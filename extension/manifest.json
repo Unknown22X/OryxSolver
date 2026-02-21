@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Oryx Solver - An Ai Homework Helper",
+  "version": "0.1",
+  "description": "an ai homework helper",
+  "icons": {
+    "16": "public/icons/16.png",
+    "48": "public/icons/48.png",
+    "128": "public/icons/128.png"
+  },
+  "action": {
+    "default_popup": "index.html"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab"
+  ]
+}
