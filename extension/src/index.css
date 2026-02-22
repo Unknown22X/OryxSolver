@@ -1,2 +1,62 @@
 @import "tailwindcss";
-@tailwind utilities;
+
+@theme {
+  /* Design Tokens */
+  --color-brand: #4f46e5;
+  --color-brand-hover: #4338ca;
+  --color-surface: #f8fafc;
+  
+  /* Custom Animations for the Sparkle Buttons */
+  --animate-sparkle: sparkle 2s ease-in-out infinite;
+  --animate-fade-in: fadeIn 0.3s ease-out forwards;
+
+  @keyframes sparkle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.1); filter: brightness(1.2); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Base Styles */
+@layer base {
+  body {
+    @apply bg-surface text-slate-900 font-sans antialiased selection:bg-indigo-100;
+  }
+  
+  /* Smooth hidden scrollbars */
+  .hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Component Classes */
+@layer components {
+  /* Glassmorphism for floating UI elements */
+  .glass {
+    @apply backdrop-blur-md bg-white/70 border border-white/20;
+  }
+
+  /* The Chat Bubble Style */
+  .bubble-ai {
+    @apply bg-white border border-slate-200 rounded-2xl rounded-tl-none p-4 shadow-sm animate-fade-in;
+  }
+
+  .bubble-user {
+    @apply bg-indigo-600 text-white rounded-2xl rounded-tr-none p-4 shadow-md ml-auto animate-fade-in;
+  }
+
+  /* The floating sparkle button that appears on the website */
+  .oryx-solve-btn {
+    @apply flex items-center gap-1.5 px-3 py-1.5 bg-brand text-white text-xs font-bold rounded-lg 
+           shadow-lg shadow-indigo-200 cursor-pointer transition-all hover:bg-brand-hover
+           hover:-translate-y-0.5 active:scale-95 animate-sparkle;
+  }
+}
