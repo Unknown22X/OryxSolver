@@ -18,11 +18,21 @@
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/cropOverlay.ts"],
+      "run_at": "document_idle"
+    }
+  ],
   "permissions": [
     "sidePanel",
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs",
+    "scripting"
   ], "host_permissions": [
+    "<all_urls>",
     "https://*.supabase.co/*",
     "https://api.polar.sh/*"
   ]
