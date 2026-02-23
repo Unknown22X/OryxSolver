@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/background.ts","./src/main.tsx","./src/lib/utils.ts","./src/sidepanel/app.tsx","./src/sidepanel/index.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/background.ts","./src/main.tsx","./src/content/cropoverlay.ts","./src/lib/utils.ts","./src/sidepanel/app.tsx","./src/sidepanel/index.tsx","./src/sidepanel/components/answerherocard.tsx","./src/sidepanel/components/messagecomposer.tsx","./src/sidepanel/components/steptimeline.tsx","./src/sidepanel/services/cameracapture.ts"],"version":"5.9.3"}
