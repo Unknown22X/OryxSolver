@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/chrome-extension": "^2.9.5",
     "@clerk/clerk-react": "^5.61.1",
+    "@clerk/react-router": "^2.4.8",
     "@tailwindcss/vite": "^4.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

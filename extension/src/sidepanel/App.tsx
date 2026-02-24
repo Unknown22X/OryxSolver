@@ -5,6 +5,12 @@ import { captureCroppedAreaToFile } from './services/cameraCapture';
 import AnswerHeroCard from './components/AnswerHeroCard';
 import StepTimeline from './components/StepTimeline';
 
+
+// pseudo for handling cookies/sessions : 
+// if (isLoaded === false) return <Loading />;
+// if (!isSignedIn) return <LoginScreen />;
+// return <SolverScreen />;
+
 type AiResponse = {
   answer: string;
   explanation: string;

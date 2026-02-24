@@ -1,5 +1,9 @@
 import { createClerkClient } from '@clerk/chrome-extension/background'
 
+// ====================
+// === handling api ===
+// ====================
+
 // Vite exposes env variables starting with VITE_ to the client
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -18,6 +22,8 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('OryxSolver installed, Clerk Auth initialized.')
 });
 
+
+
 type CropRectPayload = {
   x: number;
   y: number;
@@ -25,114 +31,6 @@ type CropRectPayload = {
   height: number;
   dpr: number;
 };
-
-function injectCropOverlay() {
-  const existing = document.getElementById('oryx-crop-overlay-root');
-  if (existing) existing.remove();
-
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-
-  const root = document.createElement('div');
-  root.id = 'oryx-crop-overlay-root';
-  root.style.position = 'fixed';
-  root.style.inset = '0';
-  root.style.zIndex = '2147483647';
-  root.style.background = 'rgba(15, 23, 42, 0.35)';
-  root.style.cursor = 'crosshair';
-  root.style.userSelect = 'none';
-
-  const hint = document.createElement('div');
-  hint.textContent = 'Drag to capture area. Press Esc to cancel.';
-  hint.style.position = 'fixed';
-  hint.style.top = '16px';
-  hint.style.left = '50%';
-  hint.style.transform = 'translateX(-50%)';
-  hint.style.padding = '8px 12px';
-  hint.style.borderRadius = '10px';
-  hint.style.background = 'rgba(2, 6, 23, 0.85)';
-  hint.style.color = '#e2e8f0';
-  hint.style.fontSize = '12px';
-  hint.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif';
-  root.appendChild(hint);
-
-  const selection = document.createElement('div');
-  selection.style.position = 'absolute';
-  selection.style.display = 'none';
-  selection.style.border = '2px solid #6366f1';
-  selection.style.background = 'rgba(99, 102, 241, 0.15)';
-  selection.style.boxShadow = '0 0 0 99999px rgba(15, 23, 42, 0.35)';
-  root.appendChild(selection);
-
-  const cleanup = () => {
-    window.removeEventListener('keydown', onKeydown);
-    root.remove();
-  };
-
-  const onKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      cleanup();
-      chrome.runtime.sendMessage({ type: 'CROP_SELECTION_CANCELLED' });
-    }
-  };
-
-  const updateSelection = (currentX: number, currentY: number) => {
-    const left = Math.min(startX, currentX);
-    const top = Math.min(startY, currentY);
-    const width = Math.abs(currentX - startX);
-    const height = Math.abs(currentY - startY);
-
-    selection.style.left = `${left}px`;
-    selection.style.top = `${top}px`;
-    selection.style.width = `${width}px`;
-    selection.style.height = `${height}px`;
-  };
-
-  root.addEventListener('mousedown', (event) => {
-    isDragging = true;
-    startX = event.clientX;
-    startY = event.clientY;
-    selection.style.display = 'block';
-    updateSelection(startX, startY);
-  });
-
-  root.addEventListener('mousemove', (event) => {
-    if (!isDragging) return;
-    updateSelection(event.clientX, event.clientY);
-  });
-
-  root.addEventListener('mouseup', (event) => {
-    if (!isDragging) return;
-    isDragging = false;
-
-    const left = Math.min(startX, event.clientX);
-    const top = Math.min(startY, event.clientY);
-    const width = Math.abs(event.clientX - startX);
-    const height = Math.abs(event.clientY - startY);
-
-    cleanup();
-
-    if (width < 8 || height < 8) {
-      chrome.runtime.sendMessage({ type: 'CROP_SELECTION_CANCELLED' });
-      return;
-    }
-
-    chrome.runtime.sendMessage({
-      type: 'CROP_RECT_SELECTED',
-      payload: {
-        x: left,
-        y: top,
-        width,
-        height,
-        dpr: window.devicePixelRatio || 1,
-      },
-    });
-  });
-
-  window.addEventListener('keydown', onKeydown);
-  document.documentElement.appendChild(root);
-}
 
 async function cropImageDataUrl(
   imageDataUrl: string,
@@ -193,16 +91,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        // First try the statically loaded content script route.
-        try {
-          await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
-        } catch {
-          // If no receiving content script exists on this tab, inject fallback overlay.
-          await chrome.scripting.executeScript({
-            target: { tabId: activeTab.id },
-            func: injectCropOverlay,
-          });
-        }
+        await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
 
         sendResponse({ ok: true });
         return;

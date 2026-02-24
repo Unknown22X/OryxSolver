@@ -33,8 +33,6 @@ export async function captureCroppedAreaToFile(): Promise<File> {
   })) as CaptureVisibleTabResponse;
 
   if (!startResponse?.ok) {
-    // Fallback: if crop overlay can't start (e.g., page not refreshed/restricted),
-    // capture the full visible tab so camera action still works.
     return captureVisibleTabToFile();
   }
 
@@ -66,9 +64,7 @@ export async function captureCroppedAreaToFile(): Promise<File> {
 
     timeoutId = setTimeout(() => {
       cleanup();
-      captureVisibleTabToFile()
-        .then(resolve)
-        .catch(reject);
+      captureVisibleTabToFile().then(resolve).catch(reject);
     }, timeoutMs);
   });
 }

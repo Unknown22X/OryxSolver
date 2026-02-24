@@ -1,8 +1,8 @@
 let overlayRoot: HTMLDivElement | null = null;
 let selectionBox: HTMLDivElement | null = null;
-let isDragging = false;
-let startX = 0;
-let startY = 0;
+let isDragging = false; // true when mouse is pressed , false when it is released
+let startX = 0; // x-coord where first clicked
+let startY = 0; // the same but for y
 
 function cleanupOverlay() {
   window.removeEventListener('keydown', handleKeydown);
