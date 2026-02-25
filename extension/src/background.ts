@@ -22,6 +22,31 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('OryxSolver installed, Clerk Auth initialized.')
 });
 
+async function configureSidePanelBehavior() {
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    console.warn('Failed to configure side panel behavior:', error);
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  void configureSidePanelBehavior();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void configureSidePanelBehavior();
+});
+
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    if (!tab.windowId) return;
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+  } catch (error) {
+    console.warn('Failed to open side panel on action click:', error);
+  }
+});
+
 
 
 type CropRectPayload = {

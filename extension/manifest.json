@@ -1,16 +1,20 @@
 {
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0qNCoxa2Ag23/oHPG28b67/W5dqiMVczcjaGk498HydQyN7ueJH6fmBIx4LNu+f3f8GBmBUKxZQ+Mjzbnri1V6Sn40rG49Ip0jce6Bqg0RUIWHgLlKLqEOfp0noDa+TR4czjiumxJqpEX5SSAQiQ7jKScgbkaO9tcVXkYgQ6b+zFyjLJ67PzRYJzC8DboZ617qN1aPNBZBik86vbuJ7kfzb0ggzd+nR1WqmeBCgnAZbF/f9FeURy0mCw0SaaW6AXSiSBYVqvEC0vX9EMgIu8pZrWYDy2Om2XeuLXfcRDHSJ/GeeHwVykE/4OX0kcTgbRWwusrrXyAwSJxHQnosiP2wIDAQAB",
   "manifest_version": 3,
   "name": "Oryx Solver - An Ai Homework Helper",
   "version": "0.1",
   "description": "an ai homework helper",
   "icons": {
     "16": "public/icons/16.png",
-    "32" : "public/icons/32.png",
-    "34" : "public/icons/34.png",
+    "32": "public/icons/32.png",
+    "34": "public/icons/34.png",
     "48": "public/icons/48.png",
     "128": "public/icons/128.png"
   },
   "action": {},
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://equal-moth-95.clerk.accounts.dev https://clerk-telemetry.com https://*.supabase.co https://api.polar.sh;"
+  },
   "background": {
     "service_worker": "src/background.ts",
     "type": "module"
@@ -20,19 +24,28 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/cropOverlay.ts"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/cropOverlay.ts"
+      ],
       "run_at": "document_idle"
     }
   ],
   "permissions": [
     "sidePanel",
     "storage",
+    "cookies",
     "activeTab",
     "tabs",
     "scripting"
-  ], "host_permissions": [
+  ],
+  "host_permissions": [
     "<all_urls>",
+    "https://equal-moth-95.clerk.accounts.dev/*",
+    "https://clerk-telemetry.com/*",
+    "http://localhost/*",
     "https://*.supabase.co/*",
     "https://api.polar.sh/*"
   ]

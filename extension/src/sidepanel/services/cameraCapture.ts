@@ -38,10 +38,9 @@ export async function captureCroppedAreaToFile(): Promise<File> {
 
   return await new Promise<File>((resolve, reject) => {
     const timeoutMs = 8000;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
       chrome.runtime.onMessage.removeListener(listener);
     };
 
@@ -62,7 +61,7 @@ export async function captureCroppedAreaToFile(): Promise<File> {
 
     chrome.runtime.onMessage.addListener(listener);
 
-    timeoutId = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       cleanup();
       captureVisibleTabToFile().then(resolve).catch(reject);
     }, timeoutMs);
