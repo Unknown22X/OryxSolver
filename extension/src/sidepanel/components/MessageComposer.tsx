@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Paperclip, Send, X } from 'lucide-react';
 
 type MessageComposerProps = {
@@ -6,12 +6,34 @@ type MessageComposerProps = {
   onCaptureScreen?: () => Promise<File | null>;
 };
 
+const DRAFT_STORAGE_KEY = 'oryx_sidepanel_draft_text';
+
 export default function MessageComposer({ onSend, onCaptureScreen }: MessageComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureHint, setCaptureHint] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const stored = await chrome.storage.local.get(DRAFT_STORAGE_KEY);
+        const draft = stored?.[DRAFT_STORAGE_KEY];
+        if (typeof draft === 'string') {
+          setText(draft);
+        }
+      } catch {
+        // Best-effort restore only.
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    void chrome.storage.local.set({ [DRAFT_STORAGE_KEY]: text }).catch(() => {
+      // Best-effort persistence only.
+    });
+  }, [text]);
 
   const handleImagePick = () => {
     fileInputRef.current?.click();
@@ -42,6 +64,9 @@ export default function MessageComposer({ onSend, onCaptureScreen }: MessageComp
     setText('')
     setAttachments([]);
     setCaptureHint(null);
+    void chrome.storage.local.remove(DRAFT_STORAGE_KEY).catch(() => {
+      // Best-effort cleanup only.
+    });
   }
 
   const handleCameraCapture = async () => {

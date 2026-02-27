@@ -1,26 +1,35 @@
 import { createClerkClient } from '@clerk/chrome-extension/background'
 
-// ====================
-// === handling api ===
-// ====================
+// =========================
+// === auth + clerk init ===
+// =========================
 
-// Vite exposes env variables starting with VITE_ to the client
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// Never crash the entire background worker if auth env vars are missing.
-// Capture/messaging must keep working even before auth is configured.
 export const clerk = PUBLISHABLE_KEY
-  ? createClerkClient({ publishableKey: PUBLISHABLE_KEY })
+  ? createClerkClient({ publishableKey: PUBLISHABLE_KEY }) // to get a new token for the user
   : null;
 
 if (!PUBLISHABLE_KEY) {
   console.warn('VITE_CLERK_PUBLISHABLE_KEY is missing. Auth is disabled in background.');
 }
 
-// This is required to keep the service worker alive
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('OryxSolver installed, Clerk Auth initialized.')
-});
+export async function getToken() {
+  if (!clerk) {
+    return null;
+  }
+
+  const clerkClient = await clerk;
+  if (!clerkClient.session) {
+    return null;
+  }
+
+  return await clerkClient.session.getToken();
+}
+
+// ==============================
+// === side panel click and open  ===
+// ==============================
 
 async function configureSidePanelBehavior() {
   try {
@@ -31,6 +40,7 @@ async function configureSidePanelBehavior() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
+  console.log('OryxSolver installed, Clerk Auth initialized.')
   void configureSidePanelBehavior();
 });
 
@@ -47,7 +57,9 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-
+// ============================
+// === capture math - helpers ===
+// ============================
 
 type CropRectPayload = {
   x: number;
@@ -57,11 +69,27 @@ type CropRectPayload = {
   dpr: number;
 };
 
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, base64] = dataUrl.split(',');
+  if (!meta || !base64) {
+    throw new Error('Invalid data URL.');
+  }
+
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mimeType = mimeMatch?.[1] || 'image/png';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
 async function cropImageDataUrl(
   imageDataUrl: string,
   rect: CropRectPayload,
 ): Promise<string> {
-  const sourceBlob = await (await fetch(imageDataUrl)).blob();
+  const sourceBlob = dataUrlToBlob(imageDataUrl);
   const sourceBitmap = await createImageBitmap(sourceBlob);
 
   const cropWidth = Math.max(1, Math.floor(rect.width * rect.dpr));
@@ -91,9 +119,19 @@ async function getActiveTab() {
   return activeTab;
 }
 
+// ======================================
+// === background message entry point ===
+// ======================================
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
+      if (message?.type === 'GET_AUTH_TOKEN') {
+        const token = await getToken();
+        sendResponse({ ok: true, token });
+        return;
+      }
+
       if (message?.type === 'CAPTURE_VISIBLE_TAB') {
         const activeTab = await getActiveTab();
         if (!activeTab?.windowId) {

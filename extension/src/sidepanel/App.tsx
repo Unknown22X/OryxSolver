@@ -15,7 +15,20 @@ export default function SidePanel() {
   const [latestResponse, setLatestResponse] = useState<AiResponse | null>(null);
   const explanationSteps = latestResponse ? parseExplanationSteps(latestResponse.explanation) : [];
   const logoUrl = chrome.runtime.getURL('public/icons/128.png');
-  const solveApiUrl = 'https://my-api-endpoint.com/solve';
+  const solveApiUrl = import.meta.env.VITE_SOLVE_API_URL;
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_AUTH_TOKEN' }) as {
+        ok?: boolean;
+        token?: string | null;
+      };
+      if (!response?.ok) return null;
+      return response.token ?? null;
+    } catch {
+      return null;
+    }
+  };
 
   const handleCaptureScreen = async (): Promise<File | null> => {
     setSendError(null);
@@ -36,6 +49,15 @@ export default function SidePanel() {
     setSendError(null);
 
     try {
+      if (!solveApiUrl) {
+        throw new Error('VITE_SOLVE_API_URL is missing. Set it in extension/.env');
+      }
+
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Please sign in before sending a question.');
+      }
+
       const form = new FormData();
       form.append('question', text);
       images.forEach((image) => form.append('images', image));
@@ -44,6 +66,9 @@ export default function SidePanel() {
 
       const res = await fetch(solveApiUrl, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
         body: form,
       });
 

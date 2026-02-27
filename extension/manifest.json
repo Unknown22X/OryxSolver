@@ -40,13 +40,14 @@
     "activeTab",
     "tabs",
     "scripting"
-  ],
+  ], 
   "host_permissions": [
     "<all_urls>",
     "https://equal-moth-95.clerk.accounts.dev/*",
     "https://clerk-telemetry.com/*",
     "http://localhost/*",
     "https://*.supabase.co/*",
-    "https://api.polar.sh/*"
+    "https://api.polar.sh/*", 
+    "https://MyVerySecretWebApp.com/*"
   ]
 }
