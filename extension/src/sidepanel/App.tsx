@@ -17,7 +17,7 @@ import ResponsePanel from './components/ResponsePanel';
 import { parseExplanationSteps } from './utils/parseExplanationSteps';
 import { firebaseAuth, isFirebaseConfigured } from './auth/firebaseClient';
 import { mapFirebaseAuthError } from './auth/mapFirebaseAuthError';
-import type { AiResponse, SendPayload } from './types';
+import type { AiResponse, SendPayload, StyleMode } from './types';
 
 type AuthView = 'sign-in' | 'sign-up';
 type UsageSnapshot = {
@@ -28,6 +28,12 @@ type UsageSnapshot = {
   monthlyImagesUsed: number;
   monthlyImagesLimit: number;
 };
+
+const DEFAULT_SUGGESTIONS = [
+  { label: 'Explain like I am 5', prompt: 'Explain this like I am 5 years old.', styleMode: 'eli5' as const },
+  { label: 'Gen Alpha slang', prompt: 'Explain this in Gen Alpha slang, but keep it correct.', styleMode: 'gen_alpha' as const },
+  { label: 'Step by step', prompt: 'Break this down step by step.', styleMode: 'step_by_step' as const },
+];
 
 
 export default function SidePanel() {
@@ -58,12 +64,15 @@ export default function SidePanel() {
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [styleMode, setStyleMode] = useState<StyleMode>('standard');
+  const [composerSuggestions, setComposerSuggestions] = useState(DEFAULT_SUGGESTIONS);
 
   const explanationSteps = latestResponse ? parseExplanationSteps(latestResponse.explanation) : [];
   const logoUrl = chrome.runtime.getURL('public/icons/128.png');
   const solveApiUrl = import.meta.env.VITE_SOLVE_API_URL;
   const upgradeUrl = import.meta.env.VITE_UPGRADE_URL;
   const marketingUrl = import.meta.env.VITE_MARKETING_URL;
+  const modeGuideUrl = import.meta.env.VITE_MODE_GUIDE_URL || import.meta.env.VITE_MODE_GUIDE;
   const isSignedIn = !!authUser;
   const isEmailVerified = !!authUser?.emailVerified;
 
@@ -248,6 +257,7 @@ export default function SidePanel() {
       monthlyImagesUsed: 0,
       monthlyImagesLimit: 10,
     });
+    setComposerSuggestions(DEFAULT_SUGGESTIONS);
     setAuthMessage('Signed out.');
     setIsProfileOpen(false);
   };
@@ -271,12 +281,13 @@ export default function SidePanel() {
     }
   };
 
-  const handleSend = async ({ text, images }: SendPayload) => {
+  const handleSend = async ({ text, images, styleMode }: SendPayload) => {
     if (!text.trim() && images.length === 0) return;
 
     setIsSending(true);
     setSendError(null);
     setSendErrorCode(null);
+    setComposerSuggestions([]);
 
     try {
       if (!solveApiUrl) {
@@ -293,6 +304,7 @@ export default function SidePanel() {
 
       const form = new FormData();
       form.append('question', text);
+      form.append('style_mode', styleMode);
       images.forEach((image) => form.append('images', image));
 
       const res = await fetch(solveApiUrl, {
@@ -351,7 +363,22 @@ export default function SidePanel() {
             ? dataJson.steps.map((step: unknown) => String(step)).join('\n')
             : JSON.stringify(dataJson, null, 2);
 
-      setLatestResponse({ answer, explanation });
+      const suggestions = Array.isArray(dataJson?.suggestions)
+        ? dataJson.suggestions
+            .filter((s: unknown) => typeof s === 'object' && s !== null)
+            .map((s: unknown) => {
+              const item = s as { label?: unknown; prompt?: unknown; styleMode?: unknown };
+              return {
+                label: typeof item.label === 'string' ? item.label : 'Try this',
+                prompt: typeof item.prompt === 'string' ? item.prompt : '',
+                ...(typeof item.styleMode === 'string' ? { styleMode: item.styleMode as StyleMode } : {}),
+              };
+            })
+            .filter((s: { prompt: string }) => s.prompt.trim().length > 0)
+        : [];
+
+      setLatestResponse({ answer, explanation, suggestions });
+      setComposerSuggestions(suggestions);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown upload error';
       setSendError(message);
@@ -372,6 +399,14 @@ export default function SidePanel() {
   const handleLearnMoreClick = () => {
     if (!marketingUrl) return;
     window.open(marketingUrl, '_blank');
+  };
+
+  const handleOpenModeGuide = () => {
+    if (!modeGuideUrl) {
+      setSendError('Mode guide URL is not configured. Set VITE_MODE_GUIDE_URL in extension/.env');
+      return;
+    }
+    window.open(modeGuideUrl, '_blank');
   };
 
   return (
@@ -572,7 +607,14 @@ export default function SidePanel() {
             </p>
           )}
 
-          <MessageComposer onSend={handleSend} onCaptureScreen={handleCaptureScreen} />
+          <MessageComposer
+            onSend={handleSend}
+            onCaptureScreen={handleCaptureScreen}
+            styleMode={styleMode}
+            onStyleModeChange={setStyleMode}
+            suggestions={composerSuggestions}
+            onOpenModesGuide={handleOpenModeGuide}
+          />
         </>
       )}
 

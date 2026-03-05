@@ -419,6 +419,37 @@ Response:
 
 ---
 
+## 5.1 Portability and Migration Strategy (Supabase -> Custom Stack)
+
+### Goal
+Keep migration to custom auth/backend/hosting possible without rewriting the extension UI.
+
+### Current Reality
+- Database portability is strong because core storage is Postgres.
+- Auth portability is medium-hard because identity/session continuity must be preserved.
+- Edge Function portability is medium (logic portable, runtime glue changes).
+- RLS portability is hard if policies are deeply coupled to Supabase-specific JWT claims.
+
+### Required Boundaries (Must Keep)
+- Stable external API contract for extension (`/solve`, `/sync-profile`, future `/history`).
+- Auth adapter boundary (`verifyToken()` interface per provider).
+- AI provider adapter boundary (`generate()` interface per provider).
+- Repository boundary for DB access (`ProfileRepo`, `UsageRepo`, `HistoryRepo`).
+
+### Migration Sequence (Recommended)
+1. Freeze API response schema used by extension.
+2. Introduce repository interfaces and move direct client calls behind them.
+3. Introduce auth adapter interface and isolate Firebase/Supabase claim mapping.
+4. Add second AI provider adapter in parallel (shadow mode testing).
+5. Migrate runtime (Edge Functions -> custom backend) while preserving API contract.
+6. Migrate auth sessions/users with mapping table and token cutover plan.
+7. Switch traffic gradually and keep rollback path.
+
+### Non-Negotiable Data Model Rule
+- Keep an internal app-level user key mapping table and never rely on provider IDs as the only primary identity reference.
+
+---
+
 ## 6. Release Plan
 
 ### 6.1 Internal Alpha

@@ -1,14 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, Paperclip, Send, X } from 'lucide-react';
+import type { AiSuggestion, StyleMode } from '../types';
 
 type MessageComposerProps = {
-  onSend?: (payload: { text: string; images: File[] }) => void;
+  onSend?: (payload: { text: string; images: File[]; styleMode: StyleMode }) => void;
   onCaptureScreen?: () => Promise<File | null>;
+  styleMode?: StyleMode;
+  onStyleModeChange?: (mode: StyleMode) => void;
+  suggestions?: AiSuggestion[];
+  onOpenModesGuide?: () => void;
+};
+
+const STYLE_MODE_OPTIONS: Array<{ value: StyleMode; label: string }> = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'exam', label: 'Exam' },
+  { value: 'eli5', label: 'ELI5' },
+  { value: 'step_by_step', label: 'Step-by-step' },
+  { value: 'gen_alpha', label: 'Gen Alpha' },
+];
+
+const DEFAULT_IMAGE_PROMPT_BY_MODE: Record<StyleMode, string> = {
+  standard: 'Solve this question from the attached image.',
+  exam: 'Solve this exam question from the attached image.',
+  eli5: 'Solve this question from the attached image and explain simply.',
+  step_by_step: 'Solve this question from the attached image step by step.',
+  gen_alpha: 'Solve this question from the attached image in light Gen Alpha style.',
 };
 
 const DRAFT_STORAGE_KEY = 'oryx_sidepanel_draft_text';
 
-export default function MessageComposer({ onSend, onCaptureScreen }: MessageComposerProps) {
+export default function MessageComposer({
+  onSend,
+  onCaptureScreen,
+  styleMode = 'standard',
+  onStyleModeChange,
+  suggestions = [],
+  onOpenModesGuide,
+}: MessageComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -69,8 +97,16 @@ export default function MessageComposer({ onSend, onCaptureScreen }: MessageComp
   // }; // just the read name bruh , handels what happen when the user sends the msg , clean the img and the text
 
   const handleSend  = () => {
-    if (!text.trim() && attachments.length === 0) return;
-    onSend?.({ text: text.trim(), images: attachments });
+    const rawText = text.trim();
+    const effectiveText =
+      rawText.length > 0
+        ? rawText
+        : attachments.length > 0
+          ? DEFAULT_IMAGE_PROMPT_BY_MODE[styleMode]
+          : '';
+
+    if (!effectiveText && attachments.length === 0) return;
+    onSend?.({ text: effectiveText, images: attachments, styleMode });
     setText('')
     setAttachments([]);
     setCaptureHint(null);
@@ -101,6 +137,61 @@ export default function MessageComposer({ onSend, onCaptureScreen }: MessageComp
 
   return (
     <footer className="mx-4 mb-4 rounded-2xl border border-white/65 bg-white/62 p-4 shadow-lg backdrop-blur-xl" >
+      <div className="mb-2">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Mode</p>
+          <button
+            type="button"
+            onClick={onOpenModesGuide}
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white/80 text-[11px] font-bold text-slate-600 transition hover:bg-slate-100"
+            title="What do these modes mean?"
+            aria-label="Open mode guide"
+          >
+            ?
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {STYLE_MODE_OPTIONS.map((option) => {
+            const isActive = option.value === styleMode;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onStyleModeChange?.(option.value)}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                  isActive
+                    ? 'border-indigo-300 bg-indigo-100 text-indigo-800'
+                    : 'border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {suggestions.length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">AI Suggestions</p>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.slice(0, 5).map((suggestion, index) => (
+              <button
+                key={`${suggestion.label}-${index}`}
+                type="button"
+                onClick={() => {
+                  setText(suggestion.prompt);
+                  if (suggestion.styleMode) {
+                    onStyleModeChange?.(suggestion.styleMode);
+                  }
+                }}
+                className="rounded-full border border-indigo-200 bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-50"
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="relative flex items-center">
         <input
           ref={fileInputRef}

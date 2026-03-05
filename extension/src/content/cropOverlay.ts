@@ -117,8 +117,12 @@ function createOverlay() {
   window.addEventListener('keydown', handleKeydown);
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'SHOW_CROP_OVERLAY') {
-    createOverlay();
-  }
-});
+const cropOverlayWindow = window as typeof window & { __oryxCropOverlayListenerReady?: boolean };
+if (!cropOverlayWindow.__oryxCropOverlayListenerReady) {
+  cropOverlayWindow.__oryxCropOverlayListenerReady = true;
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === 'SHOW_CROP_OVERLAY') {
+      createOverlay();
+    }
+  });
+}

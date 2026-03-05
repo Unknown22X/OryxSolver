@@ -154,3 +154,33 @@ As the owner, you have established these fundamental rules for the project:
 4.  **Performance**: Use Semantic Caching to ensure the app is fast and cheap.
 
 **This document will be updated as we build new features. It is the living constitution of OryxSolver.**
+
+---
+
+## PART 10: PORTABILITY BLUEPRINT (SUPABASE/FIREBASE TO CUSTOM STACK)
+
+### 10.1 Why this matters
+You can ship fast with Supabase + Firebase now, while keeping a path to custom auth/backend later.
+
+### 10.2 What is easy vs hard to migrate
+- Easy/Medium: Postgres schema and data.
+- Medium: Edge Function business logic.
+- Hard: Auth/session continuity and RLS-equivalent authorization.
+
+### 10.3 Required architecture boundaries
+- Keep extension-facing API schemas stable.
+- Keep auth verification in a dedicated adapter layer.
+- Keep AI provider logic in `ai-proxy` adapter style.
+- Keep data access behind repository-style functions, not inline SDK calls.
+
+### 10.4 Identity continuity rule
+- Maintain an app-level identity mapping table (internal user id <-> provider uid).
+- Never couple billing/subscription ownership to a provider uid only.
+
+### 10.5 Migration-safe execution plan
+1. Freeze `/solve` contract and version it.
+2. Move DB calls behind repository functions.
+3. Add provider-agnostic auth verification interface.
+4. Add second AI provider adapter before migration.
+5. Cut over backend runtime while keeping same API contract.
+6. Run staged rollout with rollback path.

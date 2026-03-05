@@ -1,6 +1,6 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
-import { createSupabaseAdminClient } from '../_shared/db.ts';
+import { createSupabaseUserClient } from '../_shared/db.ts';
 import {
   consumeCreditForFreeTier,
   consumeMonthlyImageQuotaForFreeTier,
@@ -27,6 +27,8 @@ function jsonError(status: number, code: string, message: string, details?: unkn
     { status, headers: { 'Content-Type': 'application/json' } },
   );
 }
+
+type StyleMode = 'standard' | 'exam' | 'eli5' | 'step_by_step' | 'gen_alpha';
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -72,10 +74,72 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
   return parts;
 }
 
+function chooseAiMode(
+  question: string,
+  hasImages: boolean,
+  styleMode: StyleMode,
+): 'normal' | 'fast_fallback' {
+  if (hasImages) return 'normal';
+  if (styleMode === 'gen_alpha') return 'normal';
+
+  const trimmed = question.trim();
+  const lower = trimmed.toLowerCase();
+
+  const isVeryShort = trimmed.length > 0 && trimmed.length <= 80;
+  const mcqSignals = [
+    /\b(a|b|c|d)\b[\).:-]/i,
+    /\boption\b/i,
+    /\bchoose\b/i,
+    /\bwhich\b/i,
+    /\bmcq\b/i,
+  ];
+  const hasMcqSignal = mcqSignals.some((pattern) => pattern.test(trimmed));
+
+  const complexSignals = [
+    /integral|derivative|limit|matrix|equation|function|probability/i,
+    /\bprove\b/i,
+    /\bderive\b/i,
+    /\bexplain\b/i,
+    /\bshow\s+steps\b/i,
+    /\btherefore\b/i,
+    /\bbecause\b/i,
+    /\bmatrix\b/i,
+    /\bintegral\b/i,
+    /\bderivative\b/i,
+    /\blimit\b/i,
+    /\bprobability\b/i,
+    /\bequation\b/i,
+    /\bfunction\b/i,
+  ];
+  const hasComplexSignal = complexSignals.some((pattern) => pattern.test(lower));
+
+  if (isVeryShort && hasMcqSignal && !hasComplexSignal) {
+    return 'fast_fallback';
+  }
+
+  return 'normal';
+}
+
+function hasMeaningfulAiOutput(ai: { answer: string; explanation: string; steps: string[] }): boolean {
+  const answer = ai.answer.trim();
+  const explanation = ai.explanation.trim();
+  const meaningfulSteps = ai.steps.map((s) => s.trim()).filter((s) => s.length >= 4);
+
+  const isPlaceholderAnswer =
+    answer.length === 0 ||
+    answer.toLowerCase() === 'answer available in explanation';
+
+  if (isPlaceholderAnswer) return false;
+  if (meaningfulSteps.length > 0) return true;
+  return explanation.length >= 24;
+}
+
 async function callAiProxy(
   question: string,
   imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
-): Promise<{ answer: string; explanation: string; steps: string[] }> {
+  mode: 'normal' | 'fast_fallback' = 'normal',
+  styleMode: StyleMode = 'standard',
+): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
   const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
   if (!internalToken) {
     throw new AppError(500, 'INTERNAL_TOKEN_MISSING', 'Missing INTERNAL_EDGE_TOKEN secret');
@@ -87,38 +151,68 @@ async function callAiProxy(
   }
 
   const url = `${supabaseUrl}/functions/v1/ai-proxy`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-token': internalToken,
-    },
-    body: JSON.stringify({
-      question,
-      imageParts,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutMs = mode === 'fast_fallback' ? 7000 : 12000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) {
-    const errText = await res.text();
-    let code = 'AI_PROXY_ERROR';
-    let message = `AI proxy failed: ${res.status}`;
-    try {
-      const errJson = JSON.parse(errText) as { code?: string; error?: string };
-      if (typeof errJson.code === 'string') code = errJson.code;
-      if (typeof errJson.error === 'string') message = errJson.error;
-    } catch {
-      if (errText.trim()) message = `${message} ${errText}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-token': internalToken,
+      },
+      body: JSON.stringify({
+        question,
+        imageParts,
+        mode,
+        styleMode,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let code = 'AI_PROXY_ERROR';
+      let message = `AI proxy failed: ${res.status}`;
+      try {
+        const errJson = JSON.parse(errText) as { code?: string; error?: string };
+        if (typeof errJson.code === 'string') code = errJson.code;
+        if (typeof errJson.error === 'string') message = errJson.error;
+      } catch {
+        if (errText.trim()) message = `${message} ${errText}`;
+      }
+      throw new AppError(res.status === 429 ? 429 : 502, code, message);
     }
-    throw new AppError(res.status === 429 ? 429 : 502, code, message);
-  }
 
-  const data = await res.json();
-  return {
-    answer: typeof data?.answer === 'string' ? data.answer : 'Answer available in explanation',
-    explanation: typeof data?.explanation === 'string' ? data.explanation : '',
-    steps: Array.isArray(data?.steps) ? data.steps.map((s: unknown) => String(s)) : [],
-  };
+    const data = await res.json();
+    return {
+      answer: typeof data?.answer === 'string' ? data.answer : 'Answer available in explanation',
+      explanation: typeof data?.explanation === 'string' ? data.explanation : '',
+      steps: Array.isArray(data?.steps) ? data.steps.map((s: unknown) => String(s)) : [],
+      model: typeof data?.model === 'string' && data.model.trim() ? data.model.trim() : 'unknown',
+      suggestions: Array.isArray(data?.suggestions)
+        ? data.suggestions
+            .filter((s: unknown) => typeof s === 'object' && s !== null)
+            .map((s: unknown) => {
+              const item = s as { label?: unknown; prompt?: unknown; styleMode?: unknown };
+              return {
+                label: typeof item.label === 'string' ? item.label : 'Try this',
+                prompt: typeof item.prompt === 'string' ? item.prompt : '',
+                ...(typeof item.styleMode === 'string' ? { styleMode: item.styleMode as StyleMode } : {}),
+              };
+            })
+            .filter((s: { label: string; prompt: string }) => s.prompt.trim().length > 0)
+        : [],
+    };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new AppError(504, 'AI_TIMEOUT', 'AI response timed out. Please retry.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -133,14 +227,28 @@ Deno.serve(async (req) => {
 
   try {
     const form = await req.formData();
-    const question = String(form.get('question') ?? '').trim();
+    const rawQuestion = String(form.get('question') ?? '').trim();
+    const styleModeRaw = String(form.get('style_mode') ?? 'standard').trim();
+    const styleMode: StyleMode =
+      styleModeRaw === 'exam' ||
+      styleModeRaw === 'eli5' ||
+      styleModeRaw === 'step_by_step' ||
+      styleModeRaw === 'gen_alpha'
+        ? styleModeRaw
+        : 'standard';
+    const imageParts = await extractImageParts(form);
+    const question =
+      rawQuestion.length > 0
+        ? rawQuestion
+        : imageParts.length > 0
+          ? 'Solve the attached question image.'
+          : '';
     if (!question) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
     }
-    const imageParts = await extractImageParts(form);
 
-    const supabase = createSupabaseAdminClient();
     const user = await verifyFirebaseIdToken(token);
+    const supabase = createSupabaseUserClient(token);
 
     if (!user.emailVerified) {
       return jsonError(403, 'EMAIL_NOT_VERIFIED', 'Email not verified');
@@ -187,7 +295,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    const ai = await callAiProxy(question, imageParts);
+    const initialMode = chooseAiMode(question, imageCount > 0, styleMode);
+    let aiFallbackUsed = false;
+    let ai;
+    try {
+      ai = await callAiProxy(question, imageParts, initialMode, styleMode);
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'AI_TIMEOUT') {
+        aiFallbackUsed = true;
+        ai = await callAiProxy(question, [], 'fast_fallback', styleMode);
+      } else {
+        throw error;
+      }
+    }
+
+    if (!hasMeaningfulAiOutput(ai)) {
+      return jsonError(
+        503,
+        'RETRYABLE_AI_OUTPUT',
+        'AI returned incomplete output. Please retry. Credits were not consumed.',
+        { retryable: true },
+      );
+    }
 
     if (tier !== 'pro') {
       nextCreditsUsed = await consumeCreditForFreeTier(
@@ -221,8 +350,15 @@ Deno.serve(async (req) => {
             monthlyImagesUsed: nextMonthlyImagesUsed,
             monthlyImagesLimit: 10,
           },
+          metadata: {
+            model: ai.model,
+            aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
+            styleMode,
+          },
+          suggestions: ai.suggestions,
           steps: [
             ...ai.steps,
+            ...(aiFallbackUsed ? ['Fast fallback mode was used to reduce latency.'] : []),
             tier === 'pro'
               ? 'Pro plan: usage not capped by credits.'
               : `Credits used: ${nextCreditsUsed}/${allCredits}. Images this month: ${nextMonthlyImagesUsed}/10`,
@@ -241,3 +377,4 @@ Deno.serve(async (req) => {
     return jsonError(500, 'SOLVE_FAILED', message);
   }
 });
+

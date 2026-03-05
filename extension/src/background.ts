@@ -91,6 +91,19 @@ async function getActiveTab() {
   return activeTab;
 }
 
+async function ensureCropOverlayContentScript(tabId: number) {
+  const manifest = chrome.runtime.getManifest();
+  const scriptFiles = manifest.content_scripts?.flatMap((entry) => entry.js ?? []) ?? [];
+  if (scriptFiles.length === 0) {
+    throw new Error('No content script files configured in manifest.');
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: scriptFiles,
+  });
+}
+
 // ======================================
 // === background message entry point ===
 // ======================================
@@ -120,7 +133,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
+        try {
+          await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
+        } catch (error) {
+          const messageText = error instanceof Error ? error.message : String(error);
+          if (!messageText.includes('Receiving end does not exist')) {
+            throw error;
+          }
+          await ensureCropOverlayContentScript(activeTab.id);
+          await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
+        }
 
         sendResponse({ ok: true });
         return;

@@ -1,6 +1,6 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
-import { createSupabaseAdminClient } from '../_shared/db.ts';
+import { createSupabaseUserClient } from '../_shared/db.ts';
 import { getProfileForSolve, upsertProfileFromFirebaseUser } from '../_shared/profile.ts';
 
 Deno.serve(async (req) => {
@@ -20,8 +20,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabase = createSupabaseAdminClient();
     const user = await verifyFirebaseIdToken(token);
+    const supabase = createSupabaseUserClient(token);
 
     if (!user.emailVerified) {
       return new Response(JSON.stringify({ error: 'Email not verified' }), {
