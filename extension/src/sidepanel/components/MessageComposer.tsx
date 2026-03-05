@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Paperclip, Send, X } from 'lucide-react';
 
 type MessageComposerProps = {
@@ -6,12 +6,44 @@ type MessageComposerProps = {
   onCaptureScreen?: () => Promise<File | null>;
 };
 
+const DRAFT_STORAGE_KEY = 'oryx_sidepanel_draft_text';
+
 export default function MessageComposer({ onSend, onCaptureScreen }: MessageComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureHint, setCaptureHint] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const MAX_TEXTAREA_HEIGHT = 160;
+
+  const autosizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT);
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
+  };
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const stored = await chrome.storage.local.get(DRAFT_STORAGE_KEY);
+        const draft = stored?.[DRAFT_STORAGE_KEY];
+        if (typeof draft === 'string') {
+          setText(draft);
+        }
+      } catch {
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    void chrome.storage.local.set({ [DRAFT_STORAGE_KEY]: text }).catch(() => {
+    });
+    autosizeTextarea();
+  }, [text]);
 
   const handleImagePick = () => {
     fileInputRef.current?.click();
@@ -42,6 +74,10 @@ export default function MessageComposer({ onSend, onCaptureScreen }: MessageComp
     setText('')
     setAttachments([]);
     setCaptureHint(null);
+    void chrome.storage.local.remove(DRAFT_STORAGE_KEY).catch(() => {
+      
+    });
+    requestAnimationFrame(() => autosizeTextarea());
   }
 
   const handleCameraCapture = async () => {
@@ -92,18 +128,19 @@ export default function MessageComposer({ onSend, onCaptureScreen }: MessageComp
         >
           <Camera size={16} />
         </button>
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               handleSend();
             }
           }}
           placeholder="Ask a follow-up..."
-          className="w-full rounded-2xl border border-slate-400/90 bg-white/92 py-2 pl-20 pr-12 text-sm text-slate-900 placeholder:text-slate-500 ring-1 ring-slate-300/90 shadow-sm transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+          rows={1}
+          className="w-full resize-none overflow-y-hidden rounded-2xl border border-slate-400/90 bg-white/92 py-2 pl-20 pr-12 text-sm text-slate-900 placeholder:text-slate-500 ring-1 ring-slate-300/90 shadow-sm transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
         />
         <button
           type="button"

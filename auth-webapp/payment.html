@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment | OryxSolver Pro</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="upgrade-wrap">
+      <section class="upgrade-shell">
+        <header class="upgrade-hero">
+          <p class="eyebrow">Secure Checkout</p>
+          <h1>Complete Your Upgrade</h1>
+          <p class="hero-copy">Prototype checkout page. Replace with Polar/Stripe checkout session later.</p>
+        </header>
+
+        <section class="plan-card">
+          <form id="payment-form" class="payment-form">
+            <label class="field">
+              <span>Cardholder name</span>
+              <input type="text" id="card-name" placeholder="John Doe" required />
+            </label>
+
+            <label class="field">
+              <span>Card number</span>
+              <input type="text" id="card-number" inputmode="numeric" placeholder="4242 4242 4242 4242" required />
+            </label>
+
+            <div class="field-row">
+              <label class="field">
+                <span>Expiry</span>
+                <input type="text" id="card-expiry" placeholder="MM/YY" required />
+              </label>
+              <label class="field">
+                <span>CVC</span>
+                <input type="text" id="card-cvc" inputmode="numeric" placeholder="123" required />
+              </label>
+            </div>
+
+            <div class="summary-row">
+              <span>OryxSolver Pro</span>
+              <strong>$9.99 / month</strong>
+            </div>
+
+            <button id="pay-btn" type="submit" class="btn btn-primary btn-wide">Pay & Upgrade</button>
+            <a class="btn btn-secondary btn-wide" href="./pricing.html">Back</a>
+          </form>
+
+          <div id="payment-success" class="payment-success hidden">
+            <h2>Payment successful</h2>
+            <p>Your account will be marked as Pro after webhook sync.</p>
+            <a class="btn btn-primary btn-wide" href="./auth.html">Return to App</a>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./payment.js"></script>
+  </body>
+</html>

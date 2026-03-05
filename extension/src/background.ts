@@ -1,26 +1,8 @@
-import { createClerkClient } from '@clerk/chrome-extension/background'
+// Background script handles side panel behavior and capture messaging.
 
-// ====================
-// === handling api ===
-// ====================
-
-// Vite exposes env variables starting with VITE_ to the client
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
-// Never crash the entire background worker if auth env vars are missing.
-// Capture/messaging must keep working even before auth is configured.
-export const clerk = PUBLISHABLE_KEY
-  ? createClerkClient({ publishableKey: PUBLISHABLE_KEY })
-  : null;
-
-if (!PUBLISHABLE_KEY) {
-  console.warn('VITE_CLERK_PUBLISHABLE_KEY is missing. Auth is disabled in background.');
-}
-
-// This is required to keep the service worker alive
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('OryxSolver installed, Clerk Auth initialized.')
-});
+// ==============================
+// === side panel click and open  ===
+// ==============================
 
 async function configureSidePanelBehavior() {
   try {
@@ -47,7 +29,9 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-
+// ============================
+// === capture math - helpers ===
+// ============================
 
 type CropRectPayload = {
   x: number;
@@ -57,11 +41,27 @@ type CropRectPayload = {
   dpr: number;
 };
 
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, base64] = dataUrl.split(',');
+  if (!meta || !base64) {
+    throw new Error('Invalid data URL.');
+  }
+
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mimeType = mimeMatch?.[1] || 'image/png';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
 async function cropImageDataUrl(
   imageDataUrl: string,
   rect: CropRectPayload,
 ): Promise<string> {
-  const sourceBlob = await (await fetch(imageDataUrl)).blob();
+  const sourceBlob = dataUrlToBlob(imageDataUrl);
   const sourceBitmap = await createImageBitmap(sourceBlob);
 
   const cropWidth = Math.max(1, Math.floor(rect.width * rect.dpr));
@@ -90,6 +90,10 @@ async function getActiveTab() {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return activeTab;
 }
+
+// ======================================
+// === background message entry point ===
+// ======================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {

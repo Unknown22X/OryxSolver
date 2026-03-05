@@ -12,7 +12,7 @@ entrypoint = "./functions/polar-webhook/index.ts"
 
 [functions.ai-proxy]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/ai-proxy/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -20,3 +20,25 @@ entrypoint = "./functions/ai-proxy/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/ai-proxy/*.html" ]
+
+[functions.solve]
+enabled = true
+verify_jwt = false
+import_map = "./functions/solve/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/solve/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/solve/*.html" ]
+
+[functions.sync-profile]
+enabled = true
+verify_jwt = false
+import_map = "./functions/sync-profile/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/sync-profile/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/sync-profile/*.html" ]

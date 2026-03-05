@@ -4,9 +4,24 @@ type CaptureVisibleTabResponse = {
   error?: string;
 };
 
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, base64] = dataUrl.split(',');
+  if (!meta || !base64) {
+    throw new Error('Invalid data URL.');
+  }
+
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mimeType = mimeMatch?.[1] || 'image/png';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
 async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
+  const blob = dataUrlToBlob(dataUrl);
   return new File([blob], filename, { type: blob.type || 'image/png' });
 }
 

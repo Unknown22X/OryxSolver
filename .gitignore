@@ -2,3 +2,8 @@ opencode.json
 .env
 .vscode/launch.json
 .sisyphus
+ARCHITECTURE.md
+IMPLEMENTATION_PLAN.md
+*.tsbuildinfo
+supabase/.branches/
+extension/src/sidepanel/App.supabase.backup.txt

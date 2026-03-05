@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OryxSolver Auth Callback</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
+    <script src="./config.js"></script>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="card">
+        <h1>Signing you in...</h1>
+        <p id="status" class="muted">Processing callback.</p>
+        <pre id="debug" class="debug hidden"></pre>
+      </section>
+    </main>
+
+    <script type="module" src="./callback.js"></script>
+  </body>
+  </html>
+

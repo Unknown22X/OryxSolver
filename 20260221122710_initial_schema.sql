@@ -7,7 +7,7 @@ create table public.profiles (
   email text,
   subscription_tier text default 'free', -- 'free' or 'pro'
   subscription_status text default 'inactive', -- 'active', 'canceled', etc.
-  polar_customer_id text, -- To link with Polar.sh
+  paddle_customer_id text, -- To link with Polar.sh
   questions_asked_today int default 0,
   credits_balance int default 0,
   last_question_date date default CURRENT_DATE,

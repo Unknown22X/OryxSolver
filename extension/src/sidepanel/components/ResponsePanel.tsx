@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import AnswerHeroCard from './AnswerHeroCard';
 import StepTimeline from './StepTimeline';
@@ -9,6 +10,8 @@ type ResponsePanelProps = {
 };
 
 export default function ResponsePanel({ response, steps }: ResponsePanelProps) {
+  const [showRawReasoning, setShowRawReasoning] = useState(false);
+
   if (!response) {
     return (
       <div className="mt-6 rounded-2xl border border-white/65 bg-white/74 p-6 text-center shadow-md backdrop-blur-lg">
@@ -27,16 +30,35 @@ export default function ResponsePanel({ response, steps }: ResponsePanelProps) {
   }
 
   return (
-    <article className="mt-4 space-y-3">
+    <article className="mt-4 space-y-4">
       <AnswerHeroCard answer={response.answer} />
-      <div className="rounded-2xl border border-white/65 bg-white/78 p-4 shadow-md backdrop-blur-lg">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="rounded-2xl border border-white/70 bg-white/82 p-4 shadow-md backdrop-blur-lg">
+        <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
           Why this is correct
         </p>
         {steps.length > 1 ? (
           <StepTimeline steps={steps} />
         ) : (
-          <p className="text-sm leading-6 text-slate-800">{response.explanation}</p>
+          <p className="rounded-xl border border-indigo-100 bg-white/95 px-3 py-2.5 text-sm leading-6 text-slate-800">
+            {response.explanation}
+          </p>
+        )}
+
+        {response.explanation && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowRawReasoning((v) => !v)}
+              className="text-xs font-semibold text-indigo-700 transition hover:text-indigo-800"
+            >
+              {showRawReasoning ? 'Hide full reasoning text' : 'Show full reasoning text'}
+            </button>
+            {showRawReasoning && (
+              <pre className="mt-2 max-h-48 overflow-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">
+                {response.explanation}
+              </pre>
+            )}
+          </div>
         )}
       </div>
     </article>

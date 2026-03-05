@@ -1,11 +1,16 @@
-import { SignedIn, SignedOut,  UserButton } from '@clerk/chrome-extension';
-import { Settings, CreditCard, Crown } from 'lucide-react';
+import { CreditCard, Crown, Settings } from 'lucide-react';
 
 type SidePanelHeaderProps = {
   logoUrl: string;
   appName: string;
   usedCredits: number;
   totalCredits: number;
+  isSignedIn: boolean;
+  userEmail?: string | null;
+  userPhotoUrl?: string | null;
+  onOpenProfile?: () => void;
+  onOpenUpgrade?: () => void;
+  onOpenLearnMore?: () => void;
 };
 
 export default function SidePanelHeader({
@@ -13,12 +18,18 @@ export default function SidePanelHeader({
   appName,
   usedCredits,
   totalCredits,
+  isSignedIn,
+  userEmail,
+  userPhotoUrl,
+  onOpenProfile,
+  onOpenUpgrade,
+  onOpenLearnMore,
 }: SidePanelHeaderProps) {
-  const sidepanelUrl = window.location.href;
   const creditPercentage = (usedCredits / totalCredits) * 100;
   const isUsageWarning = usedCredits >= 40;
   const isUsageCritical = usedCredits >= 48;
   const remainingCredits = Math.max(totalCredits - usedCredits, 0);
+  const avatarInitial = (userEmail?.trim().charAt(0) || 'U').toUpperCase();
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-6 border-b border-white/60 bg-white/68 px-6 shadow-sm backdrop-blur-xl">
@@ -29,7 +40,7 @@ export default function SidePanelHeader({
         <h1 className="text-lg font-semibold tracking-tight text-slate-900">{appName}</h1>
       </div>
 
-      <SignedIn>
+      {isSignedIn ? (
         <div className="flex items-center gap-4">
           <div className="relative cursor-help">
             <div
@@ -64,7 +75,11 @@ export default function SidePanelHeader({
             )}
           </div>
 
-          <button className="inline-flex items-center gap-2 rounded-full border border-violet-300 bg-gradient-to-r from-violet-100 to-indigo-100 px-4 py-2 text-xs font-semibold text-violet-800 shadow-md shadow-violet-200/60 transition hover:-translate-y-0.5 hover:border-violet-400 hover:from-violet-200 hover:to-indigo-200 hover:shadow-lg">
+          <button
+            type="button"
+            onClick={onOpenUpgrade}
+            className="inline-flex items-center gap-2 rounded-full border border-violet-300 bg-gradient-to-r from-violet-100 to-indigo-100 px-4 py-2 text-xs font-semibold text-violet-800 shadow-md shadow-violet-200/60 transition hover:-translate-y-0.5 hover:border-violet-400 hover:from-violet-200 hover:to-indigo-200 hover:shadow-lg"
+          >
             <Crown size={14} className="text-violet-600" />
             Upgrade to Pro
           </button>
@@ -72,15 +87,30 @@ export default function SidePanelHeader({
           <button className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-500">
             <Settings size={20} />
           </button>
-          <UserButton afterSignOutUrl={sidepanelUrl} />
-        </div>
-      </SignedIn>
 
-      <SignedOut>
-        <button  onClick={() => window.open('https://www.example.com', '_blank')} className="inline-flex items-center gap-2 rounded-full border border-indigo-300 bg-gradient-to-br from-indigo-100 to-violet-100 px-4 py-2 text-xs font-semibold text-indigo-800 shadow-md shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:border-indigo-400 hover:from-indigo-200 hover:to-violet-200 hover:shadow-lg" >
+          <button
+            type="button"
+            onClick={onOpenProfile}
+            className="group inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow"
+            title="Account"
+            aria-label="Open account menu"
+          >
+            {userPhotoUrl ? (
+              <img src={userPhotoUrl} alt="Profile" className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xs font-semibold text-slate-700">{avatarInitial}</span>
+            )}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpenLearnMore}
+          className="inline-flex items-center gap-2 rounded-full border border-indigo-300 bg-gradient-to-br from-indigo-100 to-violet-100 px-4 py-2 text-xs font-semibold text-indigo-800 shadow-md shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:border-indigo-400 hover:from-indigo-200 hover:to-violet-200 hover:shadow-lg"
+        >
           Learn more about OryxSolver
         </button>
-      </SignedOut>
+      )}
     </header>
   );
 }

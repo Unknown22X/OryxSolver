@@ -13,7 +13,7 @@
   },
   "action": {},
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://equal-moth-95.clerk.accounts.dev https://clerk-telemetry.com https://*.supabase.co https://api.polar.sh;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://*.googleapis.com https://api.polar.sh https://objizntvrmckzdpdgqjo.supabase.co ;"
   },
   "background": {
     "service_worker": "src/background.ts",
@@ -40,13 +40,17 @@
     "activeTab",
     "tabs",
     "scripting"
-  ],
+  ], 
   "host_permissions": [
     "<all_urls>",
-    "https://equal-moth-95.clerk.accounts.dev/*",
-    "https://clerk-telemetry.com/*",
     "http://localhost/*",
-    "https://*.supabase.co/*",
-    "https://api.polar.sh/*"
+    "http://127.0.0.1/*",
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*",
+    "https://firebaseinstallations.googleapis.com/*",
+    "https://www.googleapis.com/*",
+    "https://*.googleapis.com/*",
+    "https://api.polar.sh/*",
+    "https://*.supabase.co/*"
   ]
 }
