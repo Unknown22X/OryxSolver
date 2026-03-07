@@ -9,6 +9,7 @@ type ExistingProfile = {
 type AccessProfile = {
   id: string;
   firebase_uid: string;
+  role: string | null;
   subscription_tier: string | null;
   subscription_status: string | null;
   all_credits: number | null;
@@ -39,6 +40,7 @@ export async function upsertProfileFromFirebaseUser(
       firebase_uid: user.localId,
       email: user.email ?? null,
       email_verified: user.emailVerified ?? false,
+      role: user.emailVerified ? 'authenticated' : 'pending',
       display_name: displayName,
       photo_url: photoUrl,
       last_seen_at: new Date().toISOString(),
@@ -57,7 +59,7 @@ export async function getProfileForSolve(
 ): Promise<AccessProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, firebase_uid, subscription_tier, subscription_status, all_credits, used_credits, monthly_images_used, monthly_images_period')
+    .select('id, firebase_uid, role, subscription_tier, subscription_status, all_credits, used_credits, monthly_images_used, monthly_images_period')
     .eq('firebase_uid', firebaseUid)
     .maybeSingle<AccessProfile>();
 

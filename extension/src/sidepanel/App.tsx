@@ -17,7 +17,10 @@ import ResponsePanel from './components/ResponsePanel';
 import { parseExplanationSteps } from './utils/parseExplanationSteps';
 import { firebaseAuth, isFirebaseConfigured } from './auth/firebaseClient';
 import { mapFirebaseAuthError } from './auth/mapFirebaseAuthError';
-import type { AiResponse, SendPayload, StyleMode } from './types';
+import type { AiResponse, AiSuggestion, SendPayload, StyleMode } from './types';
+import { postSolveRequest } from './services/solveApi';
+import { getApiUrl } from './services/apiConfig';
+import { mapSolveErrorMessage } from './services/mapSolveError';
 
 type AuthView = 'sign-in' | 'sign-up';
 type UsageSnapshot = {
@@ -29,7 +32,7 @@ type UsageSnapshot = {
   monthlyImagesLimit: number;
 };
 
-const DEFAULT_SUGGESTIONS = [
+const DEFAULT_SUGGESTIONS: AiSuggestion[] = [
   { label: 'Explain like I am 5', prompt: 'Explain this like I am 5 years old.', styleMode: 'eli5' as const },
   { label: 'Gen Alpha slang', prompt: 'Explain this in Gen Alpha slang, but keep it correct.', styleMode: 'gen_alpha' as const },
   { label: 'Step by step', prompt: 'Break this down step by step.', styleMode: 'step_by_step' as const },
@@ -69,7 +72,6 @@ export default function SidePanel() {
 
   const explanationSteps = latestResponse ? parseExplanationSteps(latestResponse.explanation) : [];
   const logoUrl = chrome.runtime.getURL('public/icons/128.png');
-  const solveApiUrl = import.meta.env.VITE_SOLVE_API_URL;
   const upgradeUrl = import.meta.env.VITE_UPGRADE_URL;
   const marketingUrl = import.meta.env.VITE_MARKETING_URL;
   const modeGuideUrl = import.meta.env.VITE_MODE_GUIDE_URL || import.meta.env.VITE_MODE_GUIDE;
@@ -113,7 +115,7 @@ export default function SidePanel() {
 
   async function syncProfile() {
     if (!firebaseAuth?.currentUser) return;
-    const apiUrl = import.meta.env.VITE_SYNC_PROFILE_API_URL;
+    const apiUrl = getApiUrl('/sync-profile', import.meta.env.VITE_SYNC_PROFILE_API_URL);
     if (!apiUrl) {
       console.warn('VITE_SYNC_PROFILE_API_URL is not set. Skipping profile sync.');
       return;
@@ -290,9 +292,6 @@ export default function SidePanel() {
     setComposerSuggestions([]);
 
     try {
-      if (!solveApiUrl) {
-        throw new Error('VITE_SOLVE_API_URL is missing. Set it in extension/.env');
-      }
       if (!firebaseAuth?.currentUser) {
         throw new Error('Please sign in before sending a question.');
       }
@@ -302,35 +301,11 @@ export default function SidePanel() {
 
       const token = await firebaseAuth.currentUser.getIdToken();
 
-      const form = new FormData();
-      form.append('question', text);
-      form.append('style_mode', styleMode);
-      images.forEach((image) => form.append('images', image));
-
-      const res = await fetch(solveApiUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: form,
+      const dataJson = await postSolveRequest(token, {
+        question: text,
+        styleMode,
+        images,
       });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        let message = `Upload failed: ${res.status}`;
-        let code: string | null = null;
-        try {
-          const errJson = JSON.parse(errText) as { error?: string; code?: string };
-          if (errJson.error) message = errJson.error;
-          if (errJson.code) code = errJson.code;
-        } catch {
-          if (errText.trim()) message = `${message} ${errText}`;
-        }
-        setSendErrorCode(code);
-        throw new Error(message);
-      }
-
-      const dataJson = await res.json();
       if (dataJson?.usage) {
         setUsage({
           subscriptionTier: dataJson.usage.subscriptionTier === 'pro' ? 'pro' : 'free',
@@ -352,9 +327,7 @@ export default function SidePanel() {
       const answer =
         typeof dataJson?.answer === 'string' && dataJson.answer.trim()
           ? dataJson.answer.trim()
-          : typeof dataJson?.result === 'string' && dataJson.result.trim()
-            ? dataJson.result.trim()
-            : 'Answer available in explanation';
+          : 'Answer available in explanation';
 
       const explanation =
         typeof dataJson?.explanation === 'string' && dataJson.explanation.trim()
@@ -381,7 +354,12 @@ export default function SidePanel() {
       setComposerSuggestions(suggestions);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown upload error';
-      setSendError(message);
+      let code: string | null = null;
+      if (error instanceof Error && typeof (error as Error & { code?: string }).code === 'string') {
+        code = (error as Error & { code?: string }).code ?? null;
+        setSendErrorCode(code);
+      }
+      setSendError(mapSolveErrorMessage(code, message));
       console.error('Error sending to AI:', message);
     } finally {
       setIsSending(false);

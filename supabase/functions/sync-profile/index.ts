@@ -1,6 +1,6 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
-import { createSupabaseUserClient } from '../_shared/db.ts';
+import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/db.ts';
 import { getProfileForSolve, upsertProfileFromFirebaseUser } from '../_shared/profile.ts';
 
 Deno.serve(async (req) => {
@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
   try {
     const user = await verifyFirebaseIdToken(token);
     const supabase = createSupabaseUserClient(token);
+    const supabaseAdmin = createSupabaseAdminClient();
 
     if (!user.emailVerified) {
       return new Response(JSON.stringify({ error: 'Email not verified' }), {
@@ -30,11 +31,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    await upsertProfileFromFirebaseUser(supabase, user);
+    // Trusted backend path: after Firebase verification, upsert protected profile fields via service role.
+    await upsertProfileFromFirebaseUser(supabaseAdmin, user);
     const profile = await getProfileForSolve(supabase, user.localId);
 
     return new Response(
         JSON.stringify({
+         api_version: 'v1',
          ok : true, 
          profileSynced : true,
          profile: profile

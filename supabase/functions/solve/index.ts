@@ -1,12 +1,16 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
-import { createSupabaseUserClient } from '../_shared/db.ts';
+import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/db.ts';
+import { callAiProxy, AiError } from '../_shared/ai.ts';
+import { saveHistoryEntry } from '../_shared/history.ts';
+import { logSolveRun } from '../_shared/solveRuns.ts';
 import {
   consumeCreditForFreeTier,
   consumeMonthlyImageQuotaForFreeTier,
   currentMonthStartIsoDate,
   getProfileForSolve,
 } from '../_shared/profile.ts';
+import type { SolveSuccessResponse, StyleMode } from '../_shared/contracts.ts';
 
 class AppError extends Error {
   status: number;
@@ -27,8 +31,6 @@ function jsonError(status: number, code: string, message: string, details?: unkn
     { status, headers: { 'Content-Type': 'application/json' } },
   );
 }
-
-type StyleMode = 'standard' | 'exam' | 'eli5' | 'step_by_step' | 'gen_alpha';
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -134,88 +136,20 @@ function hasMeaningfulAiOutput(ai: { answer: string; explanation: string; steps:
   return explanation.length >= 24;
 }
 
-async function callAiProxy(
-  question: string,
-  imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
-  mode: 'normal' | 'fast_fallback' = 'normal',
-  styleMode: StyleMode = 'standard',
-): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
-  const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
-  if (!internalToken) {
-    throw new AppError(500, 'INTERNAL_TOKEN_MISSING', 'Missing INTERNAL_EDGE_TOKEN secret');
-  }
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  if (!supabaseUrl) {
-    throw new AppError(500, 'SUPABASE_URL_MISSING', 'Missing SUPABASE_URL');
-  }
-
-  const url = `${supabaseUrl}/functions/v1/ai-proxy`;
-  const controller = new AbortController();
-  const timeoutMs = mode === 'fast_fallback' ? 7000 : 12000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-token': internalToken,
-      },
-      body: JSON.stringify({
-        question,
-        imageParts,
-        mode,
-        styleMode,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      let code = 'AI_PROXY_ERROR';
-      let message = `AI proxy failed: ${res.status}`;
-      try {
-        const errJson = JSON.parse(errText) as { code?: string; error?: string };
-        if (typeof errJson.code === 'string') code = errJson.code;
-        if (typeof errJson.error === 'string') message = errJson.error;
-      } catch {
-        if (errText.trim()) message = `${message} ${errText}`;
-      }
-      throw new AppError(res.status === 429 ? 429 : 502, code, message);
-    }
-
-    const data = await res.json();
-    return {
-      answer: typeof data?.answer === 'string' ? data.answer : 'Answer available in explanation',
-      explanation: typeof data?.explanation === 'string' ? data.explanation : '',
-      steps: Array.isArray(data?.steps) ? data.steps.map((s: unknown) => String(s)) : [],
-      model: typeof data?.model === 'string' && data.model.trim() ? data.model.trim() : 'unknown',
-      suggestions: Array.isArray(data?.suggestions)
-        ? data.suggestions
-            .filter((s: unknown) => typeof s === 'object' && s !== null)
-            .map((s: unknown) => {
-              const item = s as { label?: unknown; prompt?: unknown; styleMode?: unknown };
-              return {
-                label: typeof item.label === 'string' ? item.label : 'Try this',
-                prompt: typeof item.prompt === 'string' ? item.prompt : '',
-                ...(typeof item.styleMode === 'string' ? { styleMode: item.styleMode as StyleMode } : {}),
-              };
-            })
-            .filter((s: { label: string; prompt: string }) => s.prompt.trim().length > 0)
-        : [],
-    };
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new AppError(504, 'AI_TIMEOUT', 'AI response timed out. Please retry.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+function parseStyleMode(input: string): StyleMode {
+  return input === 'exam' || input === 'eli5' || input === 'step_by_step' || input === 'gen_alpha'
+    ? input
+    : 'standard';
 }
 
 Deno.serve(async (req) => {
+  const requestStartedAt = Date.now();
+  let runFirebaseUid: string | null = null;
+  let runStyleMode: StyleMode = 'standard';
+  let runMode: 'normal' | 'fast_fallback' = 'normal';
+  let runUsedFallback = false;
+  let runModel: string | null = null;
+
   if (req.method !== 'POST') {
     return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
@@ -228,14 +162,8 @@ Deno.serve(async (req) => {
   try {
     const form = await req.formData();
     const rawQuestion = String(form.get('question') ?? '').trim();
-    const styleModeRaw = String(form.get('style_mode') ?? 'standard').trim();
-    const styleMode: StyleMode =
-      styleModeRaw === 'exam' ||
-      styleModeRaw === 'eli5' ||
-      styleModeRaw === 'step_by_step' ||
-      styleModeRaw === 'gen_alpha'
-        ? styleModeRaw
-        : 'standard';
+    const styleMode = parseStyleMode(String(form.get('style_mode') ?? 'standard').trim());
+    runStyleMode = styleMode;
     const imageParts = await extractImageParts(form);
     const question =
       rawQuestion.length > 0
@@ -248,7 +176,9 @@ Deno.serve(async (req) => {
     }
 
     const user = await verifyFirebaseIdToken(token);
+    runFirebaseUid = user.localId;
     const supabase = createSupabaseUserClient(token);
+    const supabaseAdmin = createSupabaseAdminClient();
 
     if (!user.emailVerified) {
       return jsonError(403, 'EMAIL_NOT_VERIFIED', 'Email not verified');
@@ -257,6 +187,9 @@ Deno.serve(async (req) => {
     const profile = await getProfileForSolve(supabase, user.localId);
     if (!profile) {
       return jsonError(403, 'PROFILE_NOT_FOUND', 'Profile not found. Please sync profile first.');
+    }
+    if (profile.role !== 'authenticated') {
+      return jsonError(403, 'ROLE_REQUIRED', 'User must complete onboarding');
     }
 
     const tier = profile.subscription_tier ?? 'free';
@@ -296,14 +229,38 @@ Deno.serve(async (req) => {
     }
 
     const initialMode = chooseAiMode(question, imageCount > 0, styleMode);
+    runMode = initialMode;
     let aiFallbackUsed = false;
     let ai;
     try {
       ai = await callAiProxy(question, imageParts, initialMode, styleMode);
     } catch (error) {
-      if (error instanceof AppError && error.code === 'AI_TIMEOUT') {
+      if (error instanceof AiError && (
+        error.code === 'AI_TIMEOUT' ||
+        error.code === 'AI_INCOMPLETE_OUTPUT' ||
+        error.code === 'AI_PROVIDER_ERROR'
+      )) {
         aiFallbackUsed = true;
-        ai = await callAiProxy(question, [], 'fast_fallback', styleMode);
+        try {
+          ai = await callAiProxy(question, imageParts, 'fast_fallback', styleMode);
+        } catch (fallbackError) {
+          if (fallbackError instanceof AiError && fallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
+            const conciseQuestion = `${question}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
+            try {
+              ai = await callAiProxy(conciseQuestion, imageParts, 'fast_fallback', styleMode);
+            } catch (finalFallbackError) {
+              if (finalFallbackError instanceof AiError && finalFallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
+                const ultraCompactQuestion =
+                  `${question}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
+                ai = await callAiProxy(ultraCompactQuestion, imageParts, 'fast_fallback', 'standard');
+              } else {
+                throw finalFallbackError;
+              }
+            }
+          } else {
+            throw fallbackError;
+          }
+        }
       } else {
         throw error;
       }
@@ -317,16 +274,19 @@ Deno.serve(async (req) => {
         { retryable: true },
       );
     }
+    runUsedFallback = aiFallbackUsed;
+    runMode = aiFallbackUsed ? 'fast_fallback' : initialMode;
+    runModel = ai.model ?? null;
 
     if (tier !== 'pro') {
       nextCreditsUsed = await consumeCreditForFreeTier(
-        supabase,
+        supabaseAdmin,
         profile.id,
         creditsUsed,
       );
       if (imageCount > 0) {
         const imageQuota = await consumeMonthlyImageQuotaForFreeTier(
-          supabase,
+          supabaseAdmin,
           profile.id,
           profile.monthly_images_used ?? 0,
           profile.monthly_images_period ?? null,
@@ -336,40 +296,81 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(
-        JSON.stringify({
-          ok: true,
-          answer: ai.answer,
-          explanation: ai.explanation,
-          usage: {
-            subscriptionTier: tier,
-            subscriptionStatus: status,
-            totalCredits: allCredits,
-            usedCredits: nextCreditsUsed,
-            remainingCredits: Math.max(allCredits - nextCreditsUsed, 0),
-            monthlyImagesUsed: nextMonthlyImagesUsed,
-            monthlyImagesLimit: 10,
-          },
-          metadata: {
-            model: ai.model,
-            aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
-            styleMode,
-          },
-          suggestions: ai.suggestions,
-          steps: [
-            ...ai.steps,
-            ...(aiFallbackUsed ? ['Fast fallback mode was used to reduce latency.'] : []),
-            tier === 'pro'
-              ? 'Pro plan: usage not capped by credits.'
-              : `Credits used: ${nextCreditsUsed}/${allCredits}. Images this month: ${nextMonthlyImagesUsed}/10`,
-          ],
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-    );
+    // History persistence is best-effort and should never fail solve.
+    void saveHistoryEntry(supabase, {
+      firebaseUid: user.localId,
+      question,
+      answer: ai.answer,
+      source: 'extension',
+    });
+
+    const responseBody: SolveSuccessResponse = {
+      api_version: 'v1',
+      ok: true,
+      answer: ai.answer,
+      explanation: ai.explanation,
+      usage: {
+        subscriptionTier: tier === 'pro' ? 'pro' : 'free',
+        subscriptionStatus: status === 'active' ? 'active' : status === 'canceled' ? 'canceled' : 'inactive',
+        totalCredits: allCredits,
+        usedCredits: nextCreditsUsed,
+        remainingCredits: Math.max(allCredits - nextCreditsUsed, 0),
+        monthlyImagesUsed: nextMonthlyImagesUsed,
+        monthlyImagesLimit: 10,
+      },
+      metadata: {
+        model: ai.model,
+        aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
+        styleMode,
+      },
+      suggestions: ai.suggestions,
+      steps: [
+        ...ai.steps,
+        ...(aiFallbackUsed ? ['Fast fallback mode was used to reduce latency.'] : []),
+        tier === 'pro'
+          ? 'Pro plan: usage not capped by credits.'
+          : `Credits used: ${nextCreditsUsed}/${allCredits}. Images this month: ${nextMonthlyImagesUsed}/10`,
+      ],
+    };
+
+    void logSolveRun(supabaseAdmin, {
+      firebaseUid: user.localId,
+      mode: runMode,
+      styleMode: runStyleMode,
+      model: runModel,
+      latencyMs: Date.now() - requestStartedAt,
+      status: 'success',
+      usedFallback: runUsedFallback,
+    }).catch((error) => {
+      console.error('Solve run logging failed:', error);
+    });
+
+    return new Response(JSON.stringify(responseBody), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
+    if (runFirebaseUid) {
+      try {
+        const supabaseAdmin = createSupabaseAdminClient();
+        await logSolveRun(supabaseAdmin, {
+          firebaseUid: runFirebaseUid,
+          mode: runMode,
+          styleMode: runStyleMode,
+          model: runModel,
+          latencyMs: Date.now() - requestStartedAt,
+          status: 'error',
+          errorCode: err instanceof AiError || err instanceof AppError ? err.code : 'SOLVE_FAILED',
+          usedFallback: runUsedFallback,
+        });
+      } catch (logError) {
+        console.error('Solve run logging failed:', logError);
+      }
+    }
+
+    if (err instanceof AiError) {
+      return jsonError(err.status, err.code, err.message, err.details);
+    }
     if (err instanceof AppError) {
       return jsonError(err.status, err.code, err.message, err.details);
     }

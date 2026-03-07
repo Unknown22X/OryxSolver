@@ -30,6 +30,33 @@ type AiProxyRequest = {
   styleMode?: StyleMode;
 };
 
+function isComplexPrompt(question: string, imageParts: InlineImagePart[], styleMode: StyleMode): boolean {
+  if (imageParts.length > 0) return true;
+  if (styleMode === 'step_by_step') return true;
+
+  const text = question.trim();
+  const lower = text.toLowerCase();
+  if (text.length > 550) return true;
+  if ((text.match(/\n/g) ?? []).length >= 4) return true;
+
+  const complexSignals = [
+    /\bprove\b/i,
+    /\bderive\b/i,
+    /\banaly[sz]e\b/i,
+    /\bjustify\b/i,
+    /\bcompare\b/i,
+    /\bevaluate\b/i,
+    /\bintegral\b/i,
+    /\bderivative\b/i,
+    /\bmatrix\b/i,
+    /\bprobability\b/i,
+    /\bcomplexity\b/i,
+    /\bdebug\b/i,
+    /\btime complexity\b/i,
+  ];
+  return complexSignals.some((pattern) => pattern.test(lower));
+}
+
 function normalizeMcqAnswer(question: string, answer: string): string {
   const hasMcqSignal =
     /\b(a|b|c|d)\b[\).:-]/i.test(question) ||
@@ -51,8 +78,10 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
     return { answer: 'Answer available in explanation', explanation: raw, steps: [] };
   }
 
-  const answerLine = lines.find((line) => /^FINAL_ANSWER\s*:/i.test(line)) ?? lines[0];
-  const answerRaw = answerLine.replace(/^FINAL_ANSWER\s*:/i, '').trim();
+  const answerLine = lines.find((line) => /^FINAL_ANSWER\s*:/i.test(line));
+  const answerRaw = answerLine
+    ? answerLine.replace(/^FINAL_ANSWER\s*:/i, '').trim()
+    : '';
   const answer = normalizeMcqAnswer(question, answerRaw || 'Answer available in explanation');
 
   const stepStartIndex = lines.findIndex((line) => /^STEPS\s*:/i.test(line));
@@ -80,9 +109,18 @@ async function callGemini(
   const defaultBackup = 'gemini-2.5-flash';
   const normalModel = Deno.env.get('GEMINI_MODEL_NORMAL') || defaultPrimary;
   const fastModel = Deno.env.get('GEMINI_MODEL_FAST') || 'gemini-2.5-flash';
+  const cheapModel = Deno.env.get('GEMINI_MODEL_CHEAP') || fastModel;
+  const strongModel = Deno.env.get('GEMINI_MODEL_STRONG') || normalModel;
   const backupModel = Deno.env.get('GEMINI_MODEL_BACKUP') || defaultBackup;
-  const primaryModel = mode === 'fast_fallback' ? fastModel : normalModel;
-  const modelChain = [primaryModel, backupModel].filter((value, index, arr) => value && arr.indexOf(value) === index);
+  const complexPrompt = isComplexPrompt(question, imageParts, styleMode);
+
+  const modelChain =
+    mode === 'fast_fallback'
+      ? [cheapModel, strongModel, backupModel]
+      : complexPrompt
+        ? [strongModel, cheapModel, backupModel]
+        : [cheapModel, strongModel, backupModel];
+  const dedupedModelChain = modelChain.filter((value, index, arr) => value && arr.indexOf(value) === index);
   const prompt = buildPrompt({
     question,
     styleMode,
@@ -91,12 +129,12 @@ async function callGemini(
   });
 
   let fullText = '';
-  let resolvedModel = primaryModel;
+  let resolvedModel = dedupedModelChain[0];
   let lastErrorText = '';
   let lastStatus = 500;
   const perAttemptTimeoutMs = mode === 'fast_fallback' ? 6000 : 10000;
 
-  for (const model of modelChain) {
+  for (const model of dedupedModelChain) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -111,8 +149,8 @@ async function callGemini(
             },
           ],
           generationConfig: mode === 'fast_fallback'
-            ? { maxOutputTokens: 420, temperature: 0.0 }
-            : { maxOutputTokens: 1000, temperature: 0.1 },
+            ? { maxOutputTokens: 900, temperature: 0.0 }
+            : { maxOutputTokens: 2600, temperature: 0.1 },
         }),
         signal: controller.signal,
       });
@@ -130,7 +168,9 @@ async function callGemini(
       }
 
       const data = await res.json();
-      const parts = data?.candidates?.[0]?.content?.parts;
+      const candidate = data?.candidates?.[0];
+      const finishReason = String(candidate?.finishReason ?? '');
+      const parts = candidate?.content?.parts;
       fullText = Array.isArray(parts)
         ? parts.map((p: { text?: string }) => p?.text ?? '').join('\n').trim()
         : '';
@@ -139,6 +179,25 @@ async function callGemini(
         lastErrorText = 'Empty response from model';
         lastStatus = 502;
         continue;
+      }
+
+      if (finishReason === 'MAX_TOKENS') {
+        const partialParsed = parseStructuredOutput(fullText, question);
+        const explanationText = partialParsed.explanation.trim();
+        const endsCleanly = /[.!?)]$/.test(explanationText);
+        const hasUsablePartial =
+          partialParsed.answer.trim().length > 0 &&
+          partialParsed.answer.trim().toLowerCase() !== 'answer available in explanation' &&
+          partialParsed.steps.length >= 2 &&
+          explanationText.length >= 140 &&
+          endsCleanly;
+
+        if (!hasUsablePartial) {
+          lastErrorText = `Model ${model} hit MAX_TOKENS`;
+          lastStatus = 503;
+          fullText = '';
+          continue;
+        }
       }
 
       resolvedModel = model;
@@ -158,6 +217,12 @@ async function callGemini(
   if (!fullText) {
     if (lastStatus === 429) {
       throw new AppError(429, 'AI_QUOTA_EXCEEDED', 'AI provider quota exceeded. Retry later.', lastErrorText);
+    }
+    if (lastStatus === 504) {
+      throw new AppError(504, 'AI_TIMEOUT', 'AI provider timed out. Please retry.', lastErrorText);
+    }
+    if (lastStatus === 503 && /MAX_TOKENS/i.test(lastErrorText)) {
+      throw new AppError(503, 'AI_INCOMPLETE_OUTPUT', 'AI output was truncated. Please retry.', { retryable: true });
     }
     throw new AppError(502, 'AI_PROVIDER_ERROR', 'All configured AI models failed.', lastErrorText);
   }
