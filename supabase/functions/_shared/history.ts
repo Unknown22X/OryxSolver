@@ -3,18 +3,18 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 export async function saveHistoryEntry(
   supabase: SupabaseClient,
   params: {
-    firebaseUid: string;
+    authUserId: string;
     question: string;
     answer: string;
     source?: string;
   },
 ): Promise<{ saved: boolean; id: string | null }> {
-  const { firebaseUid, question, answer, source = 'extension' } = params;
+  const { authUserId, question, answer, source = 'extension' } = params;
 
   const { data, error } = await supabase
     .from('history_entries')
     .insert({
-      user_id: firebaseUid,
+      user_id: authUserId,
       question,
       answer,
       source,
@@ -29,4 +29,3 @@ export async function saveHistoryEntry(
 
   return { saved: true, id: data?.id ?? null };
 }
-

@@ -1,5 +1,5 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
-import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
+import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
 import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/db.ts';
 import { callAiProxy, AiError } from '../_shared/ai.ts';
 import { saveHistoryEntry } from '../_shared/history.ts';
@@ -142,9 +142,109 @@ function parseStyleMode(input: string): StyleMode {
     : 'standard';
 }
 
+function normalizeQuestionForAi(raw: string): string {
+  const text = raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[−–—]/g, '-')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .trim();
+
+  if (!text) return '';
+
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return '';
+
+  const merged: string[] = [];
+  for (const line of lines) {
+    const prev = merged[merged.length - 1];
+    if (!prev) {
+      merged.push(line);
+      continue;
+    }
+
+    const isOptionLabel = /^[A-D][).:]?$/.test(line);
+    if (isOptionLabel) {
+      merged.push(line);
+      continue;
+    }
+
+    const prevEndsSentence = /[.?!:]$/.test(prev);
+    const isShortFragment = line.length <= 18 && prev.length <= 80;
+    const prevLooksLabel = /^[A-D][).:]?$/.test(prev);
+
+    if ((isShortFragment && !prevEndsSentence) || prevLooksLabel) {
+      merged[merged.length - 1] = `${prev} ${line}`.replace(/\s+/g, ' ').trim();
+    } else {
+      merged.push(line);
+    }
+  }
+
+  return merged
+    .join('\n')
+    .replace(/\s*([=+\-*/()])\s*/g, ' $1 ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .trim();
+}
+
+function repairLikelyFractionCopyArtifacts(normalized: string): string {
+  const lines = normalized.split('\n');
+  if (lines.length === 0) return normalized;
+
+  const optionStart = lines.findIndex((line) => /^[A-D][).:]?\s+/i.test(line));
+  const stemEnd = optionStart >= 0 ? optionStart : lines.length;
+
+  const fixed = [...lines];
+  for (let i = 0; i < stemEnd; i += 1) {
+    const line = fixed[i];
+    if (!line.includes('=')) continue;
+
+    // Typical broken clipboard pattern: v = - 150x w  (intended: v = - w/(150x))
+    const m1 = line.match(/\b([a-zA-Z])\s*=\s*-\s*([0-9]+[a-zA-Z]?)\s+([a-zA-Z])\b/);
+    if (m1) {
+      fixed[i] = `${m1[1]} = - ${m1[3]} / (${m1[2]})`;
+      continue;
+    }
+
+    // Positive variant: v = 150x w  (intended: v = w/(150x))
+    const m2 = line.match(/\b([a-zA-Z])\s*=\s*([0-9]+[a-zA-Z]?)\s+([a-zA-Z])\b/);
+    if (m2) {
+      fixed[i] = `${m2[1]} = ${m2[3]} / (${m2[2]})`;
+    }
+  }
+
+  return fixed.join('\n');
+}
+
+function hasAmbiguousEquationFormatting(text: string): boolean {
+  const lower = text.toLowerCase();
+  const isEquationChoiceQuestion =
+    lower.includes('which equation') || lower.includes('in terms of');
+  if (!isEquationChoiceQuestion) return false;
+
+  const hasMcqOptions = /\nA[).:]?\s+/i.test(text) && /\nD[).:]?\s+/i.test(text);
+  if (!hasMcqOptions) return false;
+
+  const lines = text.split('\n');
+  const optionStart = lines.findIndex((line) => /^[A-D][).:]?\s+/i.test(line));
+  const stem = (optionStart >= 0 ? lines.slice(0, optionStart) : lines).join(' ');
+
+  // Suspicious flattened fraction patterns with no slash after '=' in the stem.
+  const looksFlattened = /\b[a-zA-Z]\s*=\s*-?\s*[0-9]+[a-zA-Z]?\s+[a-zA-Z]\b/.test(stem);
+  const hasDivision = /\/|\bdivided by\b/i.test(stem);
+
+  return looksFlattened && !hasDivision;
+}
+
 Deno.serve(async (req) => {
   const requestStartedAt = Date.now();
-  let runFirebaseUid: string | null = null;
+  let runAuthUserId: string | null = null;
   let runStyleMode: StyleMode = 'standard';
   let runMode: 'normal' | 'fast_fallback' = 'normal';
   let runUsedFallback = false;
@@ -171,12 +271,22 @@ Deno.serve(async (req) => {
         : imageParts.length > 0
           ? 'Solve the attached question image.'
           : '';
-    if (!question) {
+    const normalizedQuestion = normalizeQuestionForAi(question);
+    if (!normalizedQuestion) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
     }
+    const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
 
-    const user = await verifyFirebaseIdToken(token);
-    runFirebaseUid = user.localId;
+    if (imageParts.length === 0 && hasAmbiguousEquationFormatting(repairedQuestion)) {
+      return jsonError(
+        422,
+        'QUESTION_INCOMPLETE',
+        'Equation formatting is ambiguous after copy. Please paste the full equation in plain text or attach a screenshot.',
+      );
+    }
+
+    const user = await verifySupabaseAccessToken(token);
+    runAuthUserId = user.id;
     const supabase = createSupabaseUserClient(token);
     const supabaseAdmin = createSupabaseAdminClient();
 
@@ -184,7 +294,7 @@ Deno.serve(async (req) => {
       return jsonError(403, 'EMAIL_NOT_VERIFIED', 'Email not verified');
     }
 
-    const profile = await getProfileForSolve(supabase, user.localId);
+    const profile = await getProfileForSolve(supabase, user.id);
     if (!profile) {
       return jsonError(403, 'PROFILE_NOT_FOUND', 'Profile not found. Please sync profile first.');
     }
@@ -228,12 +338,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    const initialMode = chooseAiMode(question, imageCount > 0, styleMode);
+    const initialMode = chooseAiMode(repairedQuestion, imageCount > 0, styleMode);
     runMode = initialMode;
     let aiFallbackUsed = false;
     let ai;
     try {
-      ai = await callAiProxy(question, imageParts, initialMode, styleMode);
+      ai = await callAiProxy(repairedQuestion, imageParts, initialMode, styleMode);
     } catch (error) {
       if (error instanceof AiError && (
         error.code === 'AI_TIMEOUT' ||
@@ -242,16 +352,16 @@ Deno.serve(async (req) => {
       )) {
         aiFallbackUsed = true;
         try {
-          ai = await callAiProxy(question, imageParts, 'fast_fallback', styleMode);
+          ai = await callAiProxy(repairedQuestion, imageParts, 'fast_fallback', styleMode);
         } catch (fallbackError) {
           if (fallbackError instanceof AiError && fallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
-            const conciseQuestion = `${question}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
+            const conciseQuestion = `${repairedQuestion}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
             try {
               ai = await callAiProxy(conciseQuestion, imageParts, 'fast_fallback', styleMode);
             } catch (finalFallbackError) {
               if (finalFallbackError instanceof AiError && finalFallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
                 const ultraCompactQuestion =
-                  `${question}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
+                  `${repairedQuestion}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
                 ai = await callAiProxy(ultraCompactQuestion, imageParts, 'fast_fallback', 'standard');
               } else {
                 throw finalFallbackError;
@@ -272,6 +382,14 @@ Deno.serve(async (req) => {
         'RETRYABLE_AI_OUTPUT',
         'AI returned incomplete output. Please retry. Credits were not consumed.',
         { retryable: true },
+      );
+    }
+
+    if (ai.answer.trim().toUpperCase() === 'INCOMPLETE_QUESTION') {
+      return jsonError(
+        422,
+        'QUESTION_INCOMPLETE',
+        'Question is missing required data. Please include the full equation/question text and retry.',
       );
     }
     runUsedFallback = aiFallbackUsed;
@@ -298,7 +416,7 @@ Deno.serve(async (req) => {
 
     // History persistence is best-effort and should never fail solve.
     void saveHistoryEntry(supabase, {
-      firebaseUid: user.localId,
+      authUserId: user.id,
       question,
       answer: ai.answer,
       source: 'extension',
@@ -334,7 +452,7 @@ Deno.serve(async (req) => {
     };
 
     void logSolveRun(supabaseAdmin, {
-      firebaseUid: user.localId,
+      authUserId: user.id,
       mode: runMode,
       styleMode: runStyleMode,
       model: runModel,
@@ -350,11 +468,11 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    if (runFirebaseUid) {
+    if (runAuthUserId) {
       try {
         const supabaseAdmin = createSupabaseAdminClient();
         await logSolveRun(supabaseAdmin, {
-          firebaseUid: runFirebaseUid,
+          authUserId: runAuthUserId,
           mode: runMode,
           styleMode: runStyleMode,
           model: runModel,

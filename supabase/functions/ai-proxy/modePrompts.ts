@@ -30,6 +30,8 @@ Accuracy:
 - Only claim a connection or inference when it is directly justified by the provided material.
 - If reasoning is ambiguous, explicitly state uncertainty instead of sounding overconfident.
 - Ensure FINAL_ANSWER strictly matches the verified reasoning steps.
+- If the question is missing required data (e.g., missing equation/values/options), do not guess.
+- In that case output exactly: FINAL_ANSWER: INCOMPLETE_QUESTION
 
 Safety:
 - Do not help with cheating on live exams/active graded tests.
@@ -141,9 +143,11 @@ export function buildPrompt(context: PromptContext): string {
     '- First line must always be FINAL_ANSWER.',
     '- For MCQ, FINAL_ANSWER must be only one option letter: A, B, C, or D.',
     '- For free-response, FINAL_ANSWER must be direct and short.',
+    '- If required data is missing, set FINAL_ANSWER to INCOMPLETE_QUESTION and explain what is missing in STEPS.',
     `- ${stepCountLine}`,
     '- Do not prioritize style over correctness. Accuracy is mandatory.',
     '- If unsure, say what is uncertain and why before concluding.',
+    '- In STEPS, prefer clean Markdown and use $...$ / $$...$$ for math expressions when relevant.',
     '- No preface (no "okay", "bet", "sure", etc).',
     '- No markdown tables, no code fences.',
     hasImages ? '- Use attached images as primary context.' : '- Use question text as primary context.',

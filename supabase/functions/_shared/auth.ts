@@ -1,14 +1,11 @@
-export type FirebaseLookupUser = {
-  localId: string;
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+export type SupabaseLookupUser = {
+  id: string;
   email?: string;
   emailVerified?: boolean;
   displayName?: string;
   photoUrl?: string;
-};
-
-type FirebaseLookupResponse = {
-  users?: FirebaseLookupUser[];
-  error?: { message?: string };
 };
 
 export function getBearerToken(req: Request): string | null {
@@ -19,23 +16,46 @@ export function getBearerToken(req: Request): string | null {
   return token || null;
 }
 
-export async function verifyFirebaseIdToken(idToken: string): Promise<FirebaseLookupUser> {
-  const apiKey = Deno.env.get('FIREBASE_WEB_API_KEY');
-  if (!apiKey) {
-    throw new Error('Missing FIREBASE_WEB_API_KEY secret');
+export async function verifySupabaseAccessToken(accessToken: string): Promise<SupabaseLookupUser> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY secret');
   }
 
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
+  const supabase = createClient(supabaseUrl, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
   });
 
-  const data = (await res.json()) as FirebaseLookupResponse;
-  if (!res.ok || !data.users || data.users.length === 0) {
-    throw new Error(data.error?.message || 'Invalid Firebase token');
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    throw new Error(error?.message || 'Invalid Supabase token');
   }
 
-  return data.users[0];
+  const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: data.user.id,
+    email: data.user.email ?? undefined,
+    emailVerified: !!data.user.email_confirmed_at,
+    displayName:
+      typeof metadata.display_name === 'string'
+        ? metadata.display_name
+        : typeof metadata.full_name === 'string'
+          ? metadata.full_name
+          : undefined,
+    photoUrl:
+      typeof metadata.photo_url === 'string'
+        ? metadata.photo_url
+        : typeof metadata.avatar_url === 'string'
+          ? metadata.avatar_url
+          : undefined,
+  };
 }

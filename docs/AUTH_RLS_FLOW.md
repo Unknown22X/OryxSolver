@@ -1,29 +1,27 @@
-# Firebase -> Supabase RLS Flow
+# Supabase Auth to RLS Flow
 
 This is the current auth/RLS flow used by OryxSolver.
 
 ## Short answer
 
-Yes, we are doing your 1-9 flow, with one precision:
-- Supabase does **not** convert Firebase JWT into a new Supabase JWT in this setup.
-- It validates the Firebase JWT (third-party auth config) and exposes claims to Postgres (`auth.jwt()`), including `sub`.
+Yes. Supabase Auth issues the access token, and Supabase PostgREST/RLS evaluates that same JWT context via `auth.jwt()`.
 
 ## End-to-end flow
 
-1. User signs in from extension using Firebase Auth.
-   - File: `extension/src/sidepanel/auth/firebaseClient.ts`
+1. User signs in from extension using Supabase Auth.
+   - File: `extension/src/sidepanel/auth/supabaseAuthClient.ts`
    - UI flow: `extension/src/sidepanel/App.tsx`
 
-2. Firebase issues an ID token (`JWT`) with `sub = firebase uid`.
+2. Supabase Auth issues an access token (`JWT`) with `sub = auth user id`.
 
 3. Extension calls edge functions with:
-   - `Authorization: Bearer <firebase-id-token>`
+   - `Authorization: Bearer <supabase-access-token>`
    - Files:
      - `extension/src/sidepanel/services/solveApi.ts`
      - `extension/src/sidepanel/App.tsx` (sync profile call)
 
-4. Edge function verifies token with Firebase.
-   - File: `supabase/functions/_shared/auth.ts` (`verifyFirebaseIdToken`)
+4. Edge function verifies token via Supabase Auth user lookup.
+   - File: `supabase/functions/_shared/auth.ts` (`verifySupabaseAccessToken`)
    - Used by:
      - `supabase/functions/solve/index.ts`
      - `supabase/functions/sync-profile/index.ts`
@@ -39,9 +37,9 @@ Yes, we are doing your 1-9 flow, with one precision:
    - Profile helpers:
      - `supabase/functions/_shared/profile.ts`
 
-8. RLS policy checks ownership:
-   - `firebase_uid = auth.jwt()->>'sub'`
-   - File: `supabase/migrations/20260306_profiles_rls_firebase.sql`
+8. RLS policy checks ownership by JWT subject:
+   - `auth_user_id = auth.jwt()->>'sub'`
+   - File: `supabase/migrations/202603090001_rename_identity_uid_columns.sql`
 
 9. Result: only the owner row is readable/updatable/insertable under RLS.
 

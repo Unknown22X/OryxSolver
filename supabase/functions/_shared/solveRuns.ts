@@ -1,7 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 type SolveRunLog = {
-  firebaseUid: string;
+  authUserId: string;
   mode: 'normal' | 'fast_fallback';
   styleMode: string;
   model?: string | null;
@@ -16,7 +16,7 @@ export async function logSolveRun(
   log: SolveRunLog,
 ): Promise<void> {
   const { error } = await supabase.from('solve_runs').insert({
-    firebase_uid: log.firebaseUid,
+    auth_user_id: log.authUserId,
     mode: log.mode,
     style_mode: log.styleMode,
     model: log.model ?? null,
@@ -30,4 +30,3 @@ export async function logSolveRun(
     throw new Error(`Solve run log failed: ${error.message}`);
   }
 }
-

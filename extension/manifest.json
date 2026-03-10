@@ -13,7 +13,7 @@
   },
   "action": {},
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://*.googleapis.com https://api.polar.sh https://objizntvrmckzdpdgqjo.supabase.co ;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://api.polar.sh https://objizntvrmckzdpdgqjo.supabase.co ;"
   },
   "background": {
     "service_worker": "src/background.ts",
@@ -45,11 +45,6 @@
     "<all_urls>",
     "http://localhost/*",
     "http://127.0.0.1/*",
-    "https://identitytoolkit.googleapis.com/*",
-    "https://securetoken.googleapis.com/*",
-    "https://firebaseinstallations.googleapis.com/*",
-    "https://www.googleapis.com/*",
-    "https://*.googleapis.com/*",
     "https://api.polar.sh/*",
     "https://*.supabase.co/*"
   ]

@@ -94,6 +94,19 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
   return { answer, explanation, steps };
 }
 
+function hasUsableStructuredOutput(question: string, raw: string): boolean {
+  const parsed = parseStructuredOutput(raw, question);
+  const explanationText = parsed.explanation.trim();
+  const endsCleanly = /[.!?)]$/.test(explanationText);
+  return (
+    parsed.answer.trim().length > 0 &&
+    parsed.answer.trim().toLowerCase() !== 'answer available in explanation' &&
+    parsed.steps.length >= 2 &&
+    explanationText.length >= 140 &&
+    endsCleanly
+  );
+}
+
 async function callGemini(
   question: string,
   imageParts: InlineImagePart[],
@@ -133,6 +146,10 @@ async function callGemini(
   let lastErrorText = '';
   let lastStatus = 500;
   const perAttemptTimeoutMs = mode === 'fast_fallback' ? 6000 : 10000;
+  const primaryMaxOutputTokens =
+    mode === 'fast_fallback'
+      ? (complexPrompt || styleMode === 'step_by_step' ? 1200 : 900)
+      : (complexPrompt || styleMode === 'step_by_step' ? 3600 : 2600);
 
   for (const model of dedupedModelChain) {
     const controller = new AbortController();
@@ -149,8 +166,8 @@ async function callGemini(
             },
           ],
           generationConfig: mode === 'fast_fallback'
-            ? { maxOutputTokens: 900, temperature: 0.0 }
-            : { maxOutputTokens: 2600, temperature: 0.1 },
+            ? { maxOutputTokens: primaryMaxOutputTokens, temperature: 0.0 }
+            : { maxOutputTokens: primaryMaxOutputTokens, temperature: 0.1 },
         }),
         signal: controller.signal,
       });
@@ -182,21 +199,77 @@ async function callGemini(
       }
 
       if (finishReason === 'MAX_TOKENS') {
-        const partialParsed = parseStructuredOutput(fullText, question);
-        const explanationText = partialParsed.explanation.trim();
-        const endsCleanly = /[.!?)]$/.test(explanationText);
-        const hasUsablePartial =
-          partialParsed.answer.trim().length > 0 &&
-          partialParsed.answer.trim().toLowerCase() !== 'answer available in explanation' &&
-          partialParsed.steps.length >= 2 &&
-          explanationText.length >= 140 &&
-          endsCleanly;
+        const hasUsablePartial = hasUsableStructuredOutput(question, fullText);
 
         if (!hasUsablePartial) {
-          lastErrorText = `Model ${model} hit MAX_TOKENS`;
-          lastStatus = 503;
-          fullText = '';
-          continue;
+          // Try one continuation pass before failing this model.
+          try {
+            const continuationController = new AbortController();
+            const continuationTimeout = setTimeout(
+              () => continuationController.abort(),
+              perAttemptTimeoutMs + 3000,
+            );
+            const continuationPrompt = [
+              prompt,
+              '',
+              'Previous output was truncated. Continue exactly from where it stopped.',
+              'Rules:',
+              '- Do not restart or repeat FINAL_ANSWER.',
+              '- Continue with remaining STEPS only.',
+              '- Keep the same language and format.',
+              '',
+              'Previous partial output:',
+              fullText,
+            ].join('\n');
+
+            const continuationRes = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: continuationPrompt }] }],
+                generationConfig: mode === 'fast_fallback'
+                  ? { maxOutputTokens: 1400, temperature: 0.0 }
+                  : { maxOutputTokens: 2000, temperature: 0.1 },
+              }),
+              signal: continuationController.signal,
+            });
+            clearTimeout(continuationTimeout);
+
+            if (continuationRes.ok) {
+              const continuationJson = await continuationRes.json();
+              const continuationParts = continuationJson?.candidates?.[0]?.content?.parts;
+              const continuationText = Array.isArray(continuationParts)
+                ? continuationParts.map((p: { text?: string }) => p?.text ?? '').join('\n').trim()
+                : '';
+
+              if (continuationText) {
+                const merged = `${fullText}\n${continuationText}`.trim();
+                if (hasUsableStructuredOutput(question, merged)) {
+                  fullText = merged;
+                } else {
+                  lastErrorText = `Model ${model} continuation still incomplete`;
+                  lastStatus = 503;
+                  fullText = '';
+                  continue;
+                }
+              } else {
+                lastErrorText = `Model ${model} continuation empty`;
+                lastStatus = 503;
+                fullText = '';
+                continue;
+              }
+            } else {
+              lastErrorText = `Model ${model} continuation failed: ${continuationRes.status}`;
+              lastStatus = continuationRes.status >= 500 ? 502 : 503;
+              fullText = '';
+              continue;
+            }
+          } catch {
+            lastErrorText = `Model ${model} continuation timed out`;
+            lastStatus = 503;
+            fullText = '';
+            continue;
+          }
         }
       }
 

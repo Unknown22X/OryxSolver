@@ -20,12 +20,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = (await req.json()) as { firebaseUid?: string; firebaseEmail?: string };
-    const firebaseUid = String(body?.firebaseUid ?? '').trim();
-    const firebaseEmail = String(body?.firebaseEmail ?? '').trim();
+    const body = (await req.json()) as { authUserId?: string; userEmail?: string };
+    const authUserId = String(body?.authUserId ?? '').trim();
+    const userEmail = String(body?.userEmail ?? '').trim();
 
-    if (!firebaseUid) {
-      return json(400, { error: 'Missing firebaseUid', code: 'MISSING_FIREBASE_UID' });
+    if (!authUserId) {
+      return json(400, { error: 'Missing authUserId', code: 'MISSING_AUTH_USER_ID' });
     }
 
     const supabase = createSupabaseAdminClient();
@@ -33,16 +33,16 @@ Deno.serve(async (req) => {
       .from('profiles')
       .upsert(
         {
-          firebase_uid: firebaseUid,
-          email: firebaseEmail || null,
+          auth_user_id: authUserId,
+          email: userEmail || null,
           email_verified: true,
           role: 'authenticated',
           updated_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
         },
-        { onConflict: 'firebase_uid' },
+        { onConflict: 'auth_user_id' },
       )
-      .select('id, firebase_uid, role')
+      .select('id, auth_user_id, role')
       .maybeSingle();
 
     if (error) {
@@ -60,4 +60,3 @@ Deno.serve(async (req) => {
     return json(500, { error: message, code: 'SET_AUTHENTICATED_ROLE_FAILED' });
   }
 });
-

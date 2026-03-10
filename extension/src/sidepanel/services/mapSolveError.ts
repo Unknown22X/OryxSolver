@@ -4,6 +4,7 @@ const SOLVE_ERROR_MESSAGES: Record<string, string> = {
   AI_QUOTA_EXCEEDED: 'AI capacity is temporarily full. Please retry in a minute.',
   AI_PROVIDER_ERROR: 'AI service is temporarily unavailable. Please retry.',
   RETRYABLE_AI_OUTPUT: 'The response was incomplete. Please retry.',
+  QUESTION_INCOMPLETE: 'Your question is missing required data. Please include the full equation/question and retry.',
   LIMIT_EXCEEDED: 'You have reached your free usage limit.',
   MONTHLY_IMAGE_LIMIT_EXCEEDED: 'You reached the monthly free image limit.',
   IMAGE_LIMIT_EXCEEDED_FREE: 'Free plan allows only 1 image per message.',
@@ -17,4 +18,3 @@ export function mapSolveErrorMessage(code: string | null, fallback: string): str
   if (!code) return fallback;
   return SOLVE_ERROR_MESSAGES[code] ?? fallback;
 }
-

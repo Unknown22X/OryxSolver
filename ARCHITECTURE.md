@@ -160,7 +160,7 @@ As the owner, you have established these fundamental rules for the project:
 ## PART 10: PORTABILITY BLUEPRINT (SUPABASE/FIREBASE TO CUSTOM STACK)
 
 ### 10.1 Why this matters
-You can ship fast with Supabase + Firebase now, while keeping a path to custom auth/backend later.
+You can ship fast with Supabase Auth + Supabase backend now, while keeping a path to custom auth/backend later.
 
 ### 10.2 What is easy vs hard to migrate
 - Easy/Medium: Postgres schema and data.

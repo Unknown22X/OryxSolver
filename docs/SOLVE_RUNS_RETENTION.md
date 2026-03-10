@@ -5,7 +5,7 @@
 ## What to log
 
 Keep rows minimal:
-- `firebase_uid`
+- `auth_user_id`
 - `mode`
 - `style_mode`
 - `model`
@@ -56,6 +56,10 @@ For long-term analytics:
 
 - Future policy (planned): keep advanced/strict explanation modes as Pro-only.
 - Current direction: cheap-first model routing for easy prompts, strong model for complex/image prompts.
+- Hard-question reliability policy:
+  - adaptive token budget by complexity/mode
+  - continuation-on-truncation (auto-continue once, then merge)
+  - concise-first fallback for extreme cases
 
 ## Additional Cost Control (Images)
 

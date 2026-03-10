@@ -1,7 +1,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
-import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
+import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
 import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/db.ts';
-import { getProfileForSolve, upsertProfileFromFirebaseUser } from '../_shared/profile.ts';
+import { getProfileForSolve, upsertProfileFromAuthUser } from '../_shared/profile.ts';
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const user = await verifyFirebaseIdToken(token);
+    const user = await verifySupabaseAccessToken(token);
     const supabase = createSupabaseUserClient(token);
     const supabaseAdmin = createSupabaseAdminClient();
 
@@ -31,9 +31,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Trusted backend path: after Firebase verification, upsert protected profile fields via service role.
-    await upsertProfileFromFirebaseUser(supabaseAdmin, user);
-    const profile = await getProfileForSolve(supabase, user.localId);
+    // Trusted backend path: after token verification, upsert protected profile fields via service role.
+    await upsertProfileFromAuthUser(supabaseAdmin, user);
+    const profile = await getProfileForSolve(supabase, user.id);
 
     return new Response(
         JSON.stringify({

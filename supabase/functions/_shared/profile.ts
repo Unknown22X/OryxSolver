@@ -1,4 +1,4 @@
-import type { FirebaseLookupUser } from './auth.ts';
+import type { SupabaseLookupUser } from './auth.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 type ExistingProfile = {
@@ -8,7 +8,6 @@ type ExistingProfile = {
 
 type AccessProfile = {
   id: string;
-  firebase_uid: string;
   role: string | null;
   subscription_tier: string | null;
   subscription_status: string | null;
@@ -18,14 +17,14 @@ type AccessProfile = {
   monthly_images_period: string | null;
 };
 
-export async function upsertProfileFromFirebaseUser(
+export async function upsertProfileFromAuthUser(
   supabase: SupabaseClient,
-  user: FirebaseLookupUser,
+  user: SupabaseLookupUser,
 ) {
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
     .select('display_name, photo_url')
-    .eq('firebase_uid', user.localId)
+    .eq('id', user.id)
     .maybeSingle<ExistingProfile>();
 
   if (existingProfileError) {
@@ -37,7 +36,7 @@ export async function upsertProfileFromFirebaseUser(
 
   const { error: upsertError } = await supabase.from('profiles').upsert(
     {
-      firebase_uid: user.localId,
+      id: user.id,
       email: user.email ?? null,
       email_verified: user.emailVerified ?? false,
       role: user.emailVerified ? 'authenticated' : 'pending',
@@ -45,7 +44,7 @@ export async function upsertProfileFromFirebaseUser(
       photo_url: photoUrl,
       last_seen_at: new Date().toISOString(),
     },
-    { onConflict: 'firebase_uid' },
+    { onConflict: 'id' },
   );
 
   if (upsertError) {
@@ -55,12 +54,12 @@ export async function upsertProfileFromFirebaseUser(
 
 export async function getProfileForSolve(
   supabase: SupabaseClient,
-  firebaseUid: string,
+  authUid: string,
 ): Promise<AccessProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, firebase_uid, role, subscription_tier, subscription_status, all_credits, used_credits, monthly_images_used, monthly_images_period')
-    .eq('firebase_uid', firebaseUid)
+    .select('id, role, subscription_tier, subscription_status, all_credits, used_credits, monthly_images_used, monthly_images_period')
+    .eq('id', authUid)
     .maybeSingle<AccessProfile>();
 
   if (error) {

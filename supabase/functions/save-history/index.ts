@@ -1,5 +1,5 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
-import { getBearerToken, verifyFirebaseIdToken } from '../_shared/auth.ts';
+import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
 import { createSupabaseUserClient } from '../_shared/db.ts';
 import { saveHistoryEntry } from '../_shared/history.ts';
 import type { SaveHistoryRequest, SaveHistoryResponse } from '../_shared/contracts.ts';
@@ -31,10 +31,10 @@ Deno.serve(async (req) => {
       return json(400, { error: 'question and answer are required', code: 'INVALID_BODY' });
     }
 
-    const user = await verifyFirebaseIdToken(token);
+    const user = await verifySupabaseAccessToken(token);
     const supabase = createSupabaseUserClient(token);
     const result = await saveHistoryEntry(supabase, {
-      firebaseUid: user.localId,
+      authUserId: user.id,
       question,
       answer,
       source,
