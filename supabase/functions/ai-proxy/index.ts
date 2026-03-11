@@ -1,25 +1,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { buildPrompt, buildSuggestions, type GenerationMode, type StyleMode } from './modePrompts.ts';
+import { AppError, jsonError } from '../_shared/http.ts';
 
-class AppError extends Error {
-  status: number;
-  code: string;
-  details?: unknown;
-
-  constructor(status: number, code: string, message: string, details?: unknown) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.details = details;
-  }
-}
-
-function jsonError(status: number, code: string, message: string, details?: unknown): Response {
-  return new Response(
-    JSON.stringify({ error: message, code, ...(details ? { details } : {}) }),
-    { status, headers: { 'Content-Type': 'application/json' } },
-  );
-}
 
 type InlineImagePart = { inlineData: { mimeType: string; data: string } };
 
@@ -28,6 +10,7 @@ type AiProxyRequest = {
   imageParts?: InlineImagePart[];
   mode?: GenerationMode;
   styleMode?: StyleMode;
+  history?: Array<{ role: 'user' | 'model', text: string }>;
 };
 
 function isComplexPrompt(question: string, imageParts: InlineImagePart[], styleMode: StyleMode): boolean {
@@ -97,14 +80,22 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
 function hasUsableStructuredOutput(question: string, raw: string): boolean {
   const parsed = parseStructuredOutput(raw, question);
   const explanationText = parsed.explanation.trim();
-  const endsCleanly = /[.!?)]$/.test(explanationText);
-  return (
-    parsed.answer.trim().length > 0 &&
-    parsed.answer.trim().toLowerCase() !== 'answer available in explanation' &&
-    parsed.steps.length >= 2 &&
-    explanationText.length >= 140 &&
-    endsCleanly
-  );
+  const endsCleanly = /[.!?):]$/.test(explanationText);
+
+  const isPlaceholderAnswer =
+    parsed.answer.trim().length === 0 ||
+    parsed.answer.trim().toLowerCase() === 'answer available in explanation';
+
+  // If it doesn't end cleanly, it's definitely truncated.
+  if (!endsCleanly) return false;
+
+  if (!isPlaceholderAnswer) {
+    // For standard answers, we still want high quality.
+    return parsed.steps.length >= 2 && explanationText.length >= 120;
+  }
+
+  // For conversational/quiz responses, we allow fewer steps and shorter length.
+  return (parsed.steps.length >= 1 || explanationText.length >= 40);
 }
 
 async function callGemini(
@@ -112,16 +103,17 @@ async function callGemini(
   imageParts: InlineImagePart[],
   mode: GenerationMode,
   styleMode: StyleMode,
+  history: Array<{ role: 'user' | 'model', text: string }> = []
 ): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   if (!apiKey) {
     throw new AppError(500, 'AI_KEY_MISSING', 'Missing GEMINI_API_KEY secret');
   }
 
-  const defaultPrimary = 'gemini-2.5-pro';
-  const defaultBackup = 'gemini-2.5-flash';
+  const defaultPrimary = 'gemini-1.5-pro';
+  const defaultBackup = 'gemini-2.0-flash';
   const normalModel = Deno.env.get('GEMINI_MODEL_NORMAL') || defaultPrimary;
-  const fastModel = Deno.env.get('GEMINI_MODEL_FAST') || 'gemini-2.5-flash';
+  const fastModel = Deno.env.get('GEMINI_MODEL_FAST') || 'gemini-2.0-flash';
   const cheapModel = Deno.env.get('GEMINI_MODEL_CHEAP') || fastModel;
   const strongModel = Deno.env.get('GEMINI_MODEL_STRONG') || normalModel;
   const backupModel = Deno.env.get('GEMINI_MODEL_BACKUP') || defaultBackup;
@@ -134,11 +126,18 @@ async function callGemini(
         ? [strongModel, cheapModel, backupModel]
         : [cheapModel, strongModel, backupModel];
   const dedupedModelChain = modelChain.filter((value, index, arr) => value && arr.indexOf(value) === index);
+  const contextPrefix = history.length > 0
+    ? `PREVIOUS CONVERSATION (for context only):\n${history.map(h => `${h.role === 'user' ? 'USER' : 'AI'}: ${h.text}`).join('\n\n')}\n\n====================\n\nNEW FOLLOW-UP QUESTION:\n`
+    : '';
+  
+  const hasHistory = history.length > 0;
+
   const prompt = buildPrompt({
-    question,
+    question: contextPrefix + question,
     styleMode,
     generationMode: mode,
     hasImages: imageParts.length > 0,
+    isFollowUp: hasHistory,
   });
 
   let fullText = '';
@@ -148,8 +147,8 @@ async function callGemini(
   const perAttemptTimeoutMs = mode === 'fast_fallback' ? 6000 : 10000;
   const primaryMaxOutputTokens =
     mode === 'fast_fallback'
-      ? (complexPrompt || styleMode === 'step_by_step' ? 1200 : 900)
-      : (complexPrompt || styleMode === 'step_by_step' ? 3600 : 2600);
+      ? (complexPrompt || styleMode === 'step_by_step' ? 1400 : 1000)
+      : (complexPrompt || styleMode === 'step_by_step' ? 4096 : 3000);
 
   for (const model of dedupedModelChain) {
     const controller = new AbortController();
@@ -328,12 +327,13 @@ Deno.serve(async (req) => {
     const imageParts = Array.isArray(body.imageParts) ? body.imageParts : [];
     const mode = body.mode === 'fast_fallback' ? 'fast_fallback' : 'normal';
     const styleMode: StyleMode = body.styleMode ?? 'standard';
+    const history = Array.isArray(body.history) ? body.history : [];
 
     if (!question) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
     }
 
-    const ai = await callGemini(question, imageParts, mode, styleMode);
+    const ai = await callGemini(question, imageParts, mode, styleMode, history);
     return new Response(
       JSON.stringify({
         ok: true,

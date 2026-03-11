@@ -14,11 +14,23 @@ export async function postSolveRequest(
   form.append('question', request.question);
   form.append('style_mode', request.styleMode);
   request.images.forEach((image) => form.append('images', image));
+  if (request.history && request.history.length > 0) {
+    form.append('history', JSON.stringify(request.history));
+  }
+  if (request.conversationId) {
+    form.append('conversation_id', request.conversationId);
+  }
+  if (request.quotedStep) {
+    form.append('quoted_step', JSON.stringify(request.quotedStep));
+  }
+
+  const requestId = crypto.randomUUID?.() || Date.now().toString(36);
 
   const res = await fetch(solveApiUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
+      'x-request-id': requestId,
     },
     body: form,
   });

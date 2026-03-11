@@ -148,6 +148,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
+      if (message?.type === 'EXTRACT_PAGE_CONTEXT') {
+        const activeTab = await getActiveTab();
+        if (!activeTab?.id) {
+          sendResponse({ ok: false, error: 'No active tab found.' });
+          return;
+        }
+        
+        try {
+          // This will inject if needed, or if already there just execute
+          await ensureCropOverlayContentScript(activeTab.id);
+          const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'EXTRACT_PAGE_CONTEXT' });
+          sendResponse(response);
+        } catch (error) {
+           const messageText = error instanceof Error ? error.message : String(error);
+           sendResponse({ ok: false, error: messageText });
+        }
+        return;
+      }
+
       if (message?.type === 'CROP_RECT_SELECTED') {
         const rect = message.payload as CropRectPayload;
         if (!rect || rect.width <= 0 || rect.height <= 0) {

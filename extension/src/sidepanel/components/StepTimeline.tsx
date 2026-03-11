@@ -1,7 +1,10 @@
+import { useState, useEffect } from 'react';
+import { MessageSquare } from 'lucide-react';
 import RichText from './RichText';
 
 type StepTimelineProps = {
   steps: string[];
+  onQuoteStep?: (stepBody: string, stepIndex: number) => void;
 };
 
 function parseStepContent(step: string) {
@@ -15,37 +18,66 @@ function parseStepContent(step: string) {
   return { title: '', body: cleaned };
 }
 
-export default function StepTimeline({ steps }: StepTimelineProps) {
+export default function StepTimeline({ steps, onQuoteStep }: StepTimelineProps) {
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  useEffect(() => {
+    setVisibleCount(0);
+    const intervals: number[] = [];
+    steps.forEach((_, i) => {
+      const id = window.setTimeout(() => {
+        setVisibleCount(i + 1);
+      }, 120 + i * 250);
+      intervals.push(id);
+    });
+    return () => intervals.forEach(id => window.clearTimeout(id));
+  }, [steps]);
+
   return (
     <div className="relative space-y-8 pl-4 pr-1 pb-2">
       {/* Vertical Timeline Line */}
-      <div className="absolute left-6 top-5 bottom-8 w-[2px] bg-gradient-to-b from-indigo-200 via-indigo-200 to-transparent opacity-50 dark:from-indigo-400/70 dark:via-indigo-500/45" />
+      <div className="absolute left-6 top-5 bottom-8 w-[2px] bg-indigo-50 dark:bg-slate-800" />
+      <div 
+        className="absolute left-6 top-5 w-[2px] bg-indigo-500 transition-all duration-700 dark:bg-indigo-400" 
+        style={{ height: visibleCount === 0 ? '0' : `${(visibleCount / steps.length) * 100}%`, maxHeight: 'calc(100% - 40px)' }}
+      />
 
       {steps.map((step, index) => {
         const parsed = parseStepContent(step);
+        const isVisible = index < visibleCount;
+        const isCurrent = index === visibleCount - 1;
+
+        if (!isVisible) return null;
+
         return (
           <div
             key={`${index}-${step.slice(0, 24)}`}
-            className="relative pl-10 group animate-in fade-in slide-in-from-bottom-2 duration-300"
-            style={{ animationDelay: `${160 + index * 90}ms` }}
+            className={`relative pl-10 transition-all duration-500 animate-in fade-in slide-in-from-bottom-4 opacity-100 scale-100`}
           >
             {/* Step Number Badge */}
-            <div className="absolute left-0 top-0 z-10 flex h-8 w-8 items-center justify-center rounded-xl border-2 border-indigo-100 bg-white text-[13px] font-black text-indigo-600 shadow-sm transition-all group-hover:scale-110 group-hover:border-indigo-500 group-hover:bg-indigo-600 group-hover:text-white dark:border-slate-500 dark:bg-slate-900 dark:text-indigo-200">
-              {index + 1}
+            <div className={`absolute left-0 top-0 z-10 flex h-8 w-8 items-center justify-center rounded-xl border-2 transition-all duration-500 ${isCurrent ? 'border-indigo-500 bg-indigo-600 text-white scale-110 shadow-lg shadow-indigo-200 dark:shadow-none' : 'border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-800'}`}>
+              <span className="text-[13px] font-black">{index + 1}</span>
             </div>
 
-            <article className="relative rounded-2xl border border-white/60 bg-white/40 p-5 shadow-xl shadow-slate-200/20 backdrop-blur-md transition-all group-hover:-translate-y-1 group-hover:bg-white group-hover:shadow-2xl group-hover:shadow-indigo-100 dark:border-slate-600 dark:bg-slate-900/96 dark:shadow-none dark:group-hover:bg-slate-900">
+            <article className={`relative rounded-2xl border p-5 transition-all duration-500 ${isCurrent ? 'border-indigo-100 bg-white shadow-xl shadow-indigo-50 dark:border-indigo-500/30 dark:bg-slate-900/40 dark:shadow-none' : 'border-white/40 bg-white/20 dark:border-slate-700/30 dark:bg-slate-900/10'}`}>
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500/70 dark:text-indigo-300/80">Step {index + 1}</span>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${isCurrent ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400'}`}>Step {index + 1}</span>
                 {parsed.title && (
-                  <div className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-500" />
+                   <h3 className={`text-xs font-bold tracking-tight ${isCurrent ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'}`}>{parsed.title}</h3>
                 )}
-                {parsed.title && (
-                   <h3 className="text-xs font-bold tracking-tight text-slate-900 dark:text-slate-100">{parsed.title}</h3>
-                )}
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => onQuoteStep?.(parsed.body, index)}
+                  className={`flex h-7 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold transition-all hover:scale-105 active:scale-95 ${isCurrent ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 dark:bg-slate-800/50'}`}
+                  title="Ask about this step"
+                >
+                  <MessageSquare size={12} />
+                  <span>Ask</span>
+                </button>
               </div>
               
-              <div className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
+              <div className={`text-sm font-medium leading-relaxed transition-colors duration-500 ${isCurrent ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400'}`}>
                 <RichText content={parsed.body} />
               </div>
             </article>

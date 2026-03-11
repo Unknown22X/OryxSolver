@@ -1,4 +1,4 @@
-import { CreditCard, ArrowRight, Sun, Moon, Zap, Menu } from 'lucide-react';
+import { CreditCard, ArrowRight, Sun, Moon, Menu } from 'lucide-react';
 
 type SidePanelHeaderProps = {
   logoUrl: string;
@@ -12,7 +12,8 @@ type SidePanelHeaderProps = {
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
   onToggleHistory?: () => void;
-  onOpenProfile?: () => void;
+  onOpenSettings?: () => void;
+  showCredits?: boolean;
   onOpenUpgrade?: () => void;
 };
 
@@ -28,7 +29,8 @@ export default function SidePanelHeader({
   isDarkMode,
   onToggleDarkMode,
   onToggleHistory,
-  onOpenProfile,
+  onOpenSettings,
+  showCredits = false,
   onOpenUpgrade,
 }: SidePanelHeaderProps) {
   const creditPercentage = (usedCredits / totalCredits) * 100;
@@ -53,43 +55,43 @@ export default function SidePanelHeader({
         <div>
           <h1 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100">{appName}</h1>
           {isSignedIn && isPro && (
-            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Pro Account</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Pro Account</p>
           )}
         </div>
       </div>
 
       {isSignedIn ? (
         <div className="flex items-center gap-3">
-          {/* Credit Pill */}
-          <div 
-            className={`group relative flex items-center gap-2 rounded-2xl border px-3 py-1.5 transition-all hover:scale-105 ${
-              isUsageWarning ? 'border-amber-200 bg-amber-50/80 shadow-inner dark:bg-amber-900/20 dark:border-amber-700/50' : 'border-indigo-100 bg-indigo-50/50 shadow-inner dark:bg-indigo-900/20 dark:border-indigo-700/30'
-            }`}
-            title={`${remainingCredits} credits remaining`}
-          >
-            <CreditCard size={12} className={isUsageWarning ? 'text-amber-600' : 'text-indigo-600 dark:text-indigo-400'} />
-            <span className={`text-[11px] font-bold ${isUsageWarning ? 'text-amber-800' : 'text-indigo-800 dark:text-indigo-300'}`}>
-              {usedCredits}/{totalCredits}
-            </span>
-            {/* Progress Bar (Subtle) */}
-            <div className="absolute bottom-0 left-3 right-3 h-[2px] overflow-hidden rounded-full bg-slate-200/50">
-              <div 
-                className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-amber-500' : 'bg-indigo-500'}`}
-                style={{ width: `${creditPercentage}%` }}
-              />
+
+          {!isPro && onOpenUpgrade && (
+            <button
+              onClick={onOpenUpgrade}
+              className="hidden sm:flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-orange-500/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95"
+            >
+              🌟 Upgrade
+            </button>
+          )}
+
+          {showCredits && (
+            <div 
+              className={`group relative flex items-center gap-2 rounded-2xl border px-3 py-1.5 transition-all hover:scale-105 ${
+                isUsageWarning ? 'border-amber-200 bg-amber-50/80 shadow-inner dark:bg-amber-900/20 dark:border-amber-700/50' : 'border-indigo-100 bg-indigo-50/50 shadow-inner dark:bg-indigo-900/20 dark:border-indigo-700/30'
+              }`}
+              title={`${remainingCredits} credits remaining`}
+            >
+              <CreditCard size={12} className={isUsageWarning ? 'text-amber-600' : 'text-indigo-600 dark:text-indigo-400'} />
+              <span className={`text-[11px] font-black tracking-tight ${isUsageWarning ? 'text-amber-800' : 'text-indigo-800 dark:text-indigo-300'}`}>
+                {remainingCredits} left
+              </span>
+              {/* Progress Bar (Subtle) */}
+              <div className="absolute bottom-0 left-3 right-3 h-[2px] overflow-hidden rounded-full bg-slate-200/50">
+                <div 
+                  className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${creditPercentage}%` }}
+                />
+              </div>
             </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onOpenUpgrade}
-            className="group flex flex-shrink-0 items-center justify-center gap-1.5 rounded-[12px] bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-1.5 text-[11px] font-black tracking-wide text-white shadow-md shadow-indigo-200/50 transition-all hover:scale-105 hover:shadow-lg hover:shadow-indigo-300 active:scale-95 dark:from-violet-500 dark:to-indigo-500 dark:shadow-none"
-            title="Upgrade to Pro"
-          >
-            <Zap size={13} className="fill-white/20 group-hover:animate-pulse" />
-            <span>Upgrade to Pro</span>
-          </button>
-
+          )}
 
           <button
             type="button"
@@ -105,7 +107,7 @@ export default function SidePanelHeader({
           {/* Profile Avatar */}
           <button
             type="button"
-            onClick={onOpenProfile}
+            onClick={onOpenSettings}
             className="group relative flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-white bg-white shadow-md transition-all hover:rotate-3 hover:scale-110 hover:shadow-lg active:scale-95"
           >
             {userPhotoUrl ? (

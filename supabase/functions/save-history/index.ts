@@ -2,23 +2,17 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
 import { createSupabaseUserClient } from '../_shared/db.ts';
 import { saveHistoryEntry } from '../_shared/history.ts';
+import { jsonError, jsonOk } from '../_shared/http.ts';
 import type { SaveHistoryRequest, SaveHistoryResponse } from '../_shared/contracts.ts';
-
-function json(status: number, payload: unknown): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' });
+    return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
 
   const token = getBearerToken(req);
   if (!token) {
-    return json(401, { error: 'Missing or invalid Authorization header', code: 'MISSING_AUTH_HEADER' });
+    return jsonError(401, 'MISSING_AUTH_HEADER', 'Missing or invalid Authorization header');
   }
 
   try {
@@ -28,7 +22,7 @@ Deno.serve(async (req) => {
     const source = String(body?.source ?? 'extension').trim() || 'extension';
 
     if (!question || !answer) {
-      return json(400, { error: 'question and answer are required', code: 'INVALID_BODY' });
+      return jsonError(400, 'INVALID_BODY', 'question and answer are required');
     }
 
     const user = await verifySupabaseAccessToken(token);
@@ -46,9 +40,9 @@ Deno.serve(async (req) => {
       saved: result.saved,
       id: result.id,
     };
-    return json(200, response);
+    return jsonOk(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'save-history failed';
-    return json(500, { error: message, code: 'SAVE_HISTORY_FAILED' });
+    return jsonError(500, 'SAVE_HISTORY_FAILED', message);
   }
 });

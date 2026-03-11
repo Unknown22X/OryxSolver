@@ -4,6 +4,9 @@ export type SolveRequest = {
   question: string;
   styleMode: StyleMode;
   images: File[];
+  history?: Array<{ role: 'user' | 'model', text: string }>;
+  conversationId?: string;
+  quotedStep?: { text: string; index: number } | null;
 };
 
 export type SolveSuggestion = {
@@ -26,11 +29,13 @@ export type SolveResponse = {
     remainingCredits: number;
     monthlyImagesUsed: number;
     monthlyImagesLimit: number;
+    stepQuestionsUsed?: number;
   };
   metadata: {
     model: string;
     aiMode: 'normal' | 'fast_fallback';
     styleMode: StyleMode;
+    conversationId: string;
   };
   suggestions: SolveSuggestion[];
 };

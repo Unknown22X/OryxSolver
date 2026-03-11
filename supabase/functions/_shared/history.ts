@@ -6,7 +6,10 @@ export async function saveHistoryEntry(
     authUserId: string;
     question: string;
     answer: string;
+    explanation?: string;
     source?: string;
+    conversationId?: string;
+    styleMode?: string;
   },
 ): Promise<{ saved: boolean; id: string | null }> {
   const { authUserId, question, answer, source = 'extension' } = params;
@@ -17,7 +20,10 @@ export async function saveHistoryEntry(
       user_id: authUserId,
       question,
       answer,
+      explanation: params.explanation,
       source,
+      conversation_id: params.conversationId,
+      style_mode: params.styleMode,
       created_at: new Date().toISOString(),
     })
     .select('id')

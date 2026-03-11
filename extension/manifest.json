@@ -28,7 +28,9 @@
         "<all_urls>"
       ],
       "js": [
-        "src/content/cropOverlay.ts"
+        "src/content/cropOverlay.ts",
+        "src/content/domExtractor.ts",
+        "src/content/inlineInjector.ts"
       ],
       "run_at": "document_idle"
     }

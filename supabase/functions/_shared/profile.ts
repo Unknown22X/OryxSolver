@@ -36,7 +36,7 @@ export async function upsertProfileFromAuthUser(
 
   const { error: upsertError } = await supabase.from('profiles').upsert(
     {
-      id: user.id,
+      auth_user_id: user.id,
       email: user.email ?? null,
       email_verified: user.emailVerified ?? false,
       role: user.emailVerified ? 'authenticated' : 'pending',
@@ -44,7 +44,7 @@ export async function upsertProfileFromAuthUser(
       photo_url: photoUrl,
       last_seen_at: new Date().toISOString(),
     },
-    { onConflict: 'id' },
+    { onConflict: 'auth_user_id' },
   );
 
   if (upsertError) {
@@ -59,7 +59,7 @@ export async function getProfileForSolve(
   const { data, error } = await supabase
     .from('profiles')
     .select('id, role, subscription_tier, subscription_status, all_credits, used_credits, monthly_images_used, monthly_images_period')
-    .eq('id', authUid)
+    .eq('auth_user_id', authUid)
     .maybeSingle<AccessProfile>();
 
   if (error) {

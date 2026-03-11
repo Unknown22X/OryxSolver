@@ -1,0 +1,227 @@
+/*  ──────────────────────────────────────────────
+    OryxSolver – Component Classes
+    Reusable, semantic class names built with
+    @apply. Use these in JSX instead of repeating
+    long inline utility strings.
+
+    Naming convention:
+      .oryx-<element>           →  base
+      .oryx-<element>--<variant>→  variant
+    ────────────────────────────────────────────── */
+
+@layer components {
+
+  /* ═══════════════════════════════════════════
+     BUTTONS
+     ═══════════════════════════════════════════ */
+
+  /** Primary CTA gradient (sign-in, upgrade, save) */
+  .oryx-btn-primary {
+    @apply flex w-full items-center justify-center gap-2
+           rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600
+           py-3.5 text-sm font-bold text-white
+           shadow-lg shadow-indigo-200
+           transition-all hover:scale-[1.02] active:scale-[0.98]
+           disabled:opacity-50 disabled:scale-100
+           dark:shadow-none;
+  }
+
+  /** Secondary / neutral button */
+  .oryx-btn-secondary {
+    @apply flex w-full items-center justify-center gap-2
+           rounded-2xl bg-slate-900 py-3.5
+           text-sm font-black text-white
+           transition hover:bg-slate-800
+           dark:bg-indigo-600 dark:hover:bg-indigo-700;
+  }
+
+  /** Ghost / outline button */
+  .oryx-btn-ghost {
+    @apply flex w-full items-center justify-center gap-2
+           rounded-2xl border border-slate-200 bg-white/50
+           py-3 text-sm font-bold text-slate-700
+           transition hover:bg-white
+           dark:border-slate-800 dark:bg-slate-800/40
+           dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+
+  /** Danger (destructive) button */
+  .oryx-btn-danger {
+    @apply flex w-full items-center justify-center gap-2
+           rounded-2xl border border-red-100
+           py-4 text-xs font-bold text-red-500
+           transition hover:bg-red-50
+           dark:border-red-900/30 dark:hover:bg-red-900/10;
+  }
+
+  /** Small pill button (upgrade, tags) */
+  .oryx-btn-pill {
+    @apply inline-flex items-center gap-1.5
+           rounded-full border px-3 py-1.5
+           text-[10px] font-black uppercase tracking-wider
+           transition-all;
+  }
+
+  /* ═══════════════════════════════════════════
+     FORM INPUTS
+     ═══════════════════════════════════════════ */
+
+  /** Standard text / password input */
+  .oryx-input {
+    @apply w-full rounded-2xl border border-slate-200
+           bg-slate-50 px-4 py-3 text-sm font-bold
+           outline-none transition-all
+           focus:border-indigo-500 focus:bg-white
+           focus:ring-4 focus:ring-indigo-500/10
+           dark:bg-slate-800 dark:border-slate-700
+           dark:text-white;
+  }
+
+  /** Input with icon (left padding for icon space) */
+  .oryx-input--icon {
+    @apply w-full rounded-2xl border border-slate-200
+           bg-white/60 px-4 py-3 pl-11 text-sm font-bold
+           outline-none transition-all
+           focus:border-indigo-500 focus:bg-white
+           focus:ring-4 focus:ring-indigo-500/10
+           dark:bg-slate-800 dark:border-slate-700
+           dark:text-white;
+  }
+
+  /** Form label */
+  .oryx-label {
+    @apply text-[10px] font-black uppercase tracking-widest
+           text-slate-400 block mb-2;
+  }
+
+  /* ═══════════════════════════════════════════
+     TOGGLE SWITCH
+     ═══════════════════════════════════════════ */
+
+  .oryx-toggle {
+    @apply relative inline-flex h-6 w-11 items-center
+           rounded-full transition-colors focus:outline-none;
+  }
+  .oryx-toggle--on {
+    @apply bg-indigo-600;
+  }
+  .oryx-toggle--off {
+    @apply bg-slate-200 dark:bg-slate-700;
+  }
+  .oryx-toggle__knob {
+    @apply inline-block h-4 w-4 transform rounded-full bg-white
+           transition-transform;
+  }
+  .oryx-toggle__knob--on {
+    @apply translate-x-6;
+  }
+  .oryx-toggle__knob--off {
+    @apply translate-x-1;
+  }
+
+  /* ═══════════════════════════════════════════
+     MODALS & OVERLAYS
+     ═══════════════════════════════════════════ */
+
+  .oryx-modal-overlay {
+    @apply fixed inset-0 z-[100] flex items-center justify-center p-6;
+    animation: oryx-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /** Backdrop behind a modal */
+  .oryx-modal-backdrop {
+    @apply absolute inset-0 bg-slate-900/60 backdrop-blur-md;
+  }
+
+  /** Modal panel (the white card) */
+  .oryx-modal-panel {
+    @apply relative w-full max-w-sm overflow-hidden
+           rounded-[40px] border border-white/20
+           bg-white/95 shadow-2xl
+           dark:bg-slate-900/95 dark:border-slate-800;
+    animation: oryx-zoom-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* ═══════════════════════════════════════════
+     CARDS
+     ═══════════════════════════════════════════ */
+
+  /** Glass card (backdrop blur + border) */
+  .oryx-card-glass {
+    @apply rounded-[32px] border border-white/70
+           bg-white/50 p-6 shadow-sm backdrop-blur-xl
+           dark:bg-slate-800/40 dark:border-slate-700/50;
+  }
+
+  /** Toolkit card (homepage grid items) */
+  .oryx-card-tool {
+    @apply flex flex-col items-start gap-4
+           rounded-[32px] border border-white/60
+           bg-white/40 p-5
+           shadow-[0_8px_30px_rgb(0,0,0,0.04)]
+           transition-all hover:scale-[1.03]
+           hover:bg-white hover:shadow-xl
+           dark:border-slate-800/50
+           dark:bg-slate-900/40 dark:hover:bg-slate-800;
+  }
+
+  /** Settings menu row (profile → edit profile, etc.) */
+  .oryx-menu-item {
+    @apply flex w-full items-center justify-between
+           rounded-2xl border border-slate-100
+           bg-white/50 p-4 transition hover:bg-white
+           dark:border-slate-800 dark:bg-slate-800/40;
+  }
+
+  /* ═══════════════════════════════════════════
+     TYPOGRAPHY HELPERS
+     ═══════════════════════════════════════════ */
+
+  /** Section divider with centered label */
+  .oryx-divider {
+    @apply flex items-center gap-4;
+  }
+  .oryx-divider__line {
+    @apply h-px flex-1 bg-gradient-to-r from-transparent
+           to-slate-200 dark:to-slate-800;
+  }
+  .oryx-divider__label {
+    @apply text-[11px] font-black uppercase tracking-[0.2em]
+           text-slate-400 dark:text-slate-500 whitespace-nowrap;
+  }
+
+  /** Small uppercase badge / caption text */
+  .oryx-caption {
+    @apply text-[10px] font-black uppercase tracking-widest
+           text-slate-400 dark:text-slate-500;
+  }
+
+  /** Stat number (hero trust ticker, etc.) */
+  .oryx-stat-value {
+    @apply text-[18px] font-black text-slate-900
+           dark:text-white leading-none;
+  }
+  .oryx-stat-label {
+    @apply text-[9px] font-black uppercase tracking-[0.2em]
+           text-slate-400 dark:text-slate-500;
+  }
+
+  /* ═══════════════════════════════════════════
+     ICON CONTAINERS
+     ═══════════════════════════════════════════ */
+
+  /** Colored icon circle (toolkit grid) */
+  .oryx-icon-box {
+    @apply flex h-12 w-12 items-center justify-center
+           rounded-2xl text-[14px] font-black shadow-lg
+           dark:shadow-none;
+  }
+
+  /** Close button (modals, overlays) */
+  .oryx-close-btn {
+    @apply flex h-10 w-10 items-center justify-center
+           rounded-2xl bg-slate-100 text-slate-500
+           transition-all hover:bg-slate-200
+           dark:bg-slate-800 dark:text-slate-400;
+  }
+}

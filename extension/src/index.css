@@ -1,79 +1,23 @@
+/*  ──────────────────────────────────────────────
+    OryxSolver – Main Stylesheet Entry Point
+    
+    This file imports Tailwind CSS and then layers
+    our design system on top in a logical order:
+    
+    1. tokens      → Color palette, spacing, animations
+    2. base        → HTML resets, body defaults, scrollbars
+    3. components  → Reusable UI classes (buttons, inputs…)
+    4. utilities   → App-specific utility helpers
+    ────────────────────────────────────────────── */
+
 @import "tailwindcss";
+
+@plugin "tailwindcss-animate";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  /* Design Tokens */
-  --color-brand: #4f46e5;
-  --color-brand-hover: #4338ca;
-  --color-surface: #fdfdff;
-  
-  /* Shared Transitions */
-  --transition-premium: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* Animation Tokens */
-  --animate-sparkle: sparkle 2.4s ease-in-out infinite;
-  --animate-float: float 6s ease-in-out infinite;
-  --animate-pulse-slow: pulseSlow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  --animate-slide-up: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-
-  @keyframes sparkle {
-    0%, 100% { opacity: 1; transform: scale(1); filter: brightness(1); }
-    50% { opacity: 0.85; transform: scale(1.05); filter: brightness(1.2); }
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  @keyframes pulseSlow {
-    0%, 100% { opacity: 0.2; transform: scale(1); }
-    50% { opacity: 0.1; transform: scale(1.1); }
-  }
-
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-}
-
-/* Base Styles */
-@layer base {
-  * {
-    @apply transition-none;
-    transition: var(--transition-premium);
-    scrollbar-width: thin;
-    scrollbar-color: #e2e8f0 transparent;
-  }
-
-  body {
-    @apply bg-[#f8fafc] text-slate-900 font-sans antialiased selection:bg-indigo-100 overflow-x-hidden;
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.03) 0, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.03) 0, transparent 50%);
-  }
-  
-  /* Custom Scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-200/80 rounded-full hover:bg-slate-300;
-  }
-}
-
-/* Component Classes */
-@layer components {
-  .glass {
-    @apply backdrop-blur-2xl bg-white/70 border border-white/40 shadow-xl;
-  }
-
-  .premium-card {
-    @apply rounded-3xl border border-white/50 bg-white/60 p-6 shadow-2xl shadow-indigo-100/20 backdrop-blur-2xl transition-all hover:scale-[1.01] hover:bg-white/80;
-  }
-}
+/* Design System Layers */
+@import "./sidepanel/styles/tokens.css";
+@import "./sidepanel/styles/base.css";
+@import "./sidepanel/styles/components.css";
+@import "./sidepanel/styles/utilities.css";

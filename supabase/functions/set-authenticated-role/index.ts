@@ -1,22 +1,17 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { createSupabaseAdminClient } from '../_shared/db.ts';
-
-function json(status: number, payload: unknown): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
+import { jsonError, jsonOk } from '../_shared/http.ts';
 
 Deno.serve(async (req) => {
+  // Internal-only endpoint: protected by shared secret, not user JWT.
   const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN') ?? '';
-  const authHeader = req.headers.get('x-internal-token') ?? '';
-  if (!internalToken || authHeader !== internalToken) {
-    return json(401, { error: 'Unauthorized', code: 'UNAUTHORIZED_INTERNAL_CALL' });
+  const provided = req.headers.get('x-internal-token') ?? '';
+  if (!internalToken || provided !== internalToken) {
+    return jsonError(401, 'UNAUTHORIZED_INTERNAL_CALL', 'Unauthorized');
   }
 
   if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' });
+    return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
 
   try {
@@ -25,7 +20,7 @@ Deno.serve(async (req) => {
     const userEmail = String(body?.userEmail ?? '').trim();
 
     if (!authUserId) {
-      return json(400, { error: 'Missing authUserId', code: 'MISSING_AUTH_USER_ID' });
+      return jsonError(400, 'MISSING_AUTH_USER_ID', 'Missing authUserId');
     }
 
     const supabase = createSupabaseAdminClient();
@@ -46,10 +41,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (error) {
-      return json(500, { error: error.message, code: 'UPSERT_FAILED' });
+      return jsonError(500, 'UPSERT_FAILED', error.message);
     }
 
-    return json(200, {
+    return jsonOk({
       api_version: 'v1',
       ok: true,
       message: 'User marked as authenticated',
@@ -57,6 +52,6 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'set-authenticated-role failed';
-    return json(500, { error: message, code: 'SET_AUTHENTICATED_ROLE_FAILED' });
+    return jsonError(500, 'SET_AUTHENTICATED_ROLE_FAILED', message);
   }
 });

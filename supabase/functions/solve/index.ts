@@ -4,6 +4,7 @@ import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/
 import { callAiProxy, AiError } from '../_shared/ai.ts';
 import { saveHistoryEntry } from '../_shared/history.ts';
 import { logSolveRun } from '../_shared/solveRuns.ts';
+import { AppError, jsonError } from '../_shared/http.ts';
 import {
   consumeCreditForFreeTier,
   consumeMonthlyImageQuotaForFreeTier,
@@ -12,25 +13,7 @@ import {
 } from '../_shared/profile.ts';
 import type { SolveSuccessResponse, StyleMode } from '../_shared/contracts.ts';
 
-class AppError extends Error {
-  status: number;
-  code: string;
-  details?: unknown;
 
-  constructor(status: number, code: string, message: string, details?: unknown) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.details = details;
-  }
-}
-
-function jsonError(status: number, code: string, message: string, details?: unknown): Response {
-  return new Response(
-    JSON.stringify({ error: message, code, ...(details ? { details } : {}) }),
-    { status, headers: { 'Content-Type': 'application/json' } },
-  );
-}
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -131,9 +114,12 @@ function hasMeaningfulAiOutput(ai: { answer: string; explanation: string; steps:
     answer.length === 0 ||
     answer.toLowerCase() === 'answer available in explanation';
 
-  if (isPlaceholderAnswer) return false;
+  // If we have a real answer (not a placeholder), it's meaningful.
+  if (!isPlaceholderAnswer) return true;
+
+  // If it's a placeholder answer, we need some content elsewhere.
   if (meaningfulSteps.length > 0) return true;
-  return explanation.length >= 24;
+  return explanation.length >= 10; // Lowered from 24 to support shorter quiz questions
 }
 
 function parseStyleMode(input: string): StyleMode {
@@ -244,6 +230,7 @@ function hasAmbiguousEquationFormatting(text: string): boolean {
 
 Deno.serve(async (req) => {
   const requestStartedAt = Date.now();
+  const reqId = req.headers.get('x-request-id') || crypto.randomUUID();
   let runAuthUserId: string | null = null;
   let runStyleMode: StyleMode = 'standard';
   let runMode: 'normal' | 'fast_fallback' = 'normal';
@@ -271,6 +258,18 @@ Deno.serve(async (req) => {
         : imageParts.length > 0
           ? 'Solve the attached question image.'
           : '';
+
+    let history: Array<{ role: 'user' | 'model', text: string }> = [];
+    const historyRaw = form.get('history');
+    if (historyRaw) {
+      try {
+        history = JSON.parse(String(historyRaw));
+      } catch (err) {
+        console.warn(`[${reqId}] Failed to parse history:`, err);
+      }
+    }
+    const providedConversationId = String(form.get('conversation_id') || '').trim();
+    const conversationId = providedConversationId || crypto.randomUUID();
     const normalizedQuestion = normalizeQuestionForAi(question);
     if (!normalizedQuestion) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
@@ -343,7 +342,7 @@ Deno.serve(async (req) => {
     let aiFallbackUsed = false;
     let ai;
     try {
-      ai = await callAiProxy(repairedQuestion, imageParts, initialMode, styleMode);
+      ai = await callAiProxy(repairedQuestion, imageParts, initialMode, styleMode, history);
     } catch (error) {
       if (error instanceof AiError && (
         error.code === 'AI_TIMEOUT' ||
@@ -352,17 +351,17 @@ Deno.serve(async (req) => {
       )) {
         aiFallbackUsed = true;
         try {
-          ai = await callAiProxy(repairedQuestion, imageParts, 'fast_fallback', styleMode);
+          ai = await callAiProxy(repairedQuestion, imageParts, 'fast_fallback', styleMode, history);
         } catch (fallbackError) {
           if (fallbackError instanceof AiError && fallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
             const conciseQuestion = `${repairedQuestion}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
             try {
-              ai = await callAiProxy(conciseQuestion, imageParts, 'fast_fallback', styleMode);
+              ai = await callAiProxy(conciseQuestion, imageParts, 'fast_fallback', styleMode, history);
             } catch (finalFallbackError) {
               if (finalFallbackError instanceof AiError && finalFallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
                 const ultraCompactQuestion =
                   `${repairedQuestion}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
-                ai = await callAiProxy(ultraCompactQuestion, imageParts, 'fast_fallback', 'standard');
+                ai = await callAiProxy(ultraCompactQuestion, imageParts, 'fast_fallback', 'standard', history);
               } else {
                 throw finalFallbackError;
               }
@@ -389,7 +388,7 @@ Deno.serve(async (req) => {
       return jsonError(
         422,
         'QUESTION_INCOMPLETE',
-        'Question is missing required data. Please include the full equation/question text and retry.',
+        'Oryx needs more context or the question is incomplete. Please try rephrasing or attaching a clear screenshot.',
       );
     }
     runUsedFallback = aiFallbackUsed;
@@ -419,6 +418,9 @@ Deno.serve(async (req) => {
       authUserId: user.id,
       question,
       answer: ai.answer,
+      explanation: ai.explanation,
+      conversationId,
+      styleMode: runStyleMode,
       source: 'extension',
     });
 
@@ -440,6 +442,7 @@ Deno.serve(async (req) => {
         model: ai.model,
         aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
         styleMode,
+        conversationId,
       },
       suggestions: ai.suggestions,
       steps: [
@@ -460,7 +463,7 @@ Deno.serve(async (req) => {
       status: 'success',
       usedFallback: runUsedFallback,
     }).catch((error) => {
-      console.error('Solve run logging failed:', error);
+      console.error(`[${reqId}] Solve run logging failed:`, error);
     });
 
     return new Response(JSON.stringify(responseBody), {
@@ -482,9 +485,11 @@ Deno.serve(async (req) => {
           usedFallback: runUsedFallback,
         });
       } catch (logError) {
-        console.error('Solve run logging failed:', logError);
+        console.error(`[${reqId}] Solve run logging failed:`, logError);
       }
     }
+
+    console.error(`[${reqId}] Solve error:`, err);
 
     if (err instanceof AiError) {
       return jsonError(err.status, err.code, err.message, err.details);

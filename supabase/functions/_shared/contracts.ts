@@ -14,6 +14,7 @@ export type SolveMetadata = {
   model: string;
   aiMode: 'normal' | 'fast_fallback';
   styleMode: StyleMode;
+  conversationId: string;
 };
 
 export type SolveSuggestion = {

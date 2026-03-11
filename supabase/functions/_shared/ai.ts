@@ -18,6 +18,7 @@ export async function callAiProxy(
   imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
   mode: 'normal' | 'fast_fallback' = 'normal',
   styleMode: StyleMode = 'standard',
+  history: Array<{ role: 'user' | 'model', text: string }> = []
 ): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
   const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
   if (!internalToken) {
@@ -48,6 +49,7 @@ export async function callAiProxy(
         imageParts,
         mode,
         styleMode,
+        history,
       }),
       signal: controller.signal,
     });

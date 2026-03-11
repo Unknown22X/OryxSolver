@@ -1,25 +1,38 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { Loader2, MessageSquare, ChevronRight, Settings, Plus } from 'lucide-react';
-import type { AiResponse } from '../types';
+import { Loader2, MessageSquare, ChevronRight, Settings, Plus, MoreVertical, Trash2, Edit2, Check, X as CloseIcon } from 'lucide-react';
 
 type HistoryEntry = {
   id: string;
   created_at: string;
   question: string;
   answer: string;
+  explanation?: string | null;
+  conversation_id: string;
 };
 
 type HistoryPanelProps = {
-  onSelect: (response: AiResponse, question: string) => void;
+  onSelect: (conversationId: string) => void;
   onNewSolve: () => void;
   onOpenSettings: () => void;
   onClose: () => void;
+  onDeleteConversation: (id: string) => Promise<void>;
+  onRenameConversation: (id: string, newTitle: string) => Promise<void>;
 };
 
-export default function HistoryPanel({ onSelect, onNewSolve, onOpenSettings, onClose }: HistoryPanelProps) {
+export default function HistoryPanel({ 
+  onSelect, 
+  onNewSolve, 
+  onOpenSettings, 
+  onClose,
+  onDeleteConversation,
+  onRenameConversation,
+}: HistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadHistory() {
@@ -28,14 +41,61 @@ export default function HistoryPanel({ onSelect, onNewSolve, onOpenSettings, onC
         return;
       }
       try {
+        // Wait for session to be ready to avoid 'anon' RLS race condition
+        await supabase.auth.getSession();
+        
         const { data, error } = await supabase
           .from('history_entries')
-          .select('id, created_at, question, answer')
+          .select('id, created_at, question, answer, explanation, conversation_id')
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (!error && data) {
-          setEntries(data as HistoryEntry[]);
+          // Group by conversation_id where present
+          const conversationsMap = new Map<string, {
+            id: string;
+            conversation_id: string | null;
+            question: string;
+            created_at: string;
+            latest_at: string;
+          }>();
+
+          const standaloneEntries: HistoryEntry[] = [];
+
+          data.forEach((entry) => {
+            const convId = (entry.conversation_id as string | null)?.trim();
+            
+            if (!convId) {
+              // If no conversation ID, it's a standalone entry, don't group it
+              standaloneEntries.push(entry);
+              return;
+            }
+
+            const group = conversationsMap.get(convId);
+            if (!group) {
+              conversationsMap.set(convId, {
+                ...entry,
+                conversation_id: convId,
+                latest_at: entry.created_at, // Since we are sorted DESC, first one is latest
+              });
+            } else {
+              // As we iterate older entries (DESC order), 
+              // we update the group's question to the older one
+              // to eventually get the "original" question as the representative item.
+              group.question = entry.question;
+              group.created_at = entry.created_at;
+            }
+          });
+
+          const groupedList = Array.from(conversationsMap.values());
+          const allItems = [...groupedList, ...standaloneEntries]
+            .sort((a, b) => {
+              const bTime = new Date((b as any).latest_at || b.created_at).getTime();
+              const aTime = new Date((a as any).latest_at || a.created_at).getTime();
+              return bTime - aTime;
+            });
+            
+          setEntries(allItems as unknown as HistoryEntry[]);
         }
       } catch (e) {
         console.error('Failed to load history', e);
@@ -47,7 +107,12 @@ export default function HistoryPanel({ onSelect, onNewSolve, onOpenSettings, onC
   }, []);
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      
+      {/* Sidebar */}
+      <div className="relative flex h-full w-full max-w-[320px] flex-col bg-white shadow-2xl animate-in slide-in-from-bottom-2 duration-300 dark:bg-slate-900 dark:shadow-none">
       {/* Sidebar Top: Branding & New Solve */}
       <div className="p-5 space-y-4">
         <div className="flex items-center justify-between">
@@ -89,20 +154,115 @@ export default function HistoryPanel({ onSelect, onNewSolve, onOpenSettings, onC
             <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400 px-4">No past solves yet. Solve your first problem!</p>
           </div>
         ) : (
-          entries.map((entry) => (
-            <button
-              key={entry.id}
-              onClick={() => onSelect({ answer: entry.answer, explanation: entry.answer, suggestions: [] }, entry.question)}
-              className="group flex w-full flex-col gap-1 rounded-xl p-3 text-left transition hover:bg-slate-50 active:scale-[0.98] dark:hover:bg-slate-800/50"
-            >
-              <p className="line-clamp-1 text-[13.5px] font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                {entry.question || 'Image capture'}
-              </p>
-              <p className="text-[10px] font-semibold text-slate-400">
-                {new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-              </p>
-            </button>
-          ))
+          entries.map((entry) => {
+            const isEditing = editingId === entry.conversation_id;
+            const isMenuOpen = menuOpenId === entry.conversation_id;
+
+            return (
+              <div key={entry.id} className="group relative flex w-full items-center gap-1 rounded-xl transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                {isEditing ? (
+                  <div className="flex w-full items-center gap-2 p-2 px-3">
+                    <input
+                      autoFocus
+                      className="flex-1 bg-transparent text-[13.5px] font-bold text-slate-700 outline-none dark:text-slate-200"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          onRenameConversation(entry.conversation_id, editValue);
+                          setEntries(prev => prev.map(e => e.conversation_id === entry.conversation_id ? { ...e, question: editValue } : e));
+                          setEditingId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingId(null);
+                        }
+                      }}
+                    />
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => {
+                          onRenameConversation(entry.conversation_id, editValue);
+                          setEntries(prev => prev.map(e => e.conversation_id === entry.conversation_id ? { ...e, question: editValue } : e));
+                          setEditingId(null);
+                        }}
+                        className="rounded-lg p-1 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button 
+                        onClick={() => setEditingId(null)}
+                        className="rounded-lg p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                      >
+                        <CloseIcon size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onSelect(entry.conversation_id)}
+                      className="flex-1 flex flex-col gap-1 p-3 text-left"
+                    >
+                      <p className="line-clamp-1 text-[13.5px] font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {entry.question || 'Image capture'}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-400">
+                        {new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </p>
+                    </button>
+
+                    <div className="relative pr-2 flex items-center gap-1">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (confirm('Delete this conversation?')) {
+                            await onDeleteConversation(entry.conversation_id);
+                            setEntries(prev => prev.filter(e => e.conversation_id !== entry.conversation_id));
+                          }
+                        }}
+                        className="rounded-lg p-1.5 text-rose-400 opacity-0 group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 transition-all dark:hover:bg-rose-900/30"
+                        title="Delete"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => setMenuOpenId(isMenuOpen ? null : entry.conversation_id)}
+                        className={`rounded-lg p-1.5 transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-900 dark:bg-slate-800' : 'text-slate-400 opacity-0 group-hover:opacity-100'}`}
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+
+                      {isMenuOpen && (
+                        <div className="absolute right-2 top-10 z-20 w-32 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                          <button
+                            onClick={() => {
+                              setEditingId(entry.conversation_id);
+                              setEditValue(entry.question);
+                              setMenuOpenId(null);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+                          >
+                            <Edit2 size={12} />
+                            Rename
+                          </button>
+                          <button
+                            onClick={async () => {
+                              await onDeleteConversation(entry.conversation_id);
+                              setEntries(prev => prev.filter(e => e.conversation_id !== entry.conversation_id));
+                              setMenuOpenId(null);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                          >
+                            <Trash2 size={12} />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -118,6 +278,9 @@ export default function HistoryPanel({ onSelect, onNewSolve, onOpenSettings, onC
           <span className="text-[13px] font-bold">Account Settings</span>
         </button>
       </div>
+      {/* end sidebar */}
+      </div>
+    {/* end overlay */}
     </div>
   );
 }

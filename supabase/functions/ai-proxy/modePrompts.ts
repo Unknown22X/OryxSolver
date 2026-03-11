@@ -6,6 +6,7 @@ type PromptContext = {
   styleMode: StyleMode;
   generationMode: GenerationMode;
   hasImages: boolean;
+  isFollowUp?: boolean;
 };
 
 const BASE_PROMPT = `
@@ -151,6 +152,7 @@ export function buildPrompt(context: PromptContext): string {
     '- No preface (no "okay", "bet", "sure", etc).',
     '- No markdown tables, no code fences.',
     hasImages ? '- Use attached images as primary context.' : '- Use question text as primary context.',
+    context.isFollowUp ? '- This is a follow-up; do not repeat information from previous turns unless necessary. Focus on the new question.' : '',
     '',
     `Question: ${question}`,
   ];
