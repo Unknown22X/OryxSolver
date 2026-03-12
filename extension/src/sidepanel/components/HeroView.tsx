@@ -25,6 +25,10 @@ export default function HeroView({
   logoUrl, onSend, onCaptureScreen, styleMode, onStyleModeChange, isSending, usage, onOpenUpgrade
 }: HeroViewProps) {
 
+  const isPro = usage?.subscriptionTier === 'pro';
+  const remainingCredits = Math.max((usage?.totalCredits || 50) - (usage?.usedCredits || 0), 0);
+  const creditUsagePercent = usage?.totalCredits > 0 ? (usage.usedCredits / usage.totalCredits) * 100 : 0;
+
   return (
     <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col animate-in fade-in slide-in-from-bottom-8 duration-1000 pb-4 pt-8">
       <div className="px-6 text-center flex flex-1 flex-col items-center justify-center">
@@ -33,16 +37,8 @@ export default function HeroView({
           <img src={logoUrl} alt="OryxSolver" className="h-12 w-12 object-cover" />
         </div>
 
-        {/* ─── Headline & Upgrade ─── */}
+        {/* ─── Headline ─── */}
         <div className="mb-12 space-y-4 relative">
-          {!usage.subscriptionTier || usage.subscriptionTier === 'free' ? (
-            <button
-              onClick={onOpenUpgrade}
-              className="absolute -top-16 right-0 rounded-full border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 shadow-sm transition-all hover:scale-105 hover:shadow-md dark:border-amber-900/50 dark:from-amber-950/40 dark:to-orange-950/40 dark:text-amber-400"
-            >
-              🌟 Upgrade to Pro
-            </button>
-          ) : null}
           <h2 className="text-[48px] font-black tracking-tighter text-slate-900 dark:text-slate-50 leading-[0.9]">
             Snap<span className="text-indigo-600">.</span> Solve<span className="text-indigo-600">.</span> Learn<span className="text-indigo-600">.</span>
           </h2>
@@ -51,18 +47,49 @@ export default function HeroView({
           </p>
         </div>
 
-        {/* ─── Trust Ticker ─── */}
-        <div className="mb-10 flex items-center justify-center gap-8 rounded-full bg-slate-100/50 border border-slate-200/30 px-6 py-4 backdrop-blur-md dark:bg-white/[0.03] dark:border-white/[0.05]">
-          <div className="flex flex-col items-center gap-0.5">
-            <p className="text-[18px] font-black tracking-tighter text-slate-900 dark:text-white leading-none">2,400+</p>
-            <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Solved Today</p>
+        {/* ─── Usage Overview for Free Users ─── */}
+        {!isPro && (
+          <div className="mb-10 w-full max-w-sm rounded-[24px] border border-indigo-100 bg-white/50 p-5 shadow-sm backdrop-blur-md dark:border-white/5 dark:bg-white/5">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex flex-col items-start">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly Usage</span>
+                <p className="text-lg font-black text-slate-900 dark:text-white">
+                  {remainingCredits} <span className="text-xs text-slate-400">credits left</span>
+                </p>
+              </div>
+              <button
+                onClick={onOpenUpgrade}
+                className="rounded-full bg-indigo-600 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-200 transition-all hover:scale-105 active:scale-95 dark:shadow-none"
+              >
+                Go Pro
+              </button>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+              <div 
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000" 
+                style={{ width: `${100 - creditUsagePercent}%` }}
+              />
+            </div>
+            <p className="mt-3 text-[10px] font-bold text-slate-400">
+              Upgrade to Pro for unlimited solutions and priority AI.
+            </p>
           </div>
-          <div className="h-8 w-px bg-slate-200/60 dark:bg-slate-800" />
-          <div className="flex flex-col items-center gap-0.5">
-            <p className="text-[18px] font-black tracking-tighter text-slate-900 dark:text-white leading-none">99.8%</p>
-            <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Accuracy</p>
+        )}
+
+        {/* ─── Trust Ticker (Pro Users Only) ─── */}
+        {isPro && (
+          <div className="mb-10 flex items-center justify-center gap-8 rounded-full bg-slate-100/50 border border-slate-200/30 px-6 py-4 backdrop-blur-md dark:bg-white/[0.03] dark:border-white/[0.05]">
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-[18px] font-black tracking-tighter text-slate-900 dark:text-white leading-none">2,400+</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Solved Today</p>
+            </div>
+            <div className="h-8 w-px bg-slate-200/60 dark:bg-slate-800" />
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-[18px] font-black tracking-tighter text-slate-900 dark:text-white leading-none">99.8%</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Accuracy</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ─── Try These ─── */}
         <div className="mb-12 w-full">

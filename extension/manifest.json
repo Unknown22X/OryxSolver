@@ -5,11 +5,11 @@
   "version": "0.1",
   "description": "an ai homework helper",
   "icons": {
-    "16": "public/icons/16.png",
-    "32": "public/icons/32.png",
-    "34": "public/icons/34.png",
-    "48": "public/icons/48.png",
-    "128": "public/icons/128.png"
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "34": "icons/34.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
   },
   "action": {},
   "content_security_policy": {
@@ -32,7 +32,8 @@
         "src/content/domExtractor.ts",
         "src/content/inlineInjector.ts"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "permissions": [
@@ -49,5 +50,11 @@
     "http://127.0.0.1/*",
     "https://api.polar.sh/*",
     "https://*.supabase.co/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png", "assets/*"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

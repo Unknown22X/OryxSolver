@@ -187,7 +187,7 @@ export default function AuthView({
               <div className="mt-6 text-center">
                 <button
                   type="button"
-                  onClick={() => onSetView(view === 'sign-in' ? 'sign-up' : 'sign-in')}
+                  onClick={() => window.open('https://oryxsolver.com/auth', '_blank')}
                   className="text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors dark:text-slate-400 dark:hover:text-indigo-300"
                 >
                   {view === 'sign-in' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}

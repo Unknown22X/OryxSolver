@@ -34,7 +34,7 @@ export async function callAiProxy(
   const controller = new AbortController();
   // Must be larger than ai-proxy total attempt window (including fallback models),
   // otherwise solve aborts while ai-proxy is still processing.
-  const timeoutMs = mode === 'fast_fallback' ? 18000 : 32000;
+  const timeoutMs = mode === 'fast_fallback' ? 18000 : 60000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -65,7 +65,12 @@ export async function callAiProxy(
       } catch {
         if (errText.trim()) message = `${message} ${errText}`;
       }
-      throw new AiError(res.status === 429 ? 429 : 502, code, message);
+      // Preserve the actual status code from ai-proxy instead of blindly converting to 502
+      const status = res.status === 429 ? 429
+        : res.status === 503 ? 503
+        : res.status === 504 ? 504
+        : 502;
+      throw new AiError(status, code, message);
     }
 
     const data = await res.json();

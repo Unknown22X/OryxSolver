@@ -13,7 +13,13 @@ export async function postSolveRequest(
   const form = new FormData();
   form.append('question', request.question);
   form.append('style_mode', request.styleMode);
-  request.images.forEach((image) => form.append('images', image));
+  request.images.forEach((image) => {
+    if (image instanceof File) {
+      form.append('images', image);
+    } else if (typeof image === 'object' && 'url' in image) {
+      form.append('image_urls', image.url);
+    }
+  });
   if (request.history && request.history.length > 0) {
     form.append('history', JSON.stringify(request.history));
   }
@@ -22,6 +28,9 @@ export async function postSolveRequest(
   }
   if (request.quotedStep) {
     form.append('quoted_step', JSON.stringify(request.quotedStep));
+  }
+  if (request.isBulk) {
+    form.append('is_bulk', 'true');
   }
 
   const requestId = crypto.randomUUID?.() || Date.now().toString(36);

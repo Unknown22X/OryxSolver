@@ -1,10 +1,15 @@
-export function parseExplanationSteps(explanation: string): string[] {
+export function parseExplanationSteps(explanation: string, isBulk?: boolean): string[] {
   const lines = explanation
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 
   if (lines.length <= 1) return lines;
+
+  if (isBulk) {
+    // For bulk, DO NOT strip number prefixes or deduplicate identical answers
+    return lines;
+  }
 
   const cleaned = lines
     .map((line) =>

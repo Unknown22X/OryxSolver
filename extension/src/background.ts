@@ -167,6 +167,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
+      if (message?.type === 'INLINE_EXTRACT_QUESTION' || message?.type === 'INLINE_SOLVE_AND_INJECT') {
+        const windowId = sender.tab?.windowId || (await getActiveTab())?.windowId;
+        if (windowId) {
+          try {
+            await chrome.sidePanel.open({ windowId });
+          } catch (e) {
+            console.warn('Failed to open sidepanel:', e);
+          }
+        }
+        await chrome.storage.local.set({
+          pendingInlineQuestion: {
+            type: message.type,
+            text: message.payload?.text,
+            images: message.payload?.images || [],
+            injectionId: message.payload?.injectionId,
+            isBulk: message.payload?.isBulk,
+            timestamp: Date.now(),
+            tabId: sender.tab?.id
+          }
+        });
+        // We still send response and let the content script continue
+        sendResponse({ ok: true });
+        return;
+      }
+
       if (message?.type === 'CROP_RECT_SELECTED') {
         const rect = message.payload as CropRectPayload;
         if (!rect || rect.width <= 0 || rect.height <= 0) {

@@ -66,7 +66,7 @@ export default function SidePanelHeader({
           {!isPro && onOpenUpgrade && (
             <button
               onClick={onOpenUpgrade}
-              className="hidden sm:flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-orange-500/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95"
+              className="hidden sm:flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-500/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95"
             >
               🌟 Upgrade
             </button>
@@ -123,7 +123,7 @@ export default function SidePanelHeader({
       ) : (
         <button
           type="button"
-          onClick={() => window.open('https://example.com/home', '_blank')}
+          onClick={() => window.open('https://oryxsolver.com', '_blank')}
           className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-slate-200 transition-all hover:scale-105 active:scale-95 hover:bg-slate-800"
         >
           Explore

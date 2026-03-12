@@ -36,23 +36,40 @@ export default function UpgradeModal({
           </div>
 
           <div className="text-center">
-            <h2 className="text-2xl font-black tracking-tight text-white mb-8">
+            <h2 className="text-2xl font-black tracking-tight text-white mb-2">
               {upgradeMoment.title || 'Upgrade to Pro'}
             </h2>
+            <p className="text-indigo-100/80 text-[13px] font-medium px-4 mb-8">
+              {upgradeMoment.message || 'Unlock unlimited solutions and premium tools to excel in your studies.'}
+            </p>
             
-            <div className="mt-12 space-y-4 text-left">
+            {/* Progress Visualization (Only if relevant) */}
+            {upgradeMoment.percent > 0 && upgradeMoment.level !== 'paywall' && (
+              <div className="mb-10 px-6">
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-200/60 mb-2">
+                  <span>Current Usage</span>
+                  <span>{Math.round(upgradeMoment.percent)}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/5">
+                  <div 
+                    className="h-full bg-white transition-all duration-1000" 
+                    style={{ width: `${upgradeMoment.percent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-8 space-y-4 text-left bg-slate-50/50 dark:bg-slate-800/50 p-6 rounded-[24px] border border-slate-100 dark:border-white/5 mx-auto max-w-[280px]">
               {[
-                'Unlimited step-by-step solutions',
-                'Higher image upload limits',
-                'Priority AI processing',
-                'Advanced subject coverage (STEM)',
-                'No wait times'
+                { label: 'Unlimited Solutions', icon: '✨' },
+                { label: 'Priority AI Processing', icon: '⚡' },
+                { label: 'Advanced Vision AI', icon: '👁️' },
+                { label: 'Math/STEM Excellence', icon: '📐' },
+                { label: 'Zero Wait Times', icon: '🚀' }
               ].map((feature) => (
-                <div key={feature} className="flex items-center gap-3">
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
-                    <CheckCircle2 size={14} />
-                  </div>
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{feature}</span>
+                <div key={feature.label} className="flex items-center gap-3">
+                  <span className="text-sm">{feature.icon}</span>
+                  <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{feature.label}</span>
                 </div>
               ))}
             </div>
@@ -60,12 +77,14 @@ export default function UpgradeModal({
             <div className="mt-10">
               <button
                 onClick={() => window.open(upgradeUrl, '_blank')}
-                className="oryx-btn-primary"
+                className="oryx-btn-primary w-full max-w-[240px] shadow-indigo-500/25 hover:shadow-indigo-500/40"
               >
-                <span>Upgrade Now</span>
+                <span>Get Pro Access</span>
                 <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" />
               </button>
-              <p className="mt-4 oryx-caption">Starts at just $4.99/mo</p>
+              <p className="mt-4 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                Cancel anytime • Secure payment
+              </p>
             </div>
           </div>
         </div>

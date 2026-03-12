@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
 import RichText from './RichText';
 
 type StepTimelineProps = {
   steps: string[];
+  isBulk?: boolean;
   onQuoteStep?: (stepBody: string, stepIndex: number) => void;
 };
 
@@ -18,50 +18,33 @@ function parseStepContent(step: string) {
   return { title: '', body: cleaned };
 }
 
-export default function StepTimeline({ steps, onQuoteStep }: StepTimelineProps) {
-  const [visibleCount, setVisibleCount] = useState(0);
-
-  useEffect(() => {
-    setVisibleCount(0);
-    const intervals: number[] = [];
-    steps.forEach((_, i) => {
-      const id = window.setTimeout(() => {
-        setVisibleCount(i + 1);
-      }, 120 + i * 250);
-      intervals.push(id);
-    });
-    return () => intervals.forEach(id => window.clearTimeout(id));
-  }, [steps]);
-
+export default function StepTimeline({ steps, isBulk, onQuoteStep }: StepTimelineProps) {
   return (
     <div className="relative space-y-8 pl-4 pr-1 pb-2">
       {/* Vertical Timeline Line */}
       <div className="absolute left-6 top-5 bottom-8 w-[2px] bg-indigo-50 dark:bg-slate-800" />
       <div 
-        className="absolute left-6 top-5 w-[2px] bg-indigo-500 transition-all duration-700 dark:bg-indigo-400" 
-        style={{ height: visibleCount === 0 ? '0' : `${(visibleCount / steps.length) * 100}%`, maxHeight: 'calc(100% - 40px)' }}
+        className="absolute left-6 top-5 w-[2px] bg-indigo-500 dark:bg-indigo-400" 
+        style={{ height: 'calc(100% - 40px)' }}
       />
 
       {steps.map((step, index) => {
         const parsed = parseStepContent(step);
-        const isVisible = index < visibleCount;
-        const isCurrent = index === visibleCount - 1;
-
-        if (!isVisible) return null;
+        const isCurrent = index === steps.length - 1; // Highlight the last step slightly differently
 
         return (
           <div
             key={`${index}-${step.slice(0, 24)}`}
-            className={`relative pl-10 transition-all duration-500 animate-in fade-in slide-in-from-bottom-4 opacity-100 scale-100`}
+            className="relative pl-10"
           >
             {/* Step Number Badge */}
-            <div className={`absolute left-0 top-0 z-10 flex h-8 w-8 items-center justify-center rounded-xl border-2 transition-all duration-500 ${isCurrent ? 'border-indigo-500 bg-indigo-600 text-white scale-110 shadow-lg shadow-indigo-200 dark:shadow-none' : 'border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-800'}`}>
+            <div className={`absolute left-0 top-0 z-10 flex h-8 w-8 items-center justify-center rounded-xl border-2 ${isCurrent ? 'border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' : 'border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-800'}`}>
               <span className="text-[13px] font-black">{index + 1}</span>
             </div>
 
-            <article className={`relative rounded-2xl border p-5 transition-all duration-500 ${isCurrent ? 'border-indigo-100 bg-white shadow-xl shadow-indigo-50 dark:border-indigo-500/30 dark:bg-slate-900/40 dark:shadow-none' : 'border-white/40 bg-white/20 dark:border-slate-700/30 dark:bg-slate-900/10'}`}>
+            <article className={`relative rounded-2xl border p-5 ${isCurrent ? 'border-indigo-100 bg-white shadow-xl shadow-indigo-50 dark:border-indigo-500/30 dark:bg-slate-900/40 dark:shadow-none' : 'border-white/40 bg-white/20 dark:border-slate-700/30 dark:bg-slate-900/10'}`}>
               <div className="flex items-center gap-2 mb-3">
-                <span className={`text-[10px] font-black uppercase tracking-widest ${isCurrent ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400'}`}>Step {index + 1}</span>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${isCurrent ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400'}`}>{isBulk ? `Question ${index + 1}` : `Step ${index + 1}`}</span>
                 {parsed.title && (
                    <h3 className={`text-xs font-bold tracking-tight ${isCurrent ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'}`}>{parsed.title}</h3>
                 )}

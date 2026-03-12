@@ -14,6 +14,7 @@ type AiProxyRequest = {
 };
 
 function isComplexPrompt(question: string, imageParts: InlineImagePart[], styleMode: StyleMode): boolean {
+  if (question.includes("Create an answer key for these practice questions")) return false;
   if (imageParts.length > 0) return true;
   if (styleMode === 'step_by_step') return true;
 
@@ -50,8 +51,18 @@ function normalizeMcqAnswer(question: string, answer: string): string {
 
   if (!hasMcqSignal) return answer.trim();
 
-  const letterMatch = answer.match(/\b([A-D])\b/i) || answer.match(/^\s*([A-D])[\).:-]?/i);
-  if (letterMatch?.[1]) return letterMatch[1].toUpperCase();
+  // HEURISTIC: If the answer text is short and starts with a letter, it's definitely that letter.
+  const startMatch = answer.match(/^\s*([A-D])\b[\).:-]?/i);
+  if (startMatch?.[1]) return startMatch[1].toUpperCase();
+
+  // If the text is longer, look for the LAST letter mentioned in isolation (avoiding "Option A is wrong")
+  // or a very specific "Final Answer: B" pattern.
+  const matches = Array.from(answer.matchAll(/\b([A-D])\b/gi));
+  if (matches.length > 0) {
+      // Pick the last match if it's the only one or if it looks like the conclusion
+      return matches[matches.length - 1][1].toUpperCase();
+  }
+
   return answer.trim();
 }
 
@@ -61,15 +72,24 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
     return { answer: 'Answer available in explanation', explanation: raw, steps: [] };
   }
 
-  const answerLine = lines.find((line) => /^FINAL_ANSWER\s*:/i.test(line));
-  const answerRaw = answerLine
-    ? answerLine.replace(/^FINAL_ANSWER\s*:/i, '').trim()
-    : '';
+  // 1. Extract Final Answer (Prefer the LAST one if the AI repeated it or self-corrected)
+  let answerRaw = '';
+  for (let i = lines.length - 1; i >= 0; i--) {
+      if (/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i.test(lines[i])) {
+          answerRaw = lines[i].replace(/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i, '').trim();
+          break;
+      }
+  }
+  
   const answer = normalizeMcqAnswer(question, answerRaw || 'Answer available in explanation');
 
+  // 2. Extract Steps/Explanation
   const stepStartIndex = lines.findIndex((line) => /^STEPS\s*:/i.test(line));
-  const rawStepLines = stepStartIndex >= 0 ? lines.slice(stepStartIndex + 1) : lines.slice(1);
+  const rawStepLines = stepStartIndex >= 0 ? lines.slice(stepStartIndex + 1) : lines;
+  
   const steps = rawStepLines
+    .filter((line) => !/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i.test(line)) // Remove the answer line if at the end
+    .filter((line) => !/^STEPS\s*:/i.test(line)) // Defensive
     .map((line) => line.replace(/^[-*]\s*/, '').replace(/^\d+[\).:-]\s*/, '').trim())
     .filter(Boolean);
 
@@ -77,17 +97,56 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
   return { answer, explanation, steps };
 }
 
+/** Dedicated parser for bulk answer keys — extracts ANSWER_KEY section and strips number prefixes */
+function parseBulkOutput(raw: string): { answer: string; explanation: string; steps: string[] } {
+  const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
+  
+  // Find the ANSWER_KEY: or FINAL_ANSWERS: marker
+  const answerKeyIndex = lines.findIndex((line) => /^(ANSWER[_ ]?KEY|FINAL[_ ]?ANSWERS)\s*:/i.test(line));
+  const linesToParse = answerKeyIndex >= 0 ? lines.slice(answerKeyIndex + 1) : lines;
+  
+  // Filter to only numbered lines (skip any trailing commentary)
+  const numberedLines = linesToParse.filter((line) => /^\d+[\).:\-]/.test(line));
+  
+  // Strip the number prefix (e.g., "13. x+3" -> "x+3") to prevent Markdown ordered list rendering
+  const cleanedLines = numberedLines.map((line) => line.replace(/^\d+[\).:\-]\s*/, '').trim());
+  
+  if (cleanedLines.length > 0) {
+    return {
+      answer: 'Answer Key',
+      explanation: cleanedLines.join('\n'),
+      steps: cleanedLines,
+    };
+  }
+  
+  // Fallback: treat all non-empty lines as answers if no numbered format detected
+  return {
+    answer: 'Answer Key',
+    explanation: lines.join('\n'),
+    steps: lines,
+  };
+}
+
 function hasUsableStructuredOutput(question: string, raw: string): boolean {
   const parsed = parseStructuredOutput(raw, question);
   const explanationText = parsed.explanation.trim();
-  const endsCleanly = /[.!?):]$/.test(explanationText);
+  
+  // For bulk questions, answers might end in a number or letter (e.g., '1. A' or '2. 42')
+  const isBulkAsk = question.includes("Create an answer key for these practice questions");
+  const endsCleanly = isBulkAsk 
+    ? /[.!?):a-zA-Z0-9\s]$/.test(explanationText)
+    : /[.!?):]$/.test(explanationText);
 
   const isPlaceholderAnswer =
     parsed.answer.trim().length === 0 ||
     parsed.answer.trim().toLowerCase() === 'answer available in explanation';
 
   // If it doesn't end cleanly, it's definitely truncated.
-  if (!endsCleanly) return false;
+  if (!endsCleanly && explanationText.length > 0) return false;
+
+  if (isBulkAsk) {
+    return parsed.steps.length > 0 || explanationText.length > 0;
+  }
 
   if (!isPlaceholderAnswer) {
     // For standard answers, we still want high quality.
@@ -114,17 +173,25 @@ async function callGemini(
   const defaultBackup = 'gemini-2.0-flash';
   const normalModel = Deno.env.get('GEMINI_MODEL_NORMAL') || defaultPrimary;
   const fastModel = Deno.env.get('GEMINI_MODEL_FAST') || 'gemini-2.0-flash';
-  const cheapModel = Deno.env.get('GEMINI_MODEL_CHEAP') || fastModel;
+  const cheapModel = Deno.env.get('GEMINI_MODEL_CHEAP') || 'gemini-1.5-flash-8b';
   const strongModel = Deno.env.get('GEMINI_MODEL_STRONG') || normalModel;
   const backupModel = Deno.env.get('GEMINI_MODEL_BACKUP') || defaultBackup;
+  const isBulkAsk = 
+    question.includes("answer key for the following questions") ||
+    question.includes("Create an answer key for these practice questions") ||
+    (question.match(/QUESTION\s*\d+:/gi) ?? []).length >= 2;
+
   const complexPrompt = isComplexPrompt(question, imageParts, styleMode);
 
   const modelChain =
     mode === 'fast_fallback'
-      ? [cheapModel, strongModel, backupModel]
-      : complexPrompt
-        ? [strongModel, cheapModel, backupModel]
-        : [cheapModel, strongModel, backupModel];
+      ? [cheapModel, backupModel, strongModel]
+      : isBulkAsk
+        ? [strongModel, backupModel, cheapModel]  // Added cheap fallback
+        : complexPrompt
+          ? [strongModel, cheapModel, backupModel]
+          : [cheapModel, strongModel, backupModel];
+
   const dedupedModelChain = modelChain.filter((value, index, arr) => value && arr.indexOf(value) === index);
   const contextPrefix = history.length > 0
     ? `PREVIOUS CONVERSATION (for context only):\n${history.map(h => `${h.role === 'user' ? 'USER' : 'AI'}: ${h.text}`).join('\n\n')}\n\n====================\n\nNEW FOLLOW-UP QUESTION:\n`
@@ -144,15 +211,18 @@ async function callGemini(
   let resolvedModel = dedupedModelChain[0];
   let lastErrorText = '';
   let lastStatus = 500;
-  const perAttemptTimeoutMs = mode === 'fast_fallback' ? 6000 : 10000;
-  const primaryMaxOutputTokens =
-    mode === 'fast_fallback'
+  const perAttemptTimeoutMs = mode === 'fast_fallback' ? 6000 : 25000;
+
+  const primaryMaxOutputTokens = isBulkAsk
+    ? 8192
+    : mode === 'fast_fallback'
       ? (complexPrompt || styleMode === 'step_by_step' ? 1400 : 1000)
       : (complexPrompt || styleMode === 'step_by_step' ? 4096 : 3000);
+  const bulkTimeoutMs = 45000; // Safer gap below Supabase 60s gateway
 
   for (const model of dedupedModelChain) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), isBulkAsk ? bulkTimeoutMs : perAttemptTimeoutMs);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     try {
       const res = await fetch(url, {
@@ -164,9 +234,16 @@ async function callGemini(
               parts: [{ text: prompt }, ...imageParts],
             },
           ],
-          generationConfig: mode === 'fast_fallback'
-            ? { maxOutputTokens: primaryMaxOutputTokens, temperature: 0.0 }
-            : { maxOutputTokens: primaryMaxOutputTokens, temperature: 0.1 },
+          safetySettings: [
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" }
+          ],
+          generationConfig: {
+          maxOutputTokens: primaryMaxOutputTokens,
+          temperature: isBulkAsk ? 0.0 : (mode === 'fast_fallback' ? 0.0 : 0.1),
+        },
         }),
         signal: controller.signal,
       });
@@ -175,11 +252,16 @@ async function callGemini(
         const errText = await res.text();
         lastErrorText = errText;
         lastStatus = res.status;
+        console.warn(`[ai-proxy] Model ${model} failed: ${res.status} — ${errText.slice(0, 200)}`);
         const shouldTryNext =
           res.status === 429 ||
           res.status === 404 ||
           res.status >= 500;
-        if (shouldTryNext) continue;
+        if (shouldTryNext) {
+          // Small delay before trying next model when rate-limited
+          if (res.status === 429) await new Promise(r => setTimeout(r, 1500));
+          continue;
+        }
         throw new AppError(502, 'AI_PROVIDER_ERROR', `AI provider failed: ${res.status}`, errText);
       }
 
@@ -198,6 +280,12 @@ async function callGemini(
       }
 
       if (finishReason === 'MAX_TOKENS') {
+        // For bulk answers, just accept whatever we got — don't retry
+        if (isBulkAsk) {
+          resolvedModel = model;
+          break;
+        }
+
         const hasUsablePartial = hasUsableStructuredOutput(question, fullText);
 
         if (!hasUsablePartial) {
@@ -226,6 +314,12 @@ async function callGemini(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 contents: [{ parts: [{ text: continuationPrompt }] }],
+                safetySettings: [
+                  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" }
+                ],
                 generationConfig: mode === 'fast_fallback'
                   ? { maxOutputTokens: 1400, temperature: 0.0 }
                   : { maxOutputTokens: 2000, temperature: 0.1 },
@@ -297,6 +391,18 @@ async function callGemini(
       throw new AppError(503, 'AI_INCOMPLETE_OUTPUT', 'AI output was truncated. Please retry.', { retryable: true });
     }
     throw new AppError(502, 'AI_PROVIDER_ERROR', 'All configured AI models failed.', lastErrorText);
+  }
+
+  // Use dedicated bulk parser for bulk requests
+  if (isBulkAsk) {
+    const bulkParsed = parseBulkOutput(fullText);
+    return {
+      answer: bulkParsed.answer,
+      explanation: bulkParsed.explanation,
+      steps: bulkParsed.steps,
+      model: resolvedModel,
+      suggestions: [],
+    };
   }
 
   const parsed = parseStructuredOutput(fullText, question);

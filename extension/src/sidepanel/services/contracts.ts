@@ -3,10 +3,11 @@ import type { StyleMode } from '../types';
 export type SolveRequest = {
   question: string;
   styleMode: StyleMode;
-  images: File[];
+  images: (File | { url: string })[];
   history?: Array<{ role: 'user' | 'model', text: string }>;
   conversationId?: string;
   quotedStep?: { text: string; index: number } | null;
+  isBulk?: boolean;
 };
 
 export type SolveSuggestion = {
@@ -36,7 +37,9 @@ export type SolveResponse = {
     aiMode: 'normal' | 'fast_fallback';
     styleMode: StyleMode;
     conversationId: string;
+    isBulk?: boolean;
   };
+  isBulk?: boolean;
   suggestions: SolveSuggestion[];
 };
 

@@ -17,10 +17,13 @@ type ProfileModalProps = {
   onToggleSaveHistory: (val: boolean) => void;
   useAnalytics: boolean;
   onToggleAnalytics: (val: boolean) => void;
+  autoCopy: boolean;
+  onToggleAutoCopy: (val: boolean) => void;
   onClearHistory: () => void;
   onDeleteAccount: () => void;
   profileMessage: string | null;
   isBusy: boolean;
+  tier: 'pro' | 'free';
   settingsPanel: 'menu' | 'profile' | 'settings' | 'password';
   onSetSettingsPanel: (panel: 'menu' | 'profile' | 'settings' | 'password') => void;
   newPassword: string;
@@ -44,12 +47,15 @@ export default function ProfileModal({
   onToggleDarkMode,
   saveHistory,
   onToggleSaveHistory,
-  useAnalytics: _useAnalytics,
-  onToggleAnalytics: _onToggleAnalytics,
+  useAnalytics,
+  onToggleAnalytics,
+  autoCopy,
+  onToggleAutoCopy,
   onClearHistory,
   onDeleteAccount,
   profileMessage,
   isBusy,
+  tier,
   settingsPanel,
   onSetSettingsPanel,
   newPassword,
@@ -140,6 +146,14 @@ export default function ProfileModal({
                 <LogOut size={18} />
                 Sign Out
               </button>
+
+              <div className="mt-8 rounded-2xl bg-indigo-50 px-5 py-4 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/20">
+                <p className="oryx-caption text-indigo-500 mb-1">Current Plan</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-black text-slate-900 dark:text-white">{tier === 'pro' ? 'Oryx Pro' : 'Free Tier'}</p>
+                  <a href="https://oryxsolver.shop/pricing" target="_blank" className="text-[11px] font-black text-indigo-600 hover:underline">Manage</a>
+                </div>
+              </div>
             </div>
           )}
 
@@ -197,6 +211,32 @@ export default function ProfileModal({
                   className={`oryx-toggle ${saveHistory ? 'oryx-toggle--on' : 'oryx-toggle--off'}`}
                 >
                   <span className={`oryx-toggle__knob ${saveHistory ? 'oryx-toggle__knob--on' : 'oryx-toggle__knob--off'}`} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-black text-slate-800 dark:text-slate-100">Auto-copy Answer</p>
+                  <p className="oryx-caption">Copy main answer to clipboard</p>
+                </div>
+                <button
+                  onClick={() => onToggleAutoCopy(!autoCopy)}
+                  className={`oryx-toggle ${autoCopy ? 'oryx-toggle--on' : 'oryx-toggle--off'}`}
+                >
+                  <span className={`oryx-toggle__knob ${autoCopy ? 'oryx-toggle__knob--on' : 'oryx-toggle__knob--off'}`} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-black text-slate-800 dark:text-slate-100">Anonymous Usage</p>
+                  <p className="oryx-caption">Help improve AI with usage data</p>
+                </div>
+                <button
+                  onClick={() => onToggleAnalytics(!useAnalytics)}
+                  className={`oryx-toggle ${useAnalytics ? 'oryx-toggle--on' : 'oryx-toggle--off'}`}
+                >
+                  <span className={`oryx-toggle__knob ${useAnalytics ? 'oryx-toggle__knob--on' : 'oryx-toggle__knob--off'}`} />
                 </button>
               </div>
 

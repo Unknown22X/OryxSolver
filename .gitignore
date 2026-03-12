@@ -7,3 +7,5 @@ IMPLEMENTATION_PLAN.md
 *.tsbuildinfo
 supabase/.branches/
 extension/src/sidepanel/App.supabase.backup.txt
+extension/patch.txt
+old.txt

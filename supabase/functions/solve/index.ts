@@ -13,8 +13,6 @@ import {
 } from '../_shared/profile.ts';
 import type { SolveSuccessResponse, StyleMode } from '../_shared/contracts.ts';
 
-
-
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunkSize = 0x8000;
@@ -26,7 +24,10 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { mimeType: string; data: string } }>> {
-  const imageEntries = [...form.getAll('images'), form.get('image')].filter(Boolean);
+  const images = form.getAll('images');
+  const imageUrls = form.getAll('image_urls').filter(Boolean);
+  const imageEntries = [...images, form.get('image')].filter(Boolean);
+  
   const uniqueFiles: File[] = [];
   const seen = new Set<string>();
 
@@ -38,11 +39,11 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
     uniqueFiles.push(entry);
   }
 
-  const maxFileSizeBytes = 5 * 1024 * 1024;
-  const selected = uniqueFiles;
-
   const parts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
-  for (const file of selected) {
+  const maxFileSizeBytes = 5 * 1024 * 1024;
+
+  // Process standard file uploads
+  for (const file of uniqueFiles) {
     if (!file.type.startsWith('image/')) continue;
     if (file.size > maxFileSizeBytes) {
       throw new AppError(413, 'IMAGE_TOO_LARGE', `Image "${file.name}" is too large. Max size is 5MB.`);
@@ -54,6 +55,52 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
         data: bytesToBase64(bytes),
       },
     });
+  }
+
+  // Process image URLs
+  for (const urlEntry of imageUrls) {
+    const url = String(urlEntry);
+    if (!url) continue;
+    
+    // Support Data URLs (base64) directly to avoid fetch errors
+    if (url.startsWith('data:image/')) {
+      try {
+        const [meta, b64] = url.split(',');
+        const mimeMatch = meta.match(/data:(.*?);base64/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+        if (b64 && b64.length < 10000000) { // ~7MB limit for data urls
+          parts.push({
+            inlineData: {
+              mimeType: mime,
+              data: b64,
+            },
+          });
+          continue;
+        }
+      } catch (err) {
+        console.warn(`Failed to parse data URL`, err);
+      }
+    }
+
+    if (!url.startsWith('http')) continue;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const contentType = resp.headers.get('content-type') || 'image/png';
+      if (!contentType.startsWith('image/')) continue;
+      
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      if (bytes.length > maxFileSizeBytes) continue;
+
+      parts.push({
+        inlineData: {
+          mimeType: contentType,
+          data: bytesToBase64(bytes),
+        },
+      });
+    } catch (err) {
+      console.warn(`Failed to fetch image from URL: ${url}`, err);
+    }
   }
 
   return parts;
@@ -225,7 +272,11 @@ function hasAmbiguousEquationFormatting(text: string): boolean {
   const looksFlattened = /\b[a-zA-Z]\s*=\s*-?\s*[0-9]+[a-zA-Z]?\s+[a-zA-Z]\b/.test(stem);
   const hasDivision = /\/|\bdivided by\b/i.test(stem);
 
-  return looksFlattened && !hasDivision;
+  // Enhancement: Only reject if it's very short and looks flattened.
+  // If the stem is long, it likely contains enough context even if formatted poorly.
+  const isExtremelyShort = stem.length < 50;
+
+  return isExtremelyShort && looksFlattened && !hasDivision;
 }
 
 Deno.serve(async (req) => {
@@ -260,6 +311,7 @@ Deno.serve(async (req) => {
           : '';
 
     let history: Array<{ role: 'user' | 'model', text: string }> = [];
+    const isBulk = form.get('is_bulk') === 'true';
     const historyRaw = form.get('history');
     if (historyRaw) {
       try {
@@ -276,7 +328,7 @@ Deno.serve(async (req) => {
     }
     const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
 
-    if (imageParts.length === 0 && hasAmbiguousEquationFormatting(repairedQuestion)) {
+    if (imageParts.length === 0 && tier !== 'pro' && hasAmbiguousEquationFormatting(repairedQuestion)) {
       return jsonError(
         422,
         'QUESTION_INCOMPLETE',
@@ -305,34 +357,35 @@ Deno.serve(async (req) => {
     const status = profile.subscription_status ?? 'inactive';
     const allCredits = profile.all_credits && profile.all_credits > 0 ? profile.all_credits : 50;
     const creditsUsed = profile.used_credits ?? 0;
-    const imageCount = imageParts.length;
-
-
-
     if (tier === 'pro' && status !== 'active') {
       return jsonError(402, 'PRO_SUBSCRIPTION_INACTIVE', 'Pro subscription is inactive');
     }
 
-    if (tier === 'pro' && imageCount > 4) {
-      return jsonError(400, 'IMAGE_LIMIT_EXCEEDED_PRO', 'Pro users can upload up to 4 images per message.');
+    if (tier === 'pro' && imageParts.length > 20) {
+      return jsonError(400, 'IMAGE_LIMIT_EXCEEDED_PRO', 'Pro users can upload up to 20 images per bulk message.');
     }
 
-    if (tier !== 'pro' && imageCount > 1) {
-      return jsonError(400, 'IMAGE_LIMIT_EXCEEDED_FREE', 'Free users can upload only 1 image per message.');
+    const freeImageLimit = isBulk ? 10 : 1;
+    if (tier !== 'pro' && imageParts.length > freeImageLimit) {
+      // For Free users, instead of erroring on auto-extracted images, we truncate.
+      // This prevents "IMAGE_LIMIT_EXCEEDED" errors for Inline/Bulk solves.
+      imageParts.splice(freeImageLimit);
     }
+
+    const imageCount = imageParts.length;
 
     let nextCreditsUsed = creditsUsed;
     let nextMonthlyImagesUsed = profile.monthly_images_used ?? 0;
     if (tier !== 'pro') {
       if (creditsUsed >= allCredits) {
-        return jsonError(429, 'LIMIT_EXCEEDED', 'Credit limit reached');
+        return jsonError(429, 'CREDIT_LIMIT_REACHED', 'You have reached your free question limit. Upgrade to Pro for unlimited solutions.');
       }
       if (imageCount > 0) {
         const monthStart = currentMonthStartIsoDate();
         const currentMonthlyImagesUsed =
           profile.monthly_images_period === monthStart ? (profile.monthly_images_used ?? 0) : 0;
         if (currentMonthlyImagesUsed + imageCount > 10) {
-          return jsonError(429, 'MONTHLY_IMAGE_LIMIT_EXCEEDED', 'Free users can upload up to 10 images per month.');
+          return jsonError(429, 'IMAGE_LIMIT_REACHED', 'Monthly image limit reached. Upgrade to Pro for more uploads.');
         }
       }
     }
@@ -414,15 +467,20 @@ Deno.serve(async (req) => {
     }
 
     // History persistence is best-effort and should never fail solve.
-    void saveHistoryEntry(supabase, {
+    const { id: historyId } = await saveHistoryEntry(supabaseAdmin, {
       authUserId: user.id,
-      question,
+      question: repairedQuestion,
       answer: ai.answer,
       explanation: ai.explanation,
       conversationId,
-      styleMode: runStyleMode,
-      source: 'extension',
+      styleMode,
+      image_urls: form.getAll('image_urls').filter(Boolean).map(url => String(url)),
+      is_bulk: isBulk
     });
+
+    const isBulkAsk = 
+      question.includes("answer key for the following questions") ||
+      question.includes("Create an answer key for these practice questions");
 
     const responseBody: SolveSuccessResponse = {
       api_version: 'v1',
@@ -443,9 +501,10 @@ Deno.serve(async (req) => {
         aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
         styleMode,
         conversationId,
+        isBulk
       },
       suggestions: ai.suggestions,
-      steps: [
+      steps: isBulkAsk ? ai.steps : [
         ...ai.steps,
         ...(aiFallbackUsed ? ['Fast fallback mode was used to reduce latency.'] : []),
         tier === 'pro'
@@ -501,4 +560,3 @@ Deno.serve(async (req) => {
     return jsonError(500, 'SOLVE_FAILED', message);
   }
 });
-

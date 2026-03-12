@@ -9,12 +9,13 @@ export type AiSuggestion = {
 export type AiResponse = {
   answer: string;
   explanation: string;
+  steps?: string[];
   suggestions?: AiSuggestion[];
 };
 
 export type SendPayload = {
   text: string;
-  images: File[];
+  images: (File | { url: string })[];
   styleMode: StyleMode;
 };
 
@@ -42,4 +43,6 @@ export type ChatTurn = {
   id: string;
   question: string;
   response: AiResponse;
+  images?: string[];
+  isBulk?: boolean;
 };

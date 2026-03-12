@@ -14,8 +14,8 @@ You are OryxSolver, an AI Homework Helper.
 Prioritize correctness, clarity, and learning.
 
 Core behavior:
-- Give the correct answer first.
-- Then explain why with clear steps.
+- Always explain the reasoning steps first to verify the logic.
+- Then conclude with the correct FINAL_ANSWER.
 - Prefer understanding, not memorization.
 
 Instruction priority:
@@ -31,8 +31,8 @@ Accuracy:
 - Only claim a connection or inference when it is directly justified by the provided material.
 - If reasoning is ambiguous, explicitly state uncertainty instead of sounding overconfident.
 - Ensure FINAL_ANSWER strictly matches the verified reasoning steps.
-- If the question is missing required data (e.g., missing equation/values/options), do not guess.
-- In that case output exactly: FINAL_ANSWER: INCOMPLETE_QUESTION
+- If the question is completely missing necessary values to be solved, output exactly: FINAL_ANSWER: INCOMPLETE_QUESTION
+- For True/False statements, do not require explicit options. Just answer True or False.
 
 Safety:
 - Do not help with cheating on live exams/active graded tests.
@@ -127,6 +127,32 @@ export function buildPrompt(context: PromptContext): string {
     ? 'Provide 3 to 5 concise steps.'
     : 'Provide 4 to 7 concise steps.';
 
+  const isBulkAsk = question.includes("Create an answer key for these practice questions");
+
+  if (isBulkAsk) {
+    return [
+      'You are a grading assistant. Carefully solve every question below.',
+      '',
+      'Output format (strict):',
+      'REASONING:',
+      '(Extremely concise bullets for your internal math working. Max 10 words per question.)',
+      '',
+      'ANSWER_KEY:',
+      '1. <answer>',
+      '2. <answer>',
+      '...',
+      '',
+      'Rules:',
+      '- The ANSWER_KEY must be a numbered list matching each question number.',
+      '- For multiple choice, output just the correct option text or letter.',
+      '- For open-ended, output the shortest correct answer.',
+      '- NEVER output "N/A". Always give your best guess.',
+      '- You MUST answer ALL questions. Do not skip or stop early.',
+      '',
+      question
+    ].join('\n');
+  }
+
   const lines = [
     generationMode === 'fast_fallback'
       ? 'You are OryxSolver in low-latency mode.'
@@ -135,16 +161,16 @@ export function buildPrompt(context: PromptContext): string {
     getModeRawPrompt(styleMode),
     inferLanguageInstruction(question),
     'Output format is strict:',
-    'FINAL_ANSWER: <short direct answer>',
     'STEPS:',
     '1) <step>',
     '2) <step>',
     '3) <step>',
+    'FINAL_ANSWER: <short direct answer>',
     'Rules:',
-    '- First line must always be FINAL_ANSWER.',
+    '- Format requires STEPS followed by FINAL_ANSWER.',
     '- For MCQ, FINAL_ANSWER must be only one option letter: A, B, C, or D.',
     '- For free-response, FINAL_ANSWER must be direct and short.',
-    '- If required data is missing, set FINAL_ANSWER to INCOMPLETE_QUESTION and explain what is missing in STEPS.',
+    '- If critical values are missing and the question truly cannot be solved, set FINAL_ANSWER to INCOMPLETE_QUESTION.',
     `- ${stepCountLine}`,
     '- Do not prioritize style over correctness. Accuracy is mandatory.',
     '- If unsure, say what is uncertain and why before concluding.',

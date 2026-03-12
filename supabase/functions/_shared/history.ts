@@ -10,6 +10,8 @@ export async function saveHistoryEntry(
     source?: string;
     conversationId?: string;
     styleMode?: string;
+    image_urls?: string[];
+    is_bulk?: boolean;
   },
 ): Promise<{ saved: boolean; id: string | null }> {
   const { authUserId, question, answer, source = 'extension' } = params;
@@ -24,6 +26,8 @@ export async function saveHistoryEntry(
       source,
       conversation_id: params.conversationId,
       style_mode: params.styleMode,
+      image_urls: params.image_urls || [],
+      is_bulk: params.is_bulk || false,
       created_at: new Date().toISOString(),
     })
     .select('id')

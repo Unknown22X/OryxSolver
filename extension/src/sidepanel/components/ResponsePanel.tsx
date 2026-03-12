@@ -17,7 +17,12 @@ type ResponsePanelProps = {
 
 export default function ResponsePanel({ response, onQuoteStep }: ResponsePanelProps) {
   const [showRawReasoning, setShowRawReasoning] = useState(false);
-  const steps = response ? parseExplanationSteps(response.explanation) : [];
+  const isBulk = response?.answer === 'Answer Key';
+  // For bulk answers, use steps directly from backend (already numbered). 
+  // For normal answers, parse explanation into steps.
+  const steps: string[] = response 
+    ? (isBulk && (response.steps?.length ?? 0) > 0 ? response.steps! : parseExplanationSteps(response.explanation, isBulk))
+    : [];
 
   if (!response) {
     return (
@@ -39,14 +44,16 @@ export default function ResponsePanel({ response, onQuoteStep }: ResponsePanelPr
       </div>
       <div className="animate-in fade-in slide-in-from-bottom-2 rounded-[32px] border border-white/70 bg-white/50 p-6 shadow-sm backdrop-blur-xl dark:bg-slate-800/40 dark:border-slate-700/50" style={{ animationDelay: '100ms' }}>
         <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Step-by-step reasoning</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            {isBulk ? 'Bulk Answer Key' : 'Step-by-step reasoning'}
+          </p>
           <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 dark:bg-emerald-900/20">
             <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">Verified Solution</span>
           </div>
         </div>
         
         {steps.length > 0 ? (
-          <StepTimeline steps={steps} onQuoteStep={onQuoteStep} />
+          <StepTimeline steps={steps} isBulk={isBulk} onQuoteStep={onQuoteStep} />
         ) : (
           <div className="rounded-2xl border border-indigo-50 bg-white/60 p-4 shadow-inner dark:border-slate-800 dark:bg-slate-900/40">
              <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />

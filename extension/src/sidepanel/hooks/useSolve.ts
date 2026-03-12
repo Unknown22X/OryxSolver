@@ -26,22 +26,22 @@ export function useSolve(
     setQuotedStep(null);
   }, [setQuotedStep]);
 
-  const handleSend = async (payload: { text: string; images: File[]; styleMode: StyleMode }) => {
-    if (isSending || Date.now() - lastSendTime < 2000) return;
+  const handleSend = async (payload: { text: string; images: (File | { url: string })[]; styleMode: StyleMode; isBulk?: boolean }): Promise<{answer: string; explanation: string} | null> => {
+    if (isSending || Date.now() - lastSendTime < 2000) return null;
 
     // Context Validation
     const isGenericPrompt = ["Solve this question from the attached image.", "Solve this exam question from the attached image.", "Solve this question from the attached image and explain simply.", "Solve this question from the attached image step by step.", "Solve this question from the attached image in light Gen Alpha style."].includes(payload.text.trim());
     
     if (!payload.text.trim() || (isGenericPrompt && payload.images.length === 0)) {
       setSendError("Missing context: Please provide a specific question or upload a screenshot.");
-      return;
+      return null;
     }
     
     // Limits
     if (quotedStep && usage.subscriptionTier !== 'pro' && (usage.stepQuestionsUsed || 0) >= 3) {
       setSendError("Step question limit reached. Upgrade to Pro!");
       onLimitExceeded();
-      return;
+      return null;
     }
 
     setIsSending(true);
@@ -61,7 +61,8 @@ export function useSolve(
         images: payload.images,
         history: currentHistory,
         conversationId: activeConversationId || undefined,
-        quotedStep: quotedStep || undefined
+        quotedStep: quotedStep || undefined,
+        isBulk: payload.isBulk
       });
 
       if (response.answer) {
@@ -74,9 +75,12 @@ export function useSolve(
         const turn: ChatTurn = {
           id: turnId + '-' + Date.now(),
           question: quotedStep ? `[Step ${quotedStep.index + 1}] ${payload.text}` : payload.text,
+          images: payload.images.map(img => (img instanceof File ? URL.createObjectURL(img) : img.url)),
+          isBulk: payload.isBulk,
           response: {
             answer: response.answer,
             explanation: response.explanation,
+            steps: Array.isArray(response.steps) ? response.steps : undefined,
             suggestions: response.suggestions.map(s => ({
               label: s.label,
               prompt: s.prompt,
@@ -88,12 +92,17 @@ export function useSolve(
         setChatSession(prev => [...prev, turn]);
         setLastSendTime(Date.now());
         setQuotedStep(null);
+        return { answer: response.answer, explanation: response.explanation };
       }
+      return null;
     } catch (error: any) {
       const code = error.code || null;
       setSendError(mapSolveErrorMessage(code, error.message));
       setSendErrorCode(code);
-      if (code === 'LIMIT_EXCEEDED') onLimitExceeded();
+      if (code === 'LIMIT_EXCEEDED' || code === 'CREDIT_LIMIT_REACHED' || code === 'IMAGE_LIMIT_REACHED') {
+        onLimitExceeded();
+      }
+      return null;
     } finally {
       setIsSending(false);
     }
