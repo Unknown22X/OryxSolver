@@ -4,6 +4,8 @@ import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/
 import { callAiProxy, AiError } from '../_shared/ai.ts';
 import { saveHistoryEntry } from '../_shared/history.ts';
 import { logSolveRun } from '../_shared/solveRuns.ts';
+import { recordUsageEvent } from '../_shared/usage.ts';
+import { getCachedAnswer, saveToCache } from '../_shared/cache.ts';
 import { AppError, jsonError } from '../_shared/http.ts';
 import {
   consumeCreditForFreeTier,
@@ -328,6 +330,16 @@ Deno.serve(async (req) => {
     }
     const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
 
+    // Check cache first (skip if has images - can't cache images)
+    let cachedAnswer: string | null = null;
+    if (imageParts.length === 0) {
+      const cached = await getCachedAnswer(repairedQuestion);
+      if (cached) {
+        cachedAnswer = cached.answer;
+        console.log(`[CACHE HIT] "${repairedQuestion.substring(0, 50)}..."`);
+      }
+    }
+
     const user = await verifySupabaseAccessToken(token);
     runAuthUserId = user.id;
     const supabase = createSupabaseUserClient(token);
@@ -388,6 +400,47 @@ Deno.serve(async (req) => {
           return jsonError(429, 'IMAGE_LIMIT_REACHED', 'Monthly image limit reached. Upgrade to Pro for more uploads.');
         }
       }
+    }
+
+    // Return cached answer if we have one (skip AI, still check credits for tracking)
+    if (cachedAnswer) {
+      if (tier !== 'pro') {
+        nextCreditsUsed = await consumeCreditForFreeTier(
+          supabaseAdmin,
+          profile.id,
+          creditsUsed,
+        );
+      }
+
+      const responseBody: SolveSuccessResponse = {
+        api_version: 'v1',
+        ok: true,
+        answer: cachedAnswer,
+        explanation: '[This answer was retrieved from cache - asked before]',
+        usage: {
+          subscriptionTier: tier === 'pro' ? 'pro' : 'free',
+          subscriptionStatus: status === 'active' ? 'active' : status === 'canceled' ? 'canceled' : 'inactive',
+          totalCredits: allCredits,
+          usedCredits: nextCreditsUsed,
+          remainingCredits: Math.max(allCredits - nextCreditsUsed, 0),
+          monthlyImagesUsed: 0,
+          monthlyImagesLimit: 10,
+        },
+        metadata: {
+          model: 'cache',
+          aiMode: 'cached',
+          styleMode,
+          conversationId,
+          isBulk
+        },
+        suggestions: [],
+        steps: ['Answer retrieved from cache (no AI call needed)'],
+      };
+
+      return new Response(JSON.stringify(responseBody), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const initialMode = chooseAiMode(repairedQuestion, imageCount > 0, styleMode);
@@ -466,6 +519,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Save to cache for future (only for text-only questions)
+    if (imageCount === 0) {
+      try {
+        await saveToCache(repairedQuestion, ai.answer);
+        console.log(`[CACHE SAVE] "${repairedQuestion.substring(0, 50)}..."`);
+      } catch (cacheErr) {
+        console.warn('[CACHE SAVE FAILED]', cacheErr);
+      }
+    }
+
     // History persistence is best-effort and should never fail solve.
     const { id: historyId } = await saveHistoryEntry(supabaseAdmin, {
       authUserId: user.id,
@@ -524,6 +587,12 @@ Deno.serve(async (req) => {
       usedFallback: runUsedFallback,
     }).catch((error) => {
       console.error(`[${reqId}] Solve run logging failed:`, error);
+    });
+
+    void recordUsageEvent(supabaseAdmin, user.id, isBulk ? 'bulk_solve' : 'solve', 1, {
+      mode: runMode,
+      style: styleMode,
+      images: imageCount
     });
 
     return new Response(JSON.stringify(responseBody), {

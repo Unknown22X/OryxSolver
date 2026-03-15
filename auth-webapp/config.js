@@ -1,6 +1,4 @@
-window.__AUTH0_CONFIG = {
-  domain: "YOUR_AUTH0_DOMAIN",
-  clientId: "YOUR_AUTH0_CLIENT_ID",
-  audience: "",
+window.__SUPABASE_CONFIG = {
+  url: "YOUR_SUPABASE_URL",
+  anonKey: "YOUR_SUPABASE_ANON_KEY",
 };
-

@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
   }
 
   const eventName = payload.meta?.event_name;
+  const customData = payload.meta?.custom_data;
   const subscription = payload.data?.attributes;
 
   if (!subscription) {
@@ -59,18 +60,37 @@ Deno.serve(async (req) => {
       const customerId = String(subscription.customer_id || '');
       const status = subscription.status;
       const isActive = status === 'active' || status === 'trialing';
+      const userId = customData?.user_id;
 
-      const { error } = await supabase
+      // 1. Try updating by customerId first (standard case)
+      let { error, data } = await supabase
         .from('profiles')
         .update({
           subscription_tier: isActive ? 'pro' : 'free',
           subscription_status: status,
           lemon_customer_id: customerId,
         })
-        .eq('lemon_customer_id', customerId);
+        .eq('lemon_customer_id', customerId)
+        .select();
 
-      if (error) throw error;
-      console.log(`Updated customer ${customerId} to ${isActive ? 'pro' : 'free'}`);
+      // 2. If no user found by customerId, try updating by the passed user_id metadata
+      if (!error && (!data || data.length === 0) && userId) {
+        console.log(`No user found with customerId ${customerId}. Trying userId ${userId} from metadata.`);
+        const { error: error2 } = await supabase
+          .from('profiles')
+          .update({
+            subscription_tier: isActive ? 'pro' : 'free',
+            subscription_status: status,
+            lemon_customer_id: customerId,
+          })
+          .eq('auth_user_id', userId);
+        
+        if (error2) throw error2;
+      } else if (error) {
+        throw error;
+      }
+
+      console.log(`Updated user for customer ${customerId} to ${isActive ? 'pro' : 'free'}`);
     }
 
     if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {

@@ -14,6 +14,7 @@ import { useSolve } from './hooks/useSolve';
 
 import { getAccessToken } from './auth/supabaseAuthClient';
 import { deleteHistory, fetchConversation, renameConversation } from './services/historyApi';
+import { analytics } from './services/analyticsService';
 import type { StyleMode } from './types';
 import {
   MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT,
@@ -72,7 +73,21 @@ export default function App() {
   const isDarkMode = themeMode === 'dark' || (themeMode === 'system' && systemPrefersDark);
   const latestResponse = chatSession.length > 0 ? chatSession[chatSession.length - 1].response : null;
   const logoUrl = chrome.runtime.getURL('icons/128.png?v=3');
-  const upgradeUrl = import.meta.env.VITE_UPGRADE_URL;
+  const rawUpgradeUrl = import.meta.env.VITE_UPGRADE_URL;
+  const upgradeUrl = (() => {
+    if (!rawUpgradeUrl || !authUser) return rawUpgradeUrl;
+    try {
+      const url = new URL(rawUpgradeUrl);
+      // For Lemon Squeezy, we use checkout[custom][user_id] or similar
+      // To keep it generic, we'll add user_id
+      url.searchParams.set('user_id', authUser.id);
+      // If it's a Lemon Squeezy checkout link, they often use 'passthrough' or 'custom'
+      url.searchParams.set('checkout[custom][user_id]', authUser.id);
+      return url.toString();
+    } catch {
+      return rawUpgradeUrl;
+    }
+  })();
   const webAppBaseUrl = (() => {
     const explicit = String(import.meta.env.VITE_WEBAPP_URL ?? '').trim();
     if (explicit) return explicit;
@@ -87,6 +102,17 @@ export default function App() {
   })();
 
   // --- Effects & Lifecycle ---
+  useEffect(() => {
+    analytics.track('app_opened');
+    
+    // Check onboarding
+    const onboardingDone = localStorage.getItem('oryx_onboarding_done');
+    if (!onboardingDone && webAppBaseUrl) {
+      chrome.tabs.create({ url: `${webAppBaseUrl}/onboarding.html` });
+      localStorage.setItem('oryx_onboarding_done', 'true');
+    }
+  }, [webAppBaseUrl]);
+
   useEffect(() => {
     if (!saveHistory) {
       localStorage.removeItem('oryx_current_session');
@@ -370,30 +396,43 @@ export default function App() {
 
   // --- Render ---
   return (
-    <div className="relative isolate flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,#f1f5f9_0%,#e2e8f0_54%,#f8fafc_100%)] opacity-1 transition-opacity dark:opacity-0" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-0 transition-opacity dark:opacity-100" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_-10%,rgba(79,70,229,0.15),transparent_70%)] dark:bg-[radial-gradient(circle_at_52%_-10%,rgba(99,102,241,0.2),transparent_70%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.015] [background-image:radial-gradient(#000000_1px,transparent_1px)] [background-size:20px_20px] dark:[background-image:radial-gradient(#ffffff_0.5px,transparent_0.5px)] dark:opacity-[0.03]" />
+    <div className="relative flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900 transition-colors duration-300 dark:bg-[#0a0c1b] dark:text-slate-100">
+      {/* Background Glows for Dark Mode */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-0 dark:opacity-100">
+        <div className="absolute -top-[15%] left-1/2 h-[50%] w-[90%] -translate-x-1/2 rounded-[100%] bg-indigo-500/10 blur-[100px]" />
+        <div className="absolute top-0 left-0 h-full w-full bg-[radial-gradient(circle_at_50%_-10%,rgba(79,70,229,0.15)_0%,transparent_60%)]" />
+      </div>
 
-      <SidePanelHeader
-        logoUrl={logoUrl}
-        appName="Oryx Solver"
-        usedCredits={usage.usedCredits}
-        totalCredits={usage.totalCredits}
-        isSignedIn={!!authUser}
-        userEmail={authUser?.email}
-        userPhotoUrl={authUser?.photoURL}
-        isPro={usage.subscriptionTier === 'pro'}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={() => {
-          setThemeMode((prev) => (prev === 'system' ? 'dark' : prev === 'dark' ? 'light' : 'system'));
-        }}
-        onToggleHistory={() => setIsHistoryOpen(!isHistoryOpen)}
-        onOpenSettings={() => setIsProfileOpen(true)}
-        showCredits={!!authUser}
-        onOpenUpgrade={() => setIsUpgradeModalOpen(true)}
-      />
+      {authUser && (
+        <SidePanelHeader
+          logoUrl={logoUrl}
+          appName="Oryx Solver"
+          usedCredits={usage.usedCredits}
+          totalCredits={usage.totalCredits}
+          isSignedIn={!!authUser}
+          userEmail={authUser?.email}
+          userPhotoUrl={authUser?.photoURL}
+          isPro={usage.subscriptionTier === 'pro'}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={() => {
+            setThemeMode((prev) => (prev === 'system' ? 'dark' : prev === 'dark' ? 'light' : 'system'));
+          }}
+          onToggleHistory={() => {
+            const next = !isHistoryOpen;
+            setIsHistoryOpen(next);
+            if (next) analytics.track('history_opened');
+          }}
+          onOpenSettings={() => {
+            setIsProfileOpen(true);
+            analytics.track('settings_opened');
+          }}
+          showCredits={!!authUser}
+          onOpenUpgrade={() => {
+            setIsUpgradeModalOpen(true);
+            analytics.track('upgrade_modal_opened', { source: 'header' });
+          }}
+        />
+      )}
 
       {isSending && inlineContextSnippet && (
         <div className="z-10 mx-3 mt-2 rounded-2xl border border-indigo-100/60 bg-indigo-50/80 px-3 py-2 text-[11px] font-medium text-indigo-700 shadow-sm backdrop-blur-sm animate-in fade-in slide-in-from-top-1 dark:border-indigo-500/30 dark:bg-indigo-900/40 dark:text-indigo-200">
@@ -428,16 +467,16 @@ export default function App() {
         ) : (
           <main className={`flex min-h-0 flex-1 flex-col bg-transparent custom-scrollbar ${!latestResponse ? 'overflow-hidden' : 'overflow-y-auto space-y-4 p-4 pb-40'}`}>
             {sendError && (
-              <div className="w-full max-w-2xl mx-auto mb-4 mt-4 px-4 rounded-xl border border-rose-500/20 bg-gradient-to-r from-rose-500/10 to-rose-400/5 p-4 text-[13px] text-rose-700 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300 dark:border-rose-400/20 dark:from-rose-500/20 dark:to-rose-400/10 dark:text-rose-300 flex items-start gap-3">
-                <div className="mt-0.5 rounded-full bg-rose-100 p-1 flex-shrink-0 dark:bg-rose-900/50">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600 dark:text-rose-400">
+              <div className="w-full max-w-2xl mx-auto mb-4 mt-4 px-4 rounded-xl border border-red-500/20 bg-gradient-to-r from-red-500/10 to-red-400/5 p-4 text-[13px] text-red-700 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-400/20 dark:from-red-500/20 dark:to-red-400/10 dark:text-red-300 flex items-start gap-3">
+                <div className="mt-0.5 rounded-full bg-red-100 p-1 flex-shrink-0 dark:bg-red-900/50">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 dark:text-red-400">
                     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                   </svg>
                 </div>
                 <div className="flex-1 font-medium leading-relaxed">
                   {sendError}
                 </div>
-                <button onClick={() => setSendError(null)} className="ml-2 rounded-full p-1 hover:bg-rose-200/50 dark:hover:bg-rose-800/50 transition-colors text-rose-500 flex-shrink-0">
+                <button onClick={() => setSendError(null)} className="ml-2 rounded-full p-1 hover:bg-red-200/50 dark:hover:bg-red-800/50 transition-colors text-red-500 flex-shrink-0">
                   <span className="sr-only">Dismiss</span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
@@ -453,7 +492,10 @@ export default function App() {
                 onStyleModeChange={setStyleMode}
                 isSending={isSending}
                 usage={usage}
-                onOpenUpgrade={() => setIsUpgradeModalOpen(true)}
+                onOpenUpgrade={() => {
+                  setIsUpgradeModalOpen(true);
+                  analytics.track('upgrade_modal_opened', { source: 'hero_usage_card' });
+                }}
               />
             ) : (
               <div className="flex flex-col gap-4">

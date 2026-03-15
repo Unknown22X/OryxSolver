@@ -66,7 +66,7 @@ export default function SidePanelHeader({
           {!isPro && onOpenUpgrade && (
             <button
               onClick={onOpenUpgrade}
-              className="hidden sm:flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-500/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95"
+              className="hidden sm:flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-500/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95"
             >
               Upgrade
             </button>
@@ -75,22 +75,23 @@ export default function SidePanelHeader({
           {showCredits && (
             <div 
               className={`group relative flex items-center gap-2 rounded-2xl border px-3 py-1.5 transition-all hover:scale-105 ${
-                isUsageWarning ? 'border-amber-200 bg-amber-50/80 shadow-inner dark:bg-amber-900/20 dark:border-amber-700/50' : 'border-indigo-100 bg-indigo-50/50 shadow-inner dark:bg-indigo-900/20 dark:border-indigo-700/30'
+                isUsageWarning ? 'border-red-200 bg-red-50/80 shadow-inner dark:bg-red-900/20 dark:border-red-700/50' : 'border-blue-100 bg-blue-50/50 shadow-inner dark:bg-blue-900/20 dark:border-blue-700/30'
               }`}
               title={`${remainingCredits} credits remaining`}
             >
-              <CreditCard size={12} className={isUsageWarning ? 'text-amber-600' : 'text-indigo-600 dark:text-indigo-400'} />
-              <span className={`text-[11px] font-black tracking-tight ${isUsageWarning ? 'text-amber-800' : 'text-indigo-800 dark:text-indigo-300'}`}>
+              <CreditCard size={12} className={isUsageWarning ? 'text-red-600' : 'text-blue-600 dark:text-blue-400'} />
+              <span className={`text-[11px] font-black tracking-tight ${isUsageWarning ? 'text-red-800' : 'text-blue-800 dark:text-blue-300'}`}>
                 {remainingCredits} left
               </span>
               <div className="absolute bottom-0 left-3 right-3 h-[2px] overflow-hidden rounded-full bg-slate-200/50">
                 <div 
-                  className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                  className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-red-500' : 'bg-blue-500'}`}
                   style={{ width: `${creditPercentage}%` }}
                 />
               </div>
             </div>
           )}
+
 
           <button
             type="button"

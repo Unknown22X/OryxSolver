@@ -1,4 +1,4 @@
-import { X, User, Shield, ChevronRight, Key, LogOut, Trash2 } from 'lucide-react';
+import { X, User, Shield, ChevronRight, Key, LogOut, Trash2, Sparkles, HelpCircle } from 'lucide-react';
 import type { AuthUser } from '../../auth/supabaseAuthClient';
 
 type ProfileModalProps = {
@@ -123,7 +123,7 @@ export default function ProfileModal({
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           {profileMessage && (
-            <div className="mb-6 rounded-2xl bg-indigo-50 p-4 text-xs font-bold text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-300 animate-in slide-in-from-top-2">
+            <div className="mb-6 rounded-2xl bg-emerald-50 p-4 text-xs font-bold text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300 animate-in slide-in-from-top-2">
               {profileMessage}
             </div>
           )}
@@ -197,7 +197,7 @@ export default function ProfileModal({
 
               <button
                 onClick={onSignOut}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 py-4 text-sm font-bold text-slate-600 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-rose-900/20"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-4 text-sm font-bold text-red-600 transition hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
               >
                 <LogOut size={18} />
                 Sign Out
@@ -388,9 +388,9 @@ export default function ProfileModal({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-rose-100 bg-rose-50/30 p-4 dark:border-rose-900/30 dark:bg-rose-900/10">
-                <p className="text-sm font-black text-rose-600 dark:text-rose-400 mb-2">Danger Zone</p>
-                <button onClick={onClearHistory} className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-[11px] font-black uppercase tracking-widest text-rose-500 shadow-sm transition hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-900/20">
+              <div className="rounded-2xl border border-red-100 bg-red-50/30 p-4 dark:border-red-900/30 dark:bg-red-900/10">
+                <p className="text-sm font-black text-red-600 dark:text-red-400 mb-2">Danger Zone</p>
+                <button onClick={onClearHistory} className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-[11px] font-black uppercase tracking-widest text-red-500 shadow-sm transition hover:bg-red-50 dark:bg-slate-800 dark:hover:bg-red-900/20">
                   <Trash2 size={16} />
                   Clear Question History
                 </button>
@@ -440,6 +440,44 @@ export default function ProfileModal({
                   Delete Account Permanently
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ─── Support View ─── */}
+          {settingsPanel === 'support' && (
+            <div className="space-y-4">
+              <button
+                onClick={() => openWeb('/tutorials')}
+                disabled={!hasWebApp}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+              >
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">View Tutorials</p>
+                <p className="text-[10px] text-slate-400">Learn how to use OryxSolver effectively</p>
+              </button>
+              <button
+                onClick={() => openWeb('/support')}
+                disabled={!hasWebApp}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+              >
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Contact Support</p>
+                <p className="text-[10px] text-slate-400">Get help with your account or solutions</p>
+              </button>
+              <button
+                onClick={() => openWeb('/support/bug-report')}
+                disabled={!hasWebApp}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+              >
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Report a Bug</p>
+                <p className="text-[10px] text-slate-400">Tell us if something isn't working</p>
+              </button>
+              <button
+                onClick={() => openWeb('/support/feedback')}
+                disabled={!hasWebApp}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+              >
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Share Feedback</p>
+                <p className="text-[10px] text-slate-400">Help us improve with your suggestions</p>
+              </button>
             </div>
           )}
         </div>

@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy-900: #161927;
+  --color-navy-950: #0a0c1b;
+
+  --animate-glow: glow 2s ease-in-out infinite alternate;
+
+  @keyframes glow {
+    0% {
+      box-shadow: 0 0 5px rgba(99, 102, 241, 0.2);
+    }
+    100% {
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+    }
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-navy-950 text-slate-100 antialiased;
+}
+
+.glass {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10;
+}
+
+.gradient-btn {
+  @apply bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 transition-all active:scale-95 text-white font-black;
+}

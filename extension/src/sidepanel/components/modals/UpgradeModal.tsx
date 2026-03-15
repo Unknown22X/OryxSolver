@@ -28,36 +28,39 @@ export default function UpgradeModal({
     <div className="oryx-modal-overlay">
       <div className="oryx-modal-backdrop" onClick={onClose} />
       
-      <div className="oryx-modal-panel">
-        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-br from-indigo-600 to-violet-700" />
+      <div className="oryx-modal-panel max-w-[380px] border-white/10 dark:bg-[#0a0c1b] overflow-hidden">
+        {/* Vibrant Purple Header Section */}
+        <div className="absolute top-0 left-0 right-0 h-40 bg-[#6366f1]" />
         
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-black/10 text-white backdrop-blur-md transition-all hover:bg-black/20"
+          className="absolute top-4 right-4 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/10 text-white backdrop-blur-md transition-all hover:bg-black/20"
         >
-          <X size={16} />
+          <X size={18} />
         </button>
 
-        <div className="relative pt-12 pb-10 px-8">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-xl shadow-indigo-100 ring-4 ring-white/20">
-            <Sparkles size={32} className="text-indigo-600" />
+        <div className="relative pt-12 pb-8 px-8 flex flex-col items-center">
+          {/* Logo / Icon Container */}
+          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-[24px] bg-white shadow-2xl ring-4 ring-white/20">
+            <Sparkles size={40} className="text-[#6366f1]" />
           </div>
 
-          <div className="text-center">
-            <h2 className="text-2xl font-black tracking-tight text-white mb-2">
+          <div className="text-center w-full">
+            <h2 className="text-[28px] font-black tracking-tight text-white mb-2">
               {upgradeMoment.title || 'Upgrade to Pro'}
             </h2>
-            <p className="text-indigo-100/80 text-[13px] font-medium px-4 mb-8">
+            <p className="text-indigo-100/90 text-[14px] font-bold px-4 leading-snug mb-8">
               {upgradeMoment.message || 'Unlock unlimited solutions and premium tools to excel in your studies.'}
             </p>
             
+            {/* Current Usage Bar */}
             {upgradeMoment.percent > 0 && upgradeMoment.level !== 'paywall' && (
-              <div className="mb-10 px-6">
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-200/60 mb-2">
+              <div className="mb-8 px-2 w-full max-w-[300px] mx-auto">
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200/60 mb-2">
                   <span>Current Usage</span>
                   <span>{Math.round(upgradeMoment.percent)}%</span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/5">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                   <div 
                     className="h-full bg-white transition-all duration-1000" 
                     style={{ width: `${upgradeMoment.percent}%` }}
@@ -66,24 +69,27 @@ export default function UpgradeModal({
               </div>
             )}
 
-            <div className="mt-8 space-y-4 text-left bg-slate-50/50 dark:bg-slate-800/50 p-6 rounded-[24px] border border-slate-100 dark:border-white/5 mx-auto max-w-[280px]">
+            {/* Feature List Card */}
+            <div className="mt-4 space-y-4 text-left bg-[#161927] p-7 rounded-[32px] border border-white/5 w-full">
               {FEATURES.map((feature) => (
-                <div key={feature.label} className="flex items-center gap-3">
-                  <span className={`h-2.5 w-2.5 rounded-full ${feature.tone}`} />
-                  <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{feature.label}</span>
+                <div key={feature.label} className="flex items-center gap-4">
+                  <span className={`h-2.5 w-2.5 rounded-full ${feature.tone} shadow-sm`} />
+                  <span className="text-[14px] font-black text-slate-200">{feature.label}</span>
                 </div>
               ))}
             </div>
 
-            <div className="mt-10">
+            {/* Action Area */}
+            <div className="mt-8 flex flex-col items-center">
               <button
                 onClick={() => window.open(upgradeUrl, '_blank')}
-                className="oryx-btn-primary w-full max-w-[240px] shadow-indigo-500/25 hover:shadow-indigo-500/40"
+                className="group flex w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 py-4 text-[15px] font-black text-white shadow-xl shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95"
               >
                 <span>Get Pro Access</span>
-                <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" />
+                <ChevronRight size={20} className="transition-transform group-hover:translate-x-1" />
               </button>
-              <p className="mt-4 text-[11px] font-black uppercase tracking-widest text-slate-400">
+              
+              <p className="mt-6 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
                 Cancel anytime. Secure payment.
               </p>
             </div>

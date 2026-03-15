@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to OryxSolver</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .onboarding-wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+      }
+      .slide {
+        max-width: 500px;
+        display: none;
+      }
+      .slide.active {
+        display: block;
+        animation: fadeIn 0.5s ease;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .progress {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-bottom: 2rem;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #cbd5e1;
+        transition: all 0.3s;
+      }
+      .dot.active {
+        width: 24px;
+        border-radius: 4px;
+        background: #4f46e5;
+      }
+      .illustration {
+        width: 100%;
+        max-width: 300px;
+        height: 200px;
+        background: #f1f5f9;
+        border-radius: 24px;
+        margin: 0 auto 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="onboarding-wrap">
+      <div class="card">
+        <div class="progress">
+          <div class="dot active"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+
+        <section id="slide-1" class="slide active">
+          <div class="illustration">📸</div>
+          <h1>Snap any problem</h1>
+          <p class="lead">Use the camera tool to capture questions from your screen. It handles images, text, and math perfectly.</p>
+          <button class="btn btn-primary btn-wide next-btn">Next</button>
+        </section>
+
+        <section id="slide-2" class="slide">
+          <div class="illustration">🤖</div>
+          <h1>AI-Powered Solving</h1>
+          <p class="lead">OryxSolver uses advanced AI to understand the context and solve even the most complex STEM problems.</p>
+          <button class="btn btn-primary btn-wide next-btn">Next</button>
+        </section>
+
+        <section id="slide-3" class="slide">
+          <div class="illustration">📚</div>
+          <h1>Learn Step-by-Step</h1>
+          <p class="lead">Don't just get the answer. Understand the logic with clear, chronological steps and "Ask" follow-ups.</p>
+          <button id="finish-btn" class="btn btn-primary btn-wide">Start Solving</button>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const slides = document.querySelectorAll('.slide');
+      const dots = document.querySelectorAll('.dot');
+      const nextBtns = document.querySelectorAll('.next-btn');
+      const finishBtn = document.getElementById('finish-btn');
+      let currentSlide = 0;
+
+      function updateSlide() {
+        slides.forEach((s, i) => s.classList.toggle('active', i === currentSlide));
+        dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+      }
+
+      nextBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentSlide++;
+          updateSlide();
+        });
+      });
+
+      finishBtn.addEventListener('click', () => {
+        // Mark onboarding as complete in local storage (extension context)
+        // Since this is a web page, we might need to send a message or just close
+        // But for prototype, we'll just redirect to the auth page
+        window.location.href = './auth.html';
+      });
+    </script>
+  </body>
+</html>

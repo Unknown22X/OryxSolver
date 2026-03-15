@@ -5,6 +5,7 @@ import { mapSolveErrorMessage } from '../services/mapSolveError';
 import { mergeUsageSnapshot, buildUsageSnapshot } from '../utils/usageHelpers';
 import { getAccessToken } from '../auth/supabaseAuthClient';
 import { compressImages } from '../utils/imageCompressor';
+import { analytics } from '../services/analyticsService';
 
 export function useSolve(
   usage: UsageSnapshot,
@@ -47,6 +48,7 @@ export function useSolve(
 
     setIsSending(true);
     setSendError(null);
+    analytics.track('solve_started', { mode: payload.styleMode, imageCount: payload.images.length, isBulk: !!payload.isBulk, hasQuote: !!quotedStep });
 
     try {
       const token = await getAccessToken();
@@ -96,6 +98,7 @@ export function useSolve(
         setChatSession(prev => [...prev, turn]);
         setLastSendTime(Date.now());
         setQuotedStep(null);
+        analytics.track('solve_completed', { mode: payload.styleMode, isBulk: !!payload.isBulk });
         return { answer: response.answer, explanation: response.explanation };
       }
       return null;
@@ -103,6 +106,7 @@ export function useSolve(
       const code = error.code || null;
       setSendError(mapSolveErrorMessage(code, error.message));
       setSendErrorCode(code);
+      analytics.track('solve_failed', { code, message: error.message });
       if (code === 'LIMIT_EXCEEDED' || code === 'CREDIT_LIMIT_REACHED' || code === 'IMAGE_LIMIT_REACHED') {
         onLimitExceeded();
       }

@@ -1,10 +1,13 @@
 // Background script handles side panel behavior and capture messaging.
+import { initSentry } from './sidepanel/services/sentry';
 import {
   MSG_CAPTURE_VISIBLE_TAB, MSG_START_CROP_CAPTURE, MSG_SHOW_CROP_OVERLAY,
   MSG_CROP_RECT_SELECTED, MSG_CROP_SELECTION_CANCELLED, MSG_CROP_CAPTURE_READY,
   MSG_CROP_CAPTURE_ERROR, MSG_EXTRACT_PAGE_CONTEXT,
   MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT
 } from './shared/messageTypes';
+
+initSentry();
 
 // ==============================
 // === side panel click and open  ===

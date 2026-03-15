@@ -1,61 +1,90 @@
-const cfg = window.__AUTH0_CONFIG;
+const cfg = window.__SUPABASE_CONFIG;
 const statusEl = document.getElementById("status");
 const loginBtn = document.getElementById("login");
 const signupBtn = document.getElementById("signup");
+const googleBtn = document.getElementById("google-login");
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
 
-function setStatus(text) {
-  if (statusEl) statusEl.textContent = text;
+function setStatus(text, isError = false) {
+  if (statusEl) {
+    statusEl.textContent = text;
+    statusEl.className = isError ? "status error" : "status";
+  }
 }
 
-function getQueryParam(name) {
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
-}
+// Initialize Supabase Client
+const supabase = window.supabase.createClient(cfg.url, cfg.anonKey);
 
-async function createAuth0ClientSafe() {
-  if (!cfg?.domain || !cfg?.clientId || cfg.domain === "YOUR_AUTH0_DOMAIN") {
-    throw new Error("Auth0 config missing. Update auth-webapp/config.js");
+async function handleLogin() {
+  const email = emailInput.value;
+  const password = passwordInput.value;
+
+  if (!email || !password) {
+    setStatus("Please enter email and password.", true);
+    return;
   }
 
-  const redirectUri = `${window.location.origin}/callback.html`;
-  return window.auth0.createAuth0Client({
-    domain: cfg.domain,
-    clientId: cfg.clientId,
-    authorizationParams: {
-      redirect_uri: redirectUri,
-      ...(cfg.audience ? { audience: cfg.audience } : {}),
-    },
-    cacheLocation: "localstorage",
-    useRefreshTokens: true,
+  setStatus("Signing in...");
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
   });
+
+  if (error) {
+    setStatus(error.message, true);
+  } else {
+    setStatus("Sign in successful! Redirecting...");
+    window.location.href = "./index.html";
+  }
 }
 
-async function beginAuth(mode) {
-  const client = await createAuth0ClientSafe();
-  const extensionId = getQueryParam("ext_id") || "";
-  const returnPath = getQueryParam("return_path") || "/src/sidepanel/index.html";
+async function handleSignup() {
+  const email = emailInput.value;
+  const password = passwordInput.value;
 
-  setStatus("Redirecting to Auth0...");
-  await client.loginWithRedirect({
-    authorizationParams: {
-      screen_hint: mode === "signup" ? "signup" : "login",
-    },
-    appState: {
-      extensionId,
-      returnPath,
-    },
+  if (!email || !password) {
+    setStatus("Please enter email and password.", true);
+    return;
+  }
+
+  setStatus("Creating account...");
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
   });
+
+  if (error) {
+    setStatus(error.message, true);
+  } else {
+    setStatus("Account created! Check your email for verification.", false);
+  }
 }
 
-loginBtn?.addEventListener("click", () => {
-  void beginAuth("login").catch((err) => setStatus(err.message));
-});
+async function handleGoogleLogin() {
+  setStatus("Redirecting to Google...");
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/index.html`
+    }
+  });
 
-signupBtn?.addEventListener("click", () => {
-  void beginAuth("signup").catch((err) => setStatus(err.message));
-});
-
-const mode = getQueryParam("mode");
-if (mode === "login" || mode === "signup") {
-  void beginAuth(mode).catch((err) => setStatus(err.message));
+  if (error) setStatus(error.message, true);
 }
+
+loginBtn?.addEventListener("click", handleLogin);
+signupBtn?.addEventListener("click", handleSignup);
+googleBtn?.addEventListener("click", handleGoogleLogin);
+
+// Check if user is already logged in
+async function checkUser() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    setStatus(`Logged in as ${user.email}`);
+    if (loginBtn) loginBtn.disabled = true;
+    if (signupBtn) signupBtn.disabled = true;
+  }
+}
+
+checkUser();
