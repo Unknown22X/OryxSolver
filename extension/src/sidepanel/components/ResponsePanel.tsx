@@ -18,10 +18,9 @@ type ResponsePanelProps = {
 export default function ResponsePanel({ response, onQuoteStep }: ResponsePanelProps) {
   const [showRawReasoning, setShowRawReasoning] = useState(false);
   const isBulk = response?.answer === 'Answer Key';
-  // For bulk answers, use steps directly from backend (already numbered). 
-  // For normal answers, parse explanation into steps.
-  const steps: string[] = response 
-    ? (isBulk && (response.steps?.length ?? 0) > 0 ? response.steps! : parseExplanationSteps(response.explanation, isBulk))
+  const parsedSteps = response ? parseExplanationSteps(response.explanation, isBulk) : [];
+  const steps: string[] = response
+    ? ((response.steps?.length ?? 0) > 0 ? response.steps! : parsedSteps)
     : [];
 
   if (!response) {

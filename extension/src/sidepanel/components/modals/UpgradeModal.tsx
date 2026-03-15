@@ -1,4 +1,4 @@
-import { X, ChevronRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, ChevronRight, Sparkles } from 'lucide-react';
 import type { UpgradeMoment } from '../../types';
 
 type UpgradeModalProps = {
@@ -7,6 +7,14 @@ type UpgradeModalProps = {
   upgradeMoment: UpgradeMoment;
   upgradeUrl: string;
 };
+
+const FEATURES = [
+  { label: 'Unlimited Solutions', tone: 'bg-indigo-500' },
+  { label: 'Priority AI Processing', tone: 'bg-amber-500' },
+  { label: 'Advanced Vision AI', tone: 'bg-emerald-500' },
+  { label: 'Math and STEM Excellence', tone: 'bg-violet-500' },
+  { label: 'Zero Wait Times', tone: 'bg-sky-500' },
+];
 
 export default function UpgradeModal({
   isOpen,
@@ -43,7 +51,6 @@ export default function UpgradeModal({
               {upgradeMoment.message || 'Unlock unlimited solutions and premium tools to excel in your studies.'}
             </p>
             
-            {/* Progress Visualization (Only if relevant) */}
             {upgradeMoment.percent > 0 && upgradeMoment.level !== 'paywall' && (
               <div className="mb-10 px-6">
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-200/60 mb-2">
@@ -60,15 +67,9 @@ export default function UpgradeModal({
             )}
 
             <div className="mt-8 space-y-4 text-left bg-slate-50/50 dark:bg-slate-800/50 p-6 rounded-[24px] border border-slate-100 dark:border-white/5 mx-auto max-w-[280px]">
-              {[
-                { label: 'Unlimited Solutions', icon: '✨' },
-                { label: 'Priority AI Processing', icon: '⚡' },
-                { label: 'Advanced Vision AI', icon: '👁️' },
-                { label: 'Math/STEM Excellence', icon: '📐' },
-                { label: 'Zero Wait Times', icon: '🚀' }
-              ].map((feature) => (
+              {FEATURES.map((feature) => (
                 <div key={feature.label} className="flex items-center gap-3">
-                  <span className="text-sm">{feature.icon}</span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${feature.tone}`} />
                   <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{feature.label}</span>
                 </div>
               ))}
@@ -83,7 +84,7 @@ export default function UpgradeModal({
                 <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" />
               </button>
               <p className="mt-4 text-[11px] font-black uppercase tracking-widest text-slate-400">
-                Cancel anytime • Secure payment
+                Cancel anytime. Secure payment.
               </p>
             </div>
           </div>

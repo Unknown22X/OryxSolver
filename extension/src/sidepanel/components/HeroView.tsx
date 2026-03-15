@@ -13,106 +13,70 @@ type HeroViewProps = {
 };
 
 const EXAMPLE_PROMPTS = [
-  { label: '📐 Solve 3x² - 12x + 9 = 0', prompt: 'Solve for x: 3x² - 12x + 9 = 0', mode: 'standard' as StyleMode },
-  { label: '🧬 Explain photosynthesis', prompt: 'Explain the process of photosynthesis step by step', mode: 'step_by_step' as StyleMode },
-  { label: '🧒 ELI5: Gravity', prompt: 'Explain gravity like I\'m 5 years old', mode: 'eli5' as StyleMode },
-  { label: '💬 Gen Alpha: French Revolution', prompt: 'Explain the French Revolution in Gen Alpha terms', mode: 'gen_alpha' as StyleMode },
-  { label: '📝 Quiz me on Biology', prompt: 'Give me 5 practice quiz questions on cell biology', mode: 'exam' as StyleMode },
-  { label: '📖 Summarize Pride & Prejudice', prompt: 'Summarize the main themes of Pride and Prejudice', mode: 'standard' as StyleMode },
+  { icon: '📐', label: 'Solve 3x² - 12x + 9 = 0', prompt: 'Solve for x: 3x^2 - 12x + 9 = 0', mode: 'standard' as StyleMode },
+  { icon: '🧬', label: 'Explain photosynthesis', prompt: 'Explain the process of photosynthesis step by step', mode: 'step_by_step' as StyleMode },
+  { icon: '🤔', label: 'ELI5: Gravity', prompt: 'Explain gravity like I\'m 5 years old', mode: 'eli5' as StyleMode },
+  { icon: '💬', label: 'Gen Alpha: French Revolution', prompt: 'Explain the French Revolution in Gen Alpha terms', mode: 'gen_alpha' as StyleMode },
+  { icon: '📄', label: 'Quiz me on Biology', prompt: 'Give me 5 practice quiz questions on cell biology', mode: 'exam' as StyleMode },
+  { icon: '📖', label: 'Summarize Pride & Prejudice', prompt: 'Summarize the main themes of Pride and Prejudice', mode: 'standard' as StyleMode },
 ];
 
 export default function HeroView({
-  logoUrl, onSend, onCaptureScreen, styleMode, onStyleModeChange, isSending, usage, onOpenUpgrade
+  onSend, onCaptureScreen, styleMode, onStyleModeChange, isSending, usage, onOpenUpgrade
 }: HeroViewProps) {
 
-  const isPro = usage?.subscriptionTier === 'pro';
-  const remainingCredits = Math.max((usage?.totalCredits || 50) - (usage?.usedCredits || 0), 0);
-  const creditUsagePercent = usage?.totalCredits > 0 ? (usage.usedCredits / usage.totalCredits) * 100 : 0;
-
   return (
-    <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col animate-in fade-in slide-in-from-bottom-8 duration-1000 pb-4 pt-8">
-      <div className="px-6 text-center flex flex-1 flex-col items-center justify-center">
-        {/* ─── Logo ─── */}
-        <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-[28px] bg-white shadow-elevated ring-1 ring-slate-100 transition-transform duration-500 hover:rotate-6 hover:scale-110 dark:bg-slate-800 dark:shadow-none dark:ring-slate-700">
-          <img src={logoUrl} alt="OryxSolver" className="h-12 w-12 object-cover" />
-        </div>
+    <div className="flex h-full w-full flex-col items-center justify-between pb-4 pt-8">
+      <div className="w-full flex flex-col items-center gap-6 px-6">
+        <p className="text-[14px] font-black uppercase tracking-[0.3em] text-slate-400/80 dark:text-slate-500">
+          Try something like
+        </p>
 
-        {/* ─── Headline ─── */}
-        <div className="mb-12 space-y-4 relative">
-          <h2 className="text-[48px] font-black tracking-tighter text-slate-900 dark:text-slate-50 leading-[0.9]">
-            Snap<span className="text-indigo-600">.</span> Solve<span className="text-indigo-600">.</span> Learn<span className="text-indigo-600">.</span>
-          </h2>
-          <p className="mx-auto max-w-[360px] text-[15px] font-bold text-slate-500/80 dark:text-slate-400 leading-relaxed">
-            Screenshot any problem on your screen and get instant, step-by-step solutions with AI.
-          </p>
-        </div>
+        <div className="flex flex-col items-center gap-3 w-full">
+          {/* First row: large single item */}
+          <button
+            onClick={() => onSend({ text: EXAMPLE_PROMPTS[0].prompt, images: [], styleMode: EXAMPLE_PROMPTS[0].mode })}
+            className="group flex w-full max-w-[320px] items-center gap-3 rounded-2xl border border-slate-200 bg-white/50 px-5 py-4 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/50 active:scale-95 dark:border-white/5 dark:bg-white/5 dark:hover:border-indigo-500 dark:hover:bg-white/10 dark:hover:shadow-none"
+          >
+            <span className="text-xl">{EXAMPLE_PROMPTS[0].icon}</span>
+            <span className="text-[15px] font-bold text-slate-700 group-hover:text-indigo-600 dark:text-slate-200 dark:group-hover:text-indigo-300">
+              {EXAMPLE_PROMPTS[0].label}
+            </span>
+          </button>
 
-        {/* ─── Usage Overview for Free Users ─── */}
-        {!isPro && (
-          <div className="mb-10 w-full max-w-sm rounded-[24px] border border-indigo-100 bg-white/50 p-5 shadow-sm backdrop-blur-md dark:border-white/5 dark:bg-white/5">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex flex-col items-start">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly Usage</span>
-                <p className="text-lg font-black text-slate-900 dark:text-white">
-                  {remainingCredits} <span className="text-xs text-slate-400">credits left</span>
-                </p>
-              </div>
-              <button
-                onClick={onOpenUpgrade}
-                className="rounded-full bg-indigo-600 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-200 transition-all hover:scale-105 active:scale-95 dark:shadow-none"
-              >
-                Go Pro
-              </button>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
-              <div 
-                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000" 
-                style={{ width: `${100 - creditUsagePercent}%` }}
-              />
-            </div>
-            <p className="mt-3 text-[10px] font-bold text-slate-400">
-              Upgrade to Pro for unlimited solutions and priority AI.
-            </p>
-          </div>
-        )}
-
-        {/* ─── Trust Ticker (Pro Users Only) ─── */}
-        {isPro && (
-          <div className="mb-10 flex items-center justify-center gap-8 rounded-full bg-slate-100/50 border border-slate-200/30 px-6 py-4 backdrop-blur-md dark:bg-white/[0.03] dark:border-white/[0.05]">
-            <div className="flex flex-col items-center gap-0.5">
-              <p className="text-[18px] font-black tracking-tighter text-slate-900 dark:text-white leading-none">2,400+</p>
-              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Solved Today</p>
-            </div>
-            <div className="h-8 w-px bg-slate-200/60 dark:bg-slate-800" />
-            <div className="flex flex-col items-center gap-0.5">
-              <p className="text-[18px] font-black tracking-tighter text-slate-900 dark:text-white leading-none">99.8%</p>
-              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Accuracy</p>
-            </div>
-          </div>
-        )}
-
-        {/* ─── Try These ─── */}
-        <div className="mb-12 w-full">
-          <p className="mb-4 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Try something like</p>
-          <div className="flex flex-wrap justify-center gap-2.5">
-            {EXAMPLE_PROMPTS.map((item) => (
+          {/* Second row: two items */}
+          <div className="flex w-full max-w-[320px] gap-3">
+            {[EXAMPLE_PROMPTS[1], EXAMPLE_PROMPTS[2]].map((item) => (
               <button
                 key={item.label}
                 onClick={() => onSend({ text: item.prompt, images: [], styleMode: item.mode })}
-                className="group rounded-xl border border-slate-200 bg-white px-4 py-2.5 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-500 dark:hover:shadow-none"
+                className="group flex flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white/50 px-4 py-3.5 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/50 active:scale-95 dark:border-white/5 dark:bg-white/5 dark:hover:border-indigo-500 dark:hover:bg-white/10 dark:hover:shadow-none"
               >
-                <span className="text-[13px] font-bold text-slate-700 group-hover:text-indigo-600 dark:text-slate-300 dark:group-hover:text-indigo-400 transition-colors">
+                <span className="text-lg">{item.icon}</span>
+                <span className="truncate text-[13px] font-bold text-slate-700 group-hover:text-indigo-600 dark:text-slate-200 dark:group-hover:text-indigo-300">
                   {item.label}
                 </span>
               </button>
             ))}
           </div>
-        </div>
 
+          {/* Subsequent rows: vertical stack */}
+          {[EXAMPLE_PROMPTS[3], EXAMPLE_PROMPTS[4], EXAMPLE_PROMPTS[5]].map((item) => (
+            <button
+              key={item.label}
+              onClick={() => onSend({ text: item.prompt, images: [], styleMode: item.mode })}
+              className="group flex w-full max-w-[280px] items-center gap-3 rounded-2xl border border-slate-200 bg-white/50 px-5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/50 active:scale-95 dark:border-white/5 dark:bg-white/5 dark:hover:border-indigo-500 dark:hover:bg-white/10 dark:hover:shadow-none"
+            >
+              <span className="text-lg">{item.icon}</span>
+              <span className="text-[14px] font-bold text-slate-700 group-hover:text-indigo-600 dark:text-slate-200 dark:group-hover:text-indigo-300">
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* ─── Composer ─── */}
-      <div className="w-full px-6 mt-8">
+      <div className="w-full px-4">
         <MessageComposer
           onSend={onSend}
           onCaptureScreen={onCaptureScreen}

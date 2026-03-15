@@ -1,4 +1,10 @@
 // Background script handles side panel behavior and capture messaging.
+import {
+  MSG_CAPTURE_VISIBLE_TAB, MSG_START_CROP_CAPTURE, MSG_SHOW_CROP_OVERLAY,
+  MSG_CROP_RECT_SELECTED, MSG_CROP_SELECTION_CANCELLED, MSG_CROP_CAPTURE_READY,
+  MSG_CROP_CAPTURE_ERROR, MSG_EXTRACT_PAGE_CONTEXT,
+  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT
+} from './shared/messageTypes';
 
 // ==============================
 // === side panel click and open  ===
@@ -111,7 +117,30 @@ async function ensureCropOverlayContentScript(tabId: number) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
-      if (message?.type === 'CAPTURE_VISIBLE_TAB') {
+      if (message?.type === 'ORYX_DEBUG_SCAN' && message?.payload) {
+        // #region agent log
+        fetch('http://127.0.0.1:7794/ingest/b652e707-afc6-4371-818d-e03308b77077', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '8f43c7',
+          },
+          body: JSON.stringify({
+            sessionId: '8f43c7',
+            runId: message.payload.runId,
+            hypothesisId: message.payload.hypothesisId,
+            location: message.payload.location,
+            message: message.payload.message,
+            data: message.payload.data,
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
+        sendResponse({ ok: true });
+        return;
+      }
+
+      if (message?.type === MSG_CAPTURE_VISIBLE_TAB) {
         const activeTab = await getActiveTab();
         if (!activeTab?.windowId) {
           sendResponse({ ok: false, error: 'No active tab found.' });
@@ -126,7 +155,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      if (message?.type === 'START_CROP_CAPTURE') {
+      if (message?.type === MSG_START_CROP_CAPTURE) {
         const activeTab = await getActiveTab();
         if (!activeTab?.id) {
           sendResponse({ ok: false, error: 'No active tab found.' });
@@ -134,21 +163,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         try {
-          await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
+          await chrome.tabs.sendMessage(activeTab.id, { type: MSG_SHOW_CROP_OVERLAY });
         } catch (error) {
           const messageText = error instanceof Error ? error.message : String(error);
           if (!messageText.includes('Receiving end does not exist')) {
             throw error;
           }
           await ensureCropOverlayContentScript(activeTab.id);
-          await chrome.tabs.sendMessage(activeTab.id, { type: 'SHOW_CROP_OVERLAY' });
+          await chrome.tabs.sendMessage(activeTab.id, { type: MSG_SHOW_CROP_OVERLAY });
         }
 
         sendResponse({ ok: true });
         return;
       }
 
-      if (message?.type === 'EXTRACT_PAGE_CONTEXT') {
+      if (message?.type === MSG_EXTRACT_PAGE_CONTEXT) {
         const activeTab = await getActiveTab();
         if (!activeTab?.id) {
           sendResponse({ ok: false, error: 'No active tab found.' });
@@ -158,7 +187,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         try {
           // This will inject if needed, or if already there just execute
           await ensureCropOverlayContentScript(activeTab.id);
-          const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'EXTRACT_PAGE_CONTEXT' });
+          const response = await chrome.tabs.sendMessage(activeTab.id, { type: MSG_EXTRACT_PAGE_CONTEXT });
           sendResponse(response);
         } catch (error) {
            const messageText = error instanceof Error ? error.message : String(error);
@@ -167,7 +196,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      if (message?.type === 'INLINE_EXTRACT_QUESTION' || message?.type === 'INLINE_SOLVE_AND_INJECT') {
+      if (message?.type === MSG_INLINE_EXTRACT_QUESTION || message?.type === MSG_INLINE_SOLVE_AND_INJECT) {
         const windowId = sender.tab?.windowId || (await getActiveTab())?.windowId;
         if (windowId) {
           try {
@@ -192,7 +221,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      if (message?.type === 'CROP_RECT_SELECTED') {
+      if (message?.type === MSG_CROP_RECT_SELECTED) {
         const rect = message.payload as CropRectPayload;
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           throw new Error('Invalid crop selection.');
@@ -207,16 +236,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const croppedImageDataUrl = await cropImageDataUrl(fullImageDataUrl, rect);
 
         await chrome.runtime.sendMessage({
-          type: 'CROP_CAPTURE_READY',
+          type: MSG_CROP_CAPTURE_READY,
           imageDataUrl: croppedImageDataUrl,
         });
         sendResponse({ ok: true });
         return;
       }
 
-      if (message?.type === 'CROP_SELECTION_CANCELLED') {
+      if (message?.type === MSG_CROP_SELECTION_CANCELLED) {
         await chrome.runtime.sendMessage({
-          type: 'CROP_CAPTURE_ERROR',
+          type: MSG_CROP_CAPTURE_ERROR,
           error: 'Capture cancelled.',
         });
         sendResponse({ ok: true });

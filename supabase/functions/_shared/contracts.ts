@@ -52,3 +52,23 @@ export type SaveHistoryResponse = {
   saved: boolean;
   id: string | null;
 };
+
+export type HistoryEntry = {
+  id: string;
+  created_at: string;
+  question: string;
+  answer: string;
+  explanation?: string | null;
+  conversation_id?: string | null;
+  style_mode?: StyleMode | string | null;
+  image_urls?: string[];
+  is_bulk?: boolean;
+  steps?: string[];
+};
+
+export type HistoryListResponse = {
+  api_version: 'v1';
+  ok: true;
+  entries: HistoryEntry[];
+  nextCursor: string | null;
+};

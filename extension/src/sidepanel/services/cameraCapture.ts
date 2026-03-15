@@ -1,3 +1,5 @@
+import { MSG_CAPTURE_VISIBLE_TAB, MSG_START_CROP_CAPTURE, MSG_CROP_CAPTURE_READY, MSG_CROP_CAPTURE_ERROR } from '../../shared/messageTypes';
+
 type CaptureVisibleTabResponse = {
   ok: boolean;
   imageDataUrl?: string;
@@ -32,7 +34,7 @@ function timestampedCaptureName() {
 
 export async function captureVisibleTabToFile(): Promise<File> {
   const response = (await chrome.runtime.sendMessage({
-    type: 'CAPTURE_VISIBLE_TAB',
+    type: MSG_CAPTURE_VISIBLE_TAB,
   })) as CaptureVisibleTabResponse;
 
   if (!response?.ok || !response.imageDataUrl) {
@@ -44,7 +46,7 @@ export async function captureVisibleTabToFile(): Promise<File> {
 
 export async function captureCroppedAreaToFile(): Promise<File> {
   const startResponse = (await chrome.runtime.sendMessage({
-    type: 'START_CROP_CAPTURE',
+    type: MSG_START_CROP_CAPTURE,
   })) as CaptureVisibleTabResponse;
 
   if (!startResponse?.ok) {
@@ -60,7 +62,7 @@ export async function captureCroppedAreaToFile(): Promise<File> {
     };
 
     const listener = (message: { type?: string; imageDataUrl?: string; error?: string }) => {
-      if (message?.type === 'CROP_CAPTURE_READY' && message.imageDataUrl) {
+      if (message?.type === MSG_CROP_CAPTURE_READY && message.imageDataUrl) {
         cleanup();
         dataUrlToFile(message.imageDataUrl, timestampedCaptureName())
           .then(resolve)
@@ -68,7 +70,7 @@ export async function captureCroppedAreaToFile(): Promise<File> {
         return;
       }
 
-      if (message?.type === 'CROP_CAPTURE_ERROR') {
+      if (message?.type === MSG_CROP_CAPTURE_ERROR) {
         cleanup();
         reject(new Error(message.error || 'Crop capture failed.'));
       }

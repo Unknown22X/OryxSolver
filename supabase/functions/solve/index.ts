@@ -328,14 +328,6 @@ Deno.serve(async (req) => {
     }
     const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
 
-    if (imageParts.length === 0 && tier !== 'pro' && hasAmbiguousEquationFormatting(repairedQuestion)) {
-      return jsonError(
-        422,
-        'QUESTION_INCOMPLETE',
-        'Equation formatting is ambiguous after copy. Please paste the full equation in plain text or attach a screenshot.',
-      );
-    }
-
     const user = await verifySupabaseAccessToken(token);
     runAuthUserId = user.id;
     const supabase = createSupabaseUserClient(token);
@@ -357,6 +349,14 @@ Deno.serve(async (req) => {
     const status = profile.subscription_status ?? 'inactive';
     const allCredits = profile.all_credits && profile.all_credits > 0 ? profile.all_credits : 50;
     const creditsUsed = profile.used_credits ?? 0;
+
+    if (imageParts.length === 0 && tier !== 'pro' && hasAmbiguousEquationFormatting(repairedQuestion)) {
+      return jsonError(
+        422,
+        'QUESTION_INCOMPLETE',
+        'Equation formatting is ambiguous after copy. Please paste the full equation in plain text or attach a screenshot.',
+      );
+    }
     if (tier === 'pro' && status !== 'active') {
       return jsonError(402, 'PRO_SUBSCRIPTION_INACTIVE', 'Pro subscription is inactive');
     }
@@ -475,7 +475,8 @@ Deno.serve(async (req) => {
       conversationId,
       styleMode,
       image_urls: form.getAll('image_urls').filter(Boolean).map(url => String(url)),
-      is_bulk: isBulk
+      is_bulk: isBulk,
+      steps: ai.steps,
     });
 
     const isBulkAsk = 

@@ -1,5 +1,6 @@
 import { getApiUrl } from './apiConfig';
 import type { ApiError, SolveRequest, SolveResponse } from './contracts';
+import { assertSolveResponse } from './responseGuards';
 
 export async function postSolveRequest(
   token: string,
@@ -60,11 +61,6 @@ export async function postSolveRequest(
     throw error;
   }
 
-  const data = (await res.json()) as SolveResponse;
-  if (data.api_version !== 'v1') {
-    throw new Error(
-      `Backend API version mismatch (expected v1, got ${String(data.api_version ?? 'unknown')}). Update extension or backend.`,
-    );
-  }
-  return data;
+  const data: unknown = await res.json();
+  return assertSolveResponse(data);
 }

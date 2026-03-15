@@ -33,7 +33,7 @@ export default function SidePanelHeader({
   showCredits = false,
   onOpenUpgrade,
 }: SidePanelHeaderProps) {
-  const creditPercentage = (usedCredits / totalCredits) * 100;
+  const creditPercentage = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
   const isUsageWarning = usedCredits >= 40;
   const remainingCredits = Math.max(totalCredits - usedCredits, 0);
   const avatarInitial = (userEmail?.trim().charAt(0) || 'U').toUpperCase();
@@ -68,7 +68,7 @@ export default function SidePanelHeader({
               onClick={onOpenUpgrade}
               className="hidden sm:flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-500/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95"
             >
-              🌟 Upgrade
+              Upgrade
             </button>
           )}
 
@@ -83,7 +83,6 @@ export default function SidePanelHeader({
               <span className={`text-[11px] font-black tracking-tight ${isUsageWarning ? 'text-amber-800' : 'text-indigo-800 dark:text-indigo-300'}`}>
                 {remainingCredits} left
               </span>
-              {/* Progress Bar (Subtle) */}
               <div className="absolute bottom-0 left-3 right-3 h-[2px] overflow-hidden rounded-full bg-slate-200/50">
                 <div 
                   className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-amber-500' : 'bg-indigo-500'}`}
@@ -97,14 +96,13 @@ export default function SidePanelHeader({
             type="button"
             onClick={onToggleDarkMode}
             className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:scale-110 hover:border-indigo-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
-            title={isDarkMode ? "Light Mode" : "Dark Mode"}
+            title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
           >
             {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
           </button>
 
           <div className="h-6 w-px bg-slate-200 mx-1 dark:bg-slate-700" />
 
-          {/* Profile Avatar */}
           <button
             type="button"
             onClick={onOpenSettings}

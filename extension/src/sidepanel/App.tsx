@@ -12,8 +12,14 @@ import { useAuth } from './hooks/useAuth';
 import { useUsage } from './hooks/useUsage';
 import { useSolve } from './hooks/useSolve';
 
-import { supabase } from './services/supabaseClient';
+import { getAccessToken } from './auth/supabaseAuthClient';
+import { deleteHistory, fetchConversation, renameConversation } from './services/historyApi';
 import type { StyleMode } from './types';
+import {
+  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT,
+  MSG_INLINE_SOLVE_RESULT, MSG_CROP_CAPTURE_READY, MSG_CROP_CAPTURE_ERROR,
+  MSG_START_CROP_CAPTURE
+} from '../shared/messageTypes';
 
 export default function App() {
   // --- Global State & Hooks ---
@@ -25,9 +31,9 @@ export default function App() {
   const { 
     authUser, isAuthLoading, isAuthBusy, authMessage, authEmail, authPassword, 
     authOtpCode, isOtpRequested, authView, authMethod, resendCooldown,
-    setAuthEmail, setAuthPassword, setAuthOtpCode, setAuthView, setAuthMethod,
+    setAuthEmail, setAuthPassword, setAuthOtpCode, setAuthMethod,
     handleSignIn, handleSignUp, handleVerifyOtpCode, signOut, updateProfile,
-    resetAuthState 
+    updatePassword, resetAuthState 
   } = useAuth(syncProfile);
 
   const {
@@ -38,8 +44,19 @@ export default function App() {
   // --- UI State ---
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('oryx_dark_mode') === 'true');
-  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'profile' | 'settings' | 'password'>('menu');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
+    const stored = localStorage.getItem('oryx_theme');
+    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+    const legacyDark = localStorage.getItem('oryx_dark_mode');
+    if (legacyDark === 'true') return 'dark';
+    if (legacyDark === 'false') return 'light';
+    return 'system';
+  });
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
+    if (!window.matchMedia) return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'profile' | 'appearance' | 'history' | 'usage' | 'password' | 'support'>('menu');
   const [styleMode, setStyleMode] = useState<StyleMode>('standard');
   const [profileName, setProfileName] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
@@ -50,31 +67,73 @@ export default function App() {
   const [useAnalytics, setUseAnalytics] = useState(() => localStorage.getItem('oryx_analytics') !== 'false');
   const [autoCopy, setAutoCopy] = useState(() => localStorage.getItem('oryx_auto_copy') === 'true');
   const lastHandledRef = useRef<string | null>(null);
+  const [inlineContextSnippet, setInlineContextSnippet] = useState<string | null>(null);
 
+  const isDarkMode = themeMode === 'dark' || (themeMode === 'system' && systemPrefersDark);
   const latestResponse = chatSession.length > 0 ? chatSession[chatSession.length - 1].response : null;
   const logoUrl = chrome.runtime.getURL('icons/128.png?v=3');
   const upgradeUrl = import.meta.env.VITE_UPGRADE_URL;
+  const webAppBaseUrl = (() => {
+    const explicit = String(import.meta.env.VITE_WEBAPP_URL ?? '').trim();
+    if (explicit) return explicit;
+    if (upgradeUrl) {
+      try {
+        return new URL(upgradeUrl).origin;
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  })();
 
   // --- Effects & Lifecycle ---
   useEffect(() => {
+    if (!saveHistory) {
+      localStorage.removeItem('oryx_current_session');
+      localStorage.removeItem('oryx_active_conv_id');
+      return;
+    }
     const saved = localStorage.getItem('oryx_current_session');
     const savedId = localStorage.getItem('oryx_active_conv_id');
     if (saved) {
       try { setChatSession(JSON.parse(saved)); } catch (e) { console.error(e); }
     }
     if (savedId) setActiveConversationId(savedId);
-  }, [setChatSession, setActiveConversationId]);
+  }, [saveHistory, setChatSession, setActiveConversationId]);
 
   useEffect(() => {
+    if (!saveHistory) return;
     localStorage.setItem('oryx_current_session', JSON.stringify(chatSession));
     if (activeConversationId) localStorage.setItem('oryx_active_conv_id', activeConversationId);
     else localStorage.removeItem('oryx_active_conv_id');
-  }, [chatSession, activeConversationId]);
+  }, [chatSession, activeConversationId, saveHistory]);
 
   useEffect(() => {
-    localStorage.setItem('oryx_dark_mode', String(isDarkMode));
+    if (!window.matchMedia) return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (event: MediaQueryListEvent) => setSystemPrefersDark(event.matches);
+    if (media.addEventListener) {
+      media.addEventListener('change', handler);
+    } else {
+      media.addListener(handler);
+    }
+    return () => {
+      if (media.removeEventListener) {
+        media.removeEventListener('change', handler);
+      } else {
+        media.removeListener(handler);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('oryx_theme', themeMode);
     document.documentElement.classList.toggle('dark', isDarkMode);
-  }, [isDarkMode]);
+  }, [themeMode, isDarkMode]);
+
+  useEffect(() => {
+    localStorage.setItem('oryx_save_history', String(saveHistory));
+  }, [saveHistory]);
 
   useEffect(() => {
     if (authUser) {
@@ -106,6 +165,30 @@ export default function App() {
   }, [latestResponse, autoCopy, isSending]);
 
   useEffect(() => {
+    const dataUrlToFile = (dataUrl: string, filename = 'capture.png'): File | null => {
+      try {
+        const [meta, b64] = dataUrl.split(',');
+        if (!meta || !b64) return null;
+        const mimeMatch = meta.match(/data:(.*?);base64/);
+        const mime = mimeMatch?.[1] || 'image/png';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        return new File([bytes], filename, { type: mime });
+      } catch {
+        return null;
+      }
+    };
+
+    const normalizeInlineImages = async (urls: string[] = []) => {
+      return urls.map((url, idx) => {
+        if (typeof url === 'string' && url.startsWith('data:image/')) {
+          return dataUrlToFile(url, `inline-capture-${idx + 1}.png`) || { url };
+        }
+        return { url };
+      });
+    };
+
     const checkPending = async () => {
       const result = await chrome.storage.local.get(['pendingInlineQuestion']);
       if (result.pendingInlineQuestion) {
@@ -127,11 +210,12 @@ export default function App() {
             await chrome.storage.local.set({ oryx_bulk_used_count: count + 1 });
           }
 
-          // Convert URL strings to mock File objects if needed, though handleSend expects File[]
-          // For now, let's just make sure we pass them. solveApi might need to handle URLs vs Files.
-          handleSend({ text, images: (images || []).map(url => ({ url })), styleMode: "standard", isBulk }).then((res) => {
-            if (type === 'INLINE_SOLVE_AND_INJECT' && res?.answer) {
-              const msgPayload = { type: 'INLINE_SOLVE_RESULT', payload: { injectionId, answer: res.answer, explanation: res.explanation } };
+          setInlineContextSnippet(text.slice(0, 160));
+
+          const normalizedImages = await normalizeInlineImages(images || []);
+          handleSend({ text, images: normalizedImages, styleMode: "standard", isBulk }).then((res) => {
+            if (type === MSG_INLINE_SOLVE_AND_INJECT && res?.answer) {
+              const msgPayload = { type: MSG_INLINE_SOLVE_RESULT, payload: { injectionId, answer: res.answer, explanation: res.explanation } };
               if (tabId) {
                 chrome.tabs.sendMessage(tabId, msgPayload);
               } else {
@@ -148,7 +232,7 @@ export default function App() {
     checkPending();
 
     const handleMessage = async (message: any, sender: chrome.runtime.MessageSender) => {
-      if ((message.type === 'INLINE_EXTRACT_QUESTION' || message.type === 'INLINE_SOLVE_AND_INJECT') && message.payload?.text) {
+      if ((message.type === MSG_INLINE_EXTRACT_QUESTION || message.type === MSG_INLINE_SOLVE_AND_INJECT) && message.payload?.text) {
         const intentId = message.payload.injectionId || String(message.payload.timestamp || Date.now());
         if (lastHandledRef.current === intentId) return;
         lastHandledRef.current = intentId;
@@ -165,14 +249,17 @@ export default function App() {
           await chrome.storage.local.set({ oryx_bulk_used_count: count + 1 });
         }
 
-        handleSend({ 
-          text: message.payload.text, 
-          images: (message.payload.images || []).map((url: string) => ({ url })), 
+        setInlineContextSnippet(String(message.payload.text).slice(0, 160));
+
+        const normalizedImages = await normalizeInlineImages(message.payload.images || []);
+        handleSend({
+          text: message.payload.text,
+          images: normalizedImages,
           styleMode: "standard",
-          isBulk: message.payload.isBulk 
+          isBulk: message.payload.isBulk
         }).then((res) => {
-          if (message.type === 'INLINE_SOLVE_AND_INJECT' && res?.answer && message.payload?.injectionId) {
-            const msgPayload = { type: 'INLINE_SOLVE_RESULT', payload: { injectionId: message.payload.injectionId, answer: res.answer, explanation: res.explanation } };
+          if (message.type === MSG_INLINE_SOLVE_AND_INJECT && res?.answer && message.payload?.injectionId) {
+            const msgPayload = { type: MSG_INLINE_SOLVE_RESULT, payload: { injectionId: message.payload.injectionId, answer: res.answer, explanation: res.explanation } };
             const reqTabId = sender.tab?.id;
             if (reqTabId) {
               chrome.tabs.sendMessage(reqTabId, msgPayload);
@@ -189,6 +276,12 @@ export default function App() {
     chrome.runtime.onMessage.addListener(handleMessage);
     return () => chrome.runtime.onMessage.removeListener(handleMessage);
   }, [handleSend, usage.subscriptionTier]);
+
+  useEffect(() => {
+    if (!isSending) {
+      setInlineContextSnippet(null);
+    }
+  }, [isSending]);
 
   // --- Handlers ---
   const handleSignOutAction = async () => {
@@ -210,24 +303,26 @@ export default function App() {
   };
 
   const handleClearHistoryAction = async () => {
-    if (!supabase || !authUser?.id) return;
     if (!confirm('Clear all question history?')) return;
     try {
-      await supabase.from('history_entries').delete().eq('user_id', authUser.id);
+      const token = await getAccessToken();
+      await deleteHistory(token, { all: true });
       clearSession();
       setProfileMessage('History cleared.');
     } catch (e) { setProfileMessage('Failed to clear history.'); }
   };
 
   const handleDeleteConversation = async (id: string | null) => {
-    if (!supabase || !authUser?.id) return;
-    await supabase.from('history_entries').delete().eq('user_id', authUser.id).eq('conversation_id', id);
+    if (!id) return;
+    const token = await getAccessToken();
+    await deleteHistory(token, { conversationId: id });
     if (activeConversationId === id) clearSession();
   };
 
   const handleRenameConversation = async (id: string, newTitle: string) => {
-    if (!supabase || !authUser?.id) return;
-    await supabase.from('history_entries').update({ question: newTitle }).eq('user_id', authUser.id).eq('conversation_id', id);
+    if (!id) return;
+    const token = await getAccessToken();
+    await renameConversation(token, id, newTitle);
     if (activeConversationId === id) {
        setChatSession(prev => prev.map((turn, i) => i === 0 ? { ...turn, question: newTitle } : turn));
     }
@@ -237,7 +332,7 @@ export default function App() {
   const handleCaptureScreen = async (): Promise<File | null> => {
     return new Promise((resolve) => {
       const listener = (message: any) => {
-        if (message?.type === 'CROP_CAPTURE_READY') {
+        if (message?.type === MSG_CROP_CAPTURE_READY) {
           chrome.runtime.onMessage.removeListener(listener);
           try {
             const dataUrl = message.imageDataUrl;
@@ -253,13 +348,13 @@ export default function App() {
             resolve(null);
           }
         }
-        if (message?.type === 'CROP_CAPTURE_ERROR') {
+        if (message?.type === MSG_CROP_CAPTURE_ERROR) {
           chrome.runtime.onMessage.removeListener(listener);
           resolve(null);
         }
       };
       chrome.runtime.onMessage.addListener(listener);
-      chrome.runtime.sendMessage({ type: 'START_CROP_CAPTURE' }, (res) => {
+      chrome.runtime.sendMessage({ type: MSG_START_CROP_CAPTURE }, (res) => {
         if (!res?.ok) {
           chrome.runtime.onMessage.removeListener(listener);
           resolve(null);
@@ -291,12 +386,22 @@ export default function App() {
         userPhotoUrl={authUser?.photoURL}
         isPro={usage.subscriptionTier === 'pro'}
         isDarkMode={isDarkMode}
-        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+        onToggleDarkMode={() => {
+          setThemeMode((prev) => (prev === 'system' ? 'dark' : prev === 'dark' ? 'light' : 'system'));
+        }}
         onToggleHistory={() => setIsHistoryOpen(!isHistoryOpen)}
         onOpenSettings={() => setIsProfileOpen(true)}
         showCredits={!!authUser}
         onOpenUpgrade={() => setIsUpgradeModalOpen(true)}
       />
+
+      {isSending && inlineContextSnippet && (
+        <div className="z-10 mx-3 mt-2 rounded-2xl border border-indigo-100/60 bg-indigo-50/80 px-3 py-2 text-[11px] font-medium text-indigo-700 shadow-sm backdrop-blur-sm animate-in fade-in slide-in-from-top-1 dark:border-indigo-500/30 dark:bg-indigo-900/40 dark:text-indigo-200">
+          <span className="mr-1 font-black uppercase tracking-widest text-[9px] text-indigo-500">Solving from page</span>
+          <span className="sr-only">Current inline question context</span>
+          <span className="block truncate" aria-hidden="true">"{inlineContextSnippet}"</span>
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0">
         {!authUser && !isAuthLoading ? (
@@ -314,7 +419,6 @@ export default function App() {
             onSetEmail={setAuthEmail}
             onSetPassword={setAuthPassword}
             onSetOtpCode={setAuthOtpCode}
-            onSetView={setAuthView}
             onSetMethod={setAuthMethod}
             onSignIn={handleSignIn}
             onSignUp={handleSignUp}
@@ -322,9 +426,9 @@ export default function App() {
             onResendOtp={() => {}}
           />
         ) : (
-          <main className={`flex min-h-0 flex-1 flex-col overflow-y-auto bg-transparent custom-scrollbar ${!latestResponse ? 'items-center px-4 transition-all' : 'space-y-4 p-4 pb-32'}`}>
+          <main className={`flex min-h-0 flex-1 flex-col bg-transparent custom-scrollbar ${!latestResponse ? 'overflow-hidden' : 'overflow-y-auto space-y-4 p-4 pb-40'}`}>
             {sendError && (
-              <div className="w-full max-w-2xl mx-auto mb-4 rounded-xl border border-rose-500/20 bg-gradient-to-r from-rose-500/10 to-rose-400/5 p-4 text-[13px] text-rose-700 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300 dark:border-rose-400/20 dark:from-rose-500/20 dark:to-rose-400/10 dark:text-rose-300 flex items-start gap-3">
+              <div className="w-full max-w-2xl mx-auto mb-4 mt-4 px-4 rounded-xl border border-rose-500/20 bg-gradient-to-r from-rose-500/10 to-rose-400/5 p-4 text-[13px] text-rose-700 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300 dark:border-rose-400/20 dark:from-rose-500/20 dark:to-rose-400/10 dark:text-rose-300 flex items-start gap-3">
                 <div className="mt-0.5 rounded-full bg-rose-100 p-1 flex-shrink-0 dark:bg-rose-900/50">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600 dark:text-rose-400">
                     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -413,17 +517,13 @@ export default function App() {
           onClose={() => setIsHistoryOpen(false)}
           onSelect={async (conversationId: string) => {
             setIsHistoryOpen(false);
-            // Load all turns for this conversation from Supabase
-            if (supabase) {
-              try {
-                const { data, error } = await supabase
-                  .from('history_entries')
-                  .select('id, question, answer, explanation, conversation_id, created_at, image_urls, is_bulk')
-                  .eq('conversation_id', conversationId)
-                  .order('created_at', { ascending: true });
-                
-                if (!error && data && data.length > 0) {
-                  const turns = data.map(entry => ({
+            try {
+              const token = await getAccessToken();
+              const data = await fetchConversation(token, conversationId);
+              if (data && data.length > 0) {
+                const turns = data
+                  .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                  .map(entry => ({
                     id: entry.id,
                     question: entry.question,
                     images: entry.image_urls || [],
@@ -431,21 +531,23 @@ export default function App() {
                     response: {
                       answer: entry.answer,
                       explanation: entry.explanation || '',
+                      steps: Array.isArray(entry.steps) ? entry.steps : undefined,
                       suggestions: [],
                     },
                   }));
-                  setChatSession(turns);
-                  setActiveConversationId(conversationId);
-                }
-              } catch (e) {
-                console.error('Failed to load conversation', e);
+                setChatSession(turns);
+                setActiveConversationId(conversationId);
               }
+            } catch (e) {
+              console.error('Failed to load conversation', e);
             }
           }}
           onNewSolve={() => { clearSession(); setIsHistoryOpen(false); }}
           onOpenSettings={() => { setIsHistoryOpen(false); setIsProfileOpen(true); }}
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
+          historyEnabled={saveHistory}
+          onEnableHistory={() => setSaveHistory(true)}
         />
       )}
 
@@ -459,8 +561,8 @@ export default function App() {
         onSetProfilePhotoUrl={setProfilePhotoUrl}
         onSaveProfile={handleSaveProfileAction}
         onSignOut={handleSignOutAction}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+        themeMode={themeMode}
+        onSetThemeMode={setThemeMode}
         saveHistory={saveHistory}
         onToggleSaveHistory={setSaveHistory}
         useAnalytics={useAnalytics}
@@ -484,7 +586,30 @@ export default function App() {
         confirmNewPassword={confirmNewPassword}
         onSetNewPassword={setNewPassword}
         onSetConfirmNewPassword={setConfirmNewPassword}
-        onChangePassword={async () => {}}
+        onChangePassword={async () => {
+          setProfileMessage(null);
+          if (!newPassword.trim() || newPassword.length < 8) {
+            setProfileMessage('Password must be at least 8 characters.');
+            return;
+          }
+          if (newPassword !== confirmNewPassword) {
+            setProfileMessage('Passwords do not match.');
+            return;
+          }
+          try {
+            await updatePassword(newPassword);
+            setNewPassword('');
+            setConfirmNewPassword('');
+            setProfileMessage('Password updated.');
+          } catch (e: any) {
+            setProfileMessage(e?.message || 'Password update failed.');
+          }
+        }}
+        totalCredits={usage.totalCredits}
+        usedCredits={usage.usedCredits}
+        monthlyImagesUsed={usage.monthlyImagesUsed}
+        monthlyImagesLimit={usage.monthlyImagesLimit}
+        webAppBaseUrl={webAppBaseUrl}
       />
 
       <UpgradeModal

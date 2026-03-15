@@ -16,7 +16,6 @@ type AuthViewProps = {
   onSetEmail: (val: string) => void;
   onSetPassword: (val: string) => void;
   onSetOtpCode: (val: string) => void;
-  onSetView: (view: AuthViewType) => void;
   onSetMethod: (method: AuthMethod) => void;
   onSignIn: () => void;
   onSignUp: () => void;
@@ -38,7 +37,6 @@ export default function AuthView({
   onSetEmail,
   onSetPassword,
   onSetOtpCode,
-  onSetView,
   onSetMethod,
   onSignIn,
   onSignUp,

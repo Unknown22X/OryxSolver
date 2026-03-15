@@ -4,6 +4,7 @@ import { postSolveRequest } from '../services/solveApi';
 import { mapSolveErrorMessage } from '../services/mapSolveError';
 import { mergeUsageSnapshot, buildUsageSnapshot } from '../utils/usageHelpers';
 import { getAccessToken } from '../auth/supabaseAuthClient';
+import { compressImages } from '../utils/imageCompressor';
 
 export function useSolve(
   usage: UsageSnapshot,
@@ -49,6 +50,9 @@ export function useSolve(
 
     try {
       const token = await getAccessToken();
+
+      // Compress images client-side before upload to reduce AI vision costs
+      const compressedImages = await compressImages(payload.images);
       
       const currentHistory = chatSession.flatMap(turn => [
         { role: 'user' as const, text: turn.question },
@@ -58,7 +62,7 @@ export function useSolve(
       const response = await postSolveRequest(token, {
         question: payload.text,
         styleMode: payload.styleMode,
-        images: payload.images,
+        images: compressedImages,
         history: currentHistory,
         conversationId: activeConversationId || undefined,
         quotedStep: quotedStep || undefined,

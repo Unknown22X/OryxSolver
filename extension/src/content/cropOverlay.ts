@@ -1,3 +1,5 @@
+import { MSG_CROP_SELECTION_CANCELLED, MSG_CROP_RECT_SELECTED, MSG_SHOW_CROP_OVERLAY } from '../shared/messageTypes';
+
 let overlayRoot: HTMLDivElement | null = null;
 let selectionBox: HTMLDivElement | null = null;
 let isDragging = false; // true when mouse is pressed , false when it is released
@@ -17,7 +19,7 @@ function cleanupOverlay() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     cleanupOverlay();
-    chrome.runtime.sendMessage({ type: 'CROP_SELECTION_CANCELLED' });
+    chrome.runtime.sendMessage({ type: MSG_CROP_SELECTION_CANCELLED });
   }
 }
 
@@ -97,12 +99,12 @@ function createOverlay() {
     cleanupOverlay();
 
     if (width < 8 || height < 8) {
-      chrome.runtime.sendMessage({ type: 'CROP_SELECTION_CANCELLED' });
+      chrome.runtime.sendMessage({ type: MSG_CROP_SELECTION_CANCELLED });
       return;
     }
 
     chrome.runtime.sendMessage({
-      type: 'CROP_RECT_SELECTED',
+      type: MSG_CROP_RECT_SELECTED,
       payload: {
         x: left,
         y: top,
@@ -121,7 +123,7 @@ const cropOverlayWindow = window as typeof window & { __oryxCropOverlayListenerR
 if (!cropOverlayWindow.__oryxCropOverlayListenerReady) {
   cropOverlayWindow.__oryxCropOverlayListenerReady = true;
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === 'SHOW_CROP_OVERLAY') {
+    if (message?.type === MSG_SHOW_CROP_OVERLAY) {
       createOverlay();
     }
   });

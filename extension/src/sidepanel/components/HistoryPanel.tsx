@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../services/supabaseClient';
+import { getAccessToken } from '../auth/supabaseAuthClient';
+import { fetchHistoryList } from '../services/historyApi';
+import type { HistoryEntry } from '../services/contracts';
 import { Loader2, MessageSquare, ChevronRight, Settings, Plus, MoreVertical, Trash2, Edit2, Check, X as CloseIcon } from 'lucide-react';
-
-type HistoryEntry = {
-  id: string;
-  created_at: string;
-  question: string;
-  answer: string;
-  explanation?: string | null;
-  conversation_id: string;
-};
 
 type HistoryPanelProps = {
   onSelect: (conversationId: string) => void;
@@ -18,6 +11,8 @@ type HistoryPanelProps = {
   onClose: () => void;
   onDeleteConversation: (id: string) => Promise<void>;
   onRenameConversation: (id: string, newTitle: string) => Promise<void>;
+  historyEnabled: boolean;
+  onEnableHistory: () => void;
 };
 
 export default function HistoryPanel({ 
@@ -27,6 +22,8 @@ export default function HistoryPanel({
   onClose,
   onDeleteConversation,
   onRenameConversation,
+  historyEnabled,
+  onEnableHistory,
 }: HistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,22 +32,17 @@ export default function HistoryPanel({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!historyEnabled) {
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
     async function loadHistory() {
-      if (!supabase) {
-        setLoading(false);
-        return;
-      }
       try {
-        // Wait for session to be ready to avoid 'anon' RLS race condition
-        await supabase.auth.getSession();
-        
-        const { data, error } = await supabase
-          .from('history_entries')
-          .select('id, created_at, question, answer, explanation, conversation_id')
-          .order('created_at', { ascending: false })
-          .limit(100);
+        const token = await getAccessToken();
+        const data = await fetchHistoryList(token, { limit: 100 });
 
-        if (!error && data) {
+        if (data?.entries) {
           // Group by conversation_id where present
           const conversationsMap = new Map<string, {
             id: string;
@@ -62,7 +54,7 @@ export default function HistoryPanel({
 
           const standaloneEntries: HistoryEntry[] = [];
 
-          data.forEach((entry) => {
+          data.entries.forEach((entry) => {
             const convId = (entry.conversation_id as string | null)?.trim();
             
             if (!convId) {
@@ -104,7 +96,7 @@ export default function HistoryPanel({
       }
     }
     loadHistory();
-  }, []);
+  }, [historyEnabled]);
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -144,7 +136,20 @@ export default function HistoryPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 space-y-1.5 custom-scrollbar">
-        {loading ? (
+        {!historyEnabled ? (
+          <div className="flex h-40 flex-col items-center justify-center text-center gap-3 px-4">
+            <MessageSquare size={32} className="text-slate-300 dark:text-slate-700" />
+            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400">
+              History is disabled. Enable it to see your past solves here.
+            </p>
+            <button
+              onClick={onEnableHistory}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-sm"
+            >
+              Enable History
+            </button>
+          </div>
+        ) : loading ? (
           <div className="flex h-32 items-center justify-center">
             <Loader2 size={24} className="animate-spin text-indigo-500/50" />
           </div>
@@ -155,8 +160,9 @@ export default function HistoryPanel({
           </div>
         ) : (
           entries.map((entry) => {
-            const isEditing = editingId === entry.conversation_id;
-            const isMenuOpen = menuOpenId === entry.conversation_id;
+            const conversationId = String(entry.conversation_id || '');
+            const isEditing = editingId === conversationId;
+            const isMenuOpen = menuOpenId === conversationId;
 
             return (
               <div key={entry.id} className="group relative flex w-full items-center gap-1 rounded-xl transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -169,8 +175,10 @@ export default function HistoryPanel({
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          onRenameConversation(entry.conversation_id, editValue);
-                          setEntries(prev => prev.map(e => e.conversation_id === entry.conversation_id ? { ...e, question: editValue } : e));
+                          if (conversationId) {
+                            onRenameConversation(conversationId, editValue);
+                            setEntries(prev => prev.map(e => String(e.conversation_id || '') === conversationId ? { ...e, question: editValue } : e));
+                          }
                           setEditingId(null);
                         } else if (e.key === 'Escape') {
                           setEditingId(null);
@@ -180,8 +188,10 @@ export default function HistoryPanel({
                     <div className="flex gap-1">
                       <button 
                         onClick={() => {
-                          onRenameConversation(entry.conversation_id, editValue);
-                          setEntries(prev => prev.map(e => e.conversation_id === entry.conversation_id ? { ...e, question: editValue } : e));
+                          if (conversationId) {
+                            onRenameConversation(conversationId, editValue);
+                            setEntries(prev => prev.map(e => String(e.conversation_id || '') === conversationId ? { ...e, question: editValue } : e));
+                          }
                           setEditingId(null);
                         }}
                         className="rounded-lg p-1 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
@@ -199,7 +209,10 @@ export default function HistoryPanel({
                 ) : (
                   <>
                     <button
-                      onClick={() => onSelect(entry.conversation_id)}
+                      onClick={() => {
+                        if (!conversationId) return;
+                        onSelect(conversationId);
+                      }}
                       className="flex-1 flex flex-col gap-1 p-3 text-left"
                     >
                       <p className="line-clamp-1 text-[13.5px] font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
@@ -215,8 +228,10 @@ export default function HistoryPanel({
                         onClick={async (e) => {
                           e.stopPropagation();
                           if (confirm('Delete this conversation?')) {
-                            await onDeleteConversation(entry.conversation_id);
-                            setEntries(prev => prev.filter(e => e.conversation_id !== entry.conversation_id));
+                            if (conversationId) {
+                              await onDeleteConversation(conversationId);
+                              setEntries(prev => prev.filter(e => String(e.conversation_id || '') !== conversationId));
+                            }
                           }
                         }}
                         className="rounded-lg p-1.5 text-rose-400 opacity-0 group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 transition-all dark:hover:bg-rose-900/30"
@@ -225,7 +240,7 @@ export default function HistoryPanel({
                         <Trash2 size={15} />
                       </button>
                       <button
-                        onClick={() => setMenuOpenId(isMenuOpen ? null : entry.conversation_id)}
+                        onClick={() => setMenuOpenId(isMenuOpen ? null : conversationId)}
                         className={`rounded-lg p-1.5 transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-900 dark:bg-slate-800' : 'text-slate-400 opacity-0 group-hover:opacity-100'}`}
                       >
                         <MoreVertical size={16} />
@@ -235,7 +250,8 @@ export default function HistoryPanel({
                         <div className="absolute right-2 top-10 z-20 w-32 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
                           <button
                             onClick={() => {
-                              setEditingId(entry.conversation_id);
+                              if (!conversationId) return;
+                              setEditingId(conversationId);
                               setEditValue(entry.question);
                               setMenuOpenId(null);
                             }}
@@ -246,8 +262,10 @@ export default function HistoryPanel({
                           </button>
                           <button
                             onClick={async () => {
-                              await onDeleteConversation(entry.conversation_id);
-                              setEntries(prev => prev.filter(e => e.conversation_id !== entry.conversation_id));
+                              if (conversationId) {
+                                await onDeleteConversation(conversationId);
+                                setEntries(prev => prev.filter(e => String(e.conversation_id || '') !== conversationId));
+                              }
                               setMenuOpenId(null);
                             }}
                             className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
