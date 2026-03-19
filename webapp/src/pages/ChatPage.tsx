@@ -47,19 +47,55 @@ function normalizeComparableText(value: string): string {
     .toLowerCase();
 }
 
-function getResponsePresentation(answer: string, steps: string[], explanation: string) {
+function isConversationalPrompt(question: string, answer: string, explanation: string) {
+  const combined = `${question}\n${answer}\n${explanation}`.toLowerCase();
+  const prompt = question.trim().toLowerCase();
+
+  const conversationalPatterns = [
+    /^(hi|hello|hey|yo)\b/,
+    /\bwho are you\b/,
+    /\bwhat('?s| is) your name\b/,
+    /\bhow are you\b/,
+    /\bthank(s| you)\b/,
+    /\bi('?m| am) (tired|bored|stressed|sick) of stud/,
+    /\bmotivate me\b/,
+    /\bgive me (an )?example\b/,
+    /\bmake me a practice question\b/,
+    /\bquiz me\b/,
+  ];
+
+  if (conversationalPatterns.some((pattern) => pattern.test(combined))) return true;
+  if (/[=+\-*/^]/.test(prompt)) return false;
+  if (/\bsolve\b|\bcalculate\b|\bderive\b|\bequation\b|\bformula\b/i.test(prompt)) return false;
+  return prompt.length <= 80 && /^(what|why|how|can|could|would|do|are|is)\b/.test(prompt);
+}
+
+function getResponsePresentation(question: string, answer: string, steps: string[], explanation: string) {
   const cleanAnswer = answer.trim();
   const combined = `${cleanAnswer}\n${explanation}`.toLowerCase();
   const looksLikeChoice =
     /^(option\s+)?[a-d](?:[).:]\s*|\s*$)/i.test(cleanAnswer) ||
     /^choice\s+[a-d]\b/i.test(cleanAnswer);
   const shortSingleBlock = cleanAnswer.length > 0 && cleanAnswer.length <= 90 && !cleanAnswer.includes('\n');
+  const conversational = isConversationalPrompt(question, answer, explanation);
+
+  if (conversational) {
+    return {
+      answerLabel: 'Response',
+      answerHint: 'Natural reply',
+      explanationLabel: 'More context',
+      layout: 'chat' as const,
+      hideSteps: true,
+    };
+  }
 
   if (steps.length > 0) {
     return {
       answerLabel: looksLikeChoice ? 'Selected answer' : 'Answer',
       answerHint: looksLikeChoice ? 'Chosen result' : 'Main result',
       explanationLabel: 'Why this works',
+      layout: 'answer' as const,
+      hideSteps: false,
     };
   }
 
@@ -68,6 +104,8 @@ function getResponsePresentation(answer: string, steps: string[], explanation: s
       answerLabel: 'Example',
       answerHint: 'Practice-style response',
       explanationLabel: 'How to use it',
+      layout: 'answer' as const,
+      hideSteps: true,
     };
   }
 
@@ -76,6 +114,8 @@ function getResponsePresentation(answer: string, steps: string[], explanation: s
       answerLabel: 'Quick answer',
       answerHint: 'Direct response',
       explanationLabel: 'More context',
+      layout: 'answer' as const,
+      hideSteps: true,
     };
   }
 
@@ -83,6 +123,8 @@ function getResponsePresentation(answer: string, steps: string[], explanation: s
     answerLabel: 'Response',
     answerHint: 'Main response',
     explanationLabel: 'More context',
+    layout: 'answer' as const,
+    hideSteps: false,
   };
 }
 
@@ -393,40 +435,6 @@ export default function ChatPage({ user }: { user: User }) {
               </div>
             </div>
 
-            <div className="px-6 mb-4 flex-shrink-0">
-              <p className="px-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                Coming soon
-              </p>
-              <div className="mt-3 space-y-2">
-                <div className="rounded-[22px] border border-amber-200/70 bg-gradient-to-r from-amber-50/90 to-orange-50/90 px-4 py-3 dark:border-amber-500/15 dark:from-amber-500/10 dark:to-orange-500/10">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-black text-amber-900 dark:text-amber-100">Quiz me</p>
-                      <p className="mt-1 text-[11px] font-medium leading-relaxed text-amber-700/90 dark:text-amber-200/80">
-                        Turn a topic into a short practice round without leaving the thread.
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-amber-900/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-amber-800 dark:bg-amber-100/10 dark:text-amber-100">
-                      Soon
-                    </span>
-                  </div>
-                </div>
-                <div className="rounded-[22px] border border-sky-200/70 bg-gradient-to-r from-sky-50/90 to-cyan-50/90 px-4 py-3 dark:border-sky-500/15 dark:from-sky-500/10 dark:to-cyan-500/10">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-black text-sky-900 dark:text-sky-100">Flash cards</p>
-                      <p className="mt-1 text-[11px] font-medium leading-relaxed text-sky-700/90 dark:text-sky-200/80">
-                        Save key ideas into lightweight review cards when that flow is ready.
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-sky-900/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-sky-800 dark:bg-sky-100/10 dark:text-sky-100">
-                      Soon
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
             <div className="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar">
               {historyLoading ? (
                 <div className="flex items-center justify-center py-12">
@@ -566,7 +574,9 @@ export default function ChatPage({ user }: { user: User }) {
                   const answerMissing = ans.toLowerCase() === 'answer available in explanation';
                   const fallbackSteps = (msg.response?.steps?.length ?? 0) > 0 ? [] : parseExplanationSteps(exp);
                   const rawSteps = (msg.response?.steps?.length ?? 0) > 0 ? msg.response?.steps || [] : fallbackSteps;
-                  const validSteps = rawSteps.filter((step) => {
+                  const preliminaryPresentation = getResponsePresentation(msg.question, ans, rawSteps, exp);
+                  const candidateSteps = preliminaryPresentation.hideSteps ? [] : rawSteps;
+                  const validSteps = candidateSteps.filter((step) => {
                     const normalizedStep = normalizeComparableText(step);
                     return (
                       normalizedStep.length > 0 &&
@@ -580,7 +590,7 @@ export default function ChatPage({ user }: { user: User }) {
                     !answerMissing &&
                     normalizeComparableText(exp) !== normalizeComparableText(ans) &&
                     normalizeComparableText(exp) !== stepsCombined;
-                  const presentation = getResponsePresentation(ans, validSteps, exp);
+                  const presentation = getResponsePresentation(msg.question, ans, validSteps, exp);
 
                   return (
                   <div key={msg.id} className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -622,7 +632,7 @@ export default function ChatPage({ user }: { user: User }) {
                                 <p>{msg.error}</p>
                               </div>
                             )}
-                            {ans && ans.toLowerCase() !== 'answer available in explanation' && (
+                            {ans && ans.toLowerCase() !== 'answer available in explanation' && presentation.layout === 'answer' && (
                               <div className="mb-6 rounded-[24px] border border-indigo-100/80 bg-indigo-50/70 p-5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                                 <div className="mb-3 flex items-center gap-2 text-indigo-600 dark:text-indigo-300">
                                   <Sparkles size={14} />
@@ -646,6 +656,19 @@ export default function ChatPage({ user }: { user: User }) {
                                     className="text-[16px] font-semibold leading-relaxed text-slate-900 dark:text-white [&_.katex]:text-slate-900 dark:[&_.katex]:text-white"
                                   />
                                 )}
+                              </div>
+                            )}
+
+                            {ans && ans.toLowerCase() !== 'answer available in explanation' && presentation.layout === 'chat' && (
+                              <div className="mb-4 rounded-[20px] border border-slate-200/80 bg-white/75 p-5 dark:border-white/10 dark:bg-white/[0.04]">
+                                <div className="mb-3 flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                                  <Sparkles size={14} className="text-indigo-500 dark:text-indigo-300" />
+                                  <span className="text-[10px] font-black uppercase tracking-[0.18em]">{presentation.answerLabel}</span>
+                                </div>
+                                <RichText
+                                  content={ans}
+                                  className="text-[16px] leading-relaxed text-slate-800 dark:text-slate-100 [&_.katex]:text-slate-900 dark:[&_.katex]:text-white"
+                                />
                               </div>
                             )}
 

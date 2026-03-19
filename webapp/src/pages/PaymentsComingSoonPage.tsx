@@ -14,13 +14,13 @@ export default function PaymentsComingSoonPage() {
             <Clock3 className="h-8 w-8" />
           </div>
           <p className="mt-6 text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-            Payments coming soon
+            Upgrade preview
           </p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 dark:text-white">
-            Billing is not live yet
+            Paid checkout opens soon
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base text-slate-600 dark:text-slate-300">
-            Upgrade buttons are temporarily routed here until subscription checkout and self-serve billing are fully ready.
+            You're early. We are finishing the upgrade flow now, so you can compare plans today and come back as soon as paid checkout is open.
             {plan ? ` Requested plan: ${plan}.` : ''}
           </p>
           <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">

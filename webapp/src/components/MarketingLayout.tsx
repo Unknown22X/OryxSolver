@@ -253,7 +253,16 @@ export default function MarketingLayout({
       <main className="flex-1">{children}</main>
 
       {showFooter && (
-        <footer className={`relative overflow-hidden border-t border-slate-200/70 pt-16 pb-10 dark:border-white/5 ${footerVariant === 'dark' ? 'bg-slate-50 dark:bg-[#050714]' : 'bg-white/80 dark:bg-transparent'}`}>
+        <footer className="relative overflow-hidden border-t border-slate-200/70 bg-transparent pt-16 pb-10 dark:border-white/5">
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                footerVariant === 'dark'
+                  ? 'linear-gradient(180deg, rgba(5,7,20,0.08) 0%, rgba(5,7,20,0) 38%)'
+                  : 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 36%)',
+            }}
+          />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-40" style={{ background: 'var(--marketing-glow)' }} />
 
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6">

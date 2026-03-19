@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { getFunctionUrl } from '../lib/functions';
+import { broadcastUsageUpdated, requestUsageRefresh } from '../lib/usageEvents';
 import type { User } from '@supabase/supabase-js';
 
 interface SolveRequest {
@@ -145,10 +146,14 @@ export function useSolve(user: User | null): UseSolveReturn {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        requestUsageRefresh();
         throw new Error(errorData.error || `Request failed with status ${response.status}`);
       }
 
       const data: SolveResponse = await response.json();
+      if (data.usage) {
+        broadcastUsageUpdated(data.usage);
+      }
 
       setChatSession((prev) =>
         prev.map((msg) =>

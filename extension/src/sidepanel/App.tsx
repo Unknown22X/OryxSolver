@@ -441,6 +441,7 @@ export default function App() {
                     </div>
                     {/* AI Response Panel */}
                     <ResponsePanel
+                      question={turn.question}
                       response={turn.response}
                       onQuoteStep={(text, index) => setQuotedStep({ text, index })}
                       onSuggestionClick={(s: any) => handleSend({ text: s.prompt, images: [], styleMode })}

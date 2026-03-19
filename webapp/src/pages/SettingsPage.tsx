@@ -316,6 +316,9 @@ export default function SettingsPage({ user }: { user: User }) {
               <p className="mt-1 text-sm text-slate-500">
                 Extra pay-as-you-go credits: {usage?.paygoCreditsRemaining ?? 0}.
               </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Oryx uses your monthly plan first. Extra credits only start being consumed after the monthly plan reaches zero.
+              </p>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"

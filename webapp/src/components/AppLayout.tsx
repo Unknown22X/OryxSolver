@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  Sparkles, Zap, History, Settings, LogOut, Menu, ChevronRight,
-  Loader2
+  Sparkles, Zap, History, Settings, LogOut, Menu, ChevronRight, BookOpen, Layers2,
+  Loader2, Wallet
 } from 'lucide-react';
 import { useUsage } from '../hooks/useUsage';
 import { useProfile } from '../hooks/useProfile';
@@ -29,6 +29,15 @@ interface AppLayoutProps {
   currentPage: 'dashboard' | 'chat' | 'history' | 'settings' | 'profile' | 'admin';
   user?: User | null;
 }
+
+type NavItem = {
+  id: string;
+  label: string;
+  icon: any;
+  href?: string;
+  soon?: boolean;
+  soonTone?: 'quiz' | 'flash';
+};
 
 function UserAvatar({ photoUrl, email, size = 'md' }: { photoUrl?: string | null; email?: string; size?: 'sm' | 'md' }) {
   const initial = (email?.charAt(0) || 'U').toUpperCase();
@@ -107,10 +116,12 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
     navigate('/login');
   };
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { id: 'chat', label: 'Solve', icon: Sparkles, href: '/chat' },
     { id: 'history', label: 'History', icon: History, href: '/history' },
     { id: 'dashboard', label: 'Dashboard', icon: Zap, href: '/dashboard' },
+    { id: 'quiz_me', label: 'Quiz Me', icon: BookOpen, soon: true, soonTone: 'quiz' },
+    { id: 'flash_cards', label: 'Flash Cards', icon: Layers2, soon: true, soonTone: 'flash' },
     { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
   ];
 
@@ -126,6 +137,35 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
       </div>
     );
   }
+
+  const planQuestionsRemaining = usage?.monthlyQuestionsRemaining ?? 0;
+  const planQuestionsLimit = usage?.monthlyQuestionsLimit ?? 0;
+  const extraCreditsRemaining = usage?.paygoCreditsRemaining ?? 0;
+  const planReached = planQuestionsLimit !== -1 && planQuestionsRemaining <= 0;
+  const usesExtraCredits = usage?.subscriptionTier === 'free' && extraCreditsRemaining > 0;
+
+  const getSoonToneClasses = (tone: NavItem['soonTone']) => {
+    switch (tone) {
+      case 'quiz':
+        return {
+          row: 'border-amber-200/70 bg-amber-50/90 text-amber-800 dark:border-amber-500/15 dark:bg-amber-500/[0.08] dark:text-amber-200',
+          iconWrap: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200',
+          badge: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200',
+        };
+      case 'flash':
+        return {
+          row: 'border-cyan-200/70 bg-cyan-50/90 text-cyan-800 dark:border-cyan-500/15 dark:bg-cyan-500/[0.08] dark:text-cyan-200',
+          iconWrap: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-200',
+          badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-200',
+        };
+      default:
+        return {
+          row: 'border-slate-200/70 bg-slate-50/70 text-slate-500 dark:border-white/5 dark:bg-white/[0.03] dark:text-slate-400',
+          iconWrap: 'bg-slate-200/80 text-slate-600 dark:bg-white/10 dark:text-slate-300',
+          badge: 'bg-slate-200/80 text-slate-600 dark:bg-white/10 dark:text-slate-300',
+        };
+    }
+  };
 
   return (
     <div className="oryx-shell-bg h-screen flex overflow-hidden">
@@ -168,10 +208,27 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
+              if (item.soon) {
+                const toneClasses = getSoonToneClasses(item.soonTone);
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-2xl border transition-colors ${toneClasses.row}`}
+                  >
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${toneClasses.iconWrap}`}>
+                      <Icon size={16} />
+                    </div>
+                    <span className="font-bold">{item.label}</span>
+                    <span className={`ml-auto rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${toneClasses.badge}`}>
+                      Soon
+                    </span>
+                  </div>
+                );
+              }
               return (
                 <Link
                   key={item.id}
-                  to={item.href}
+                  to={item.href!}
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${
                     isActive 
@@ -187,23 +244,55 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
           </nav>
 
           <div className="p-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
-            <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'var(--surface-soft)' }}>
-              <p className="text-xs text-slate-500 mb-1">Plan Questions Left</p>
-              <p className="font-black text-lg">
-                {usageLoading ? (
-                  <span className="text-slate-500">...</span>
-                ) : usage?.monthlyQuestionsLimit === -1 ? (
-                  <span>High limit</span>
-                ) : (
-                  <>
-                    {usage?.monthlyQuestionsRemaining ?? 0}{' '}
-                    <span className="text-slate-500 font-normal text-sm">
-                      / {usage?.monthlyQuestionsLimit ?? 0}
-                    </span>
-                  </>
-                )}
-              </p>
+            <div className="space-y-3 mb-3">
+              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--surface-soft)' }}>
+                <p className="text-xs text-slate-500 mb-1">Monthly Plan</p>
+                <p className="font-black text-lg">
+                  {usageLoading ? (
+                    <span className="text-slate-500">...</span>
+                  ) : planQuestionsLimit === -1 ? (
+                    <span>High limit</span>
+                  ) : (
+                    <>
+                      {planQuestionsRemaining}{' '}
+                      <span className="text-slate-500 font-normal text-sm">
+                        / {planQuestionsLimit} left
+                      </span>
+                    </>
+                  )}
+                </p>
+                <p className="mt-1 text-[11px] font-medium text-slate-500">
+                  New questions use this monthly plan first.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl border" style={{ backgroundColor: 'var(--surface-soft)', borderColor: 'var(--border-color)' }}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Extra Credits</p>
+                    <p className="font-black text-lg">{usageLoading ? '...' : extraCreditsRemaining}</p>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <Wallet size={18} />
+                  </div>
+                </div>
+                <p className="mt-1 text-[11px] font-medium text-slate-500">
+                  {usesExtraCredits
+                    ? 'Used only after your monthly plan runs out.'
+                    : 'No extra credits are being used right now.'}
+                </p>
+              </div>
             </div>
+            {!usageLoading && planReached && usesExtraCredits && (
+              <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                Your monthly plan is finished. New questions now use extra credits.
+              </div>
+            )}
+            {!usageLoading && planReached && extraCreditsRemaining <= 0 && (
+              <div className="mb-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] font-medium text-rose-700 dark:text-rose-300">
+                You are out of monthly questions and extra credits.
+              </div>
+            )}
             {usage?.subscriptionTier === 'free' && !usageLoading && (
               <Link 
                 to="/payments-coming-soon"

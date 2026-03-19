@@ -1,36 +1,56 @@
-import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import MarketingLayout from '../components/MarketingLayout';
 import { trackEvent } from '../lib/analyticsClient';
-import { FALLBACK_PUBLIC_CONFIG, fetchPublicAppConfig, type ProductFeature } from '../lib/appConfig';
+import {
+  LANDING_FEATURES,
+  LANDING_FEATURES_INTRO,
+  type LandingFeatureItem,
+  LANDING_REVIEWS,
+  LANDING_REVIEWS_INTRO,
+} from '../content/landingFeatures';
 import {
   ArrowRight,
+  Star,
   CheckCircle2,
   Chrome,
   CirclePlay,
-  Clock3,
+  Camera,
   ExternalLink,
-  FolderKanban,
   GraduationCap,
   Layers,
   Shield,
   Workflow,
+  ArrowUpRight,
+  Brain,
 } from 'lucide-react';
 
-function ChromeIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M24 14.4A9.6 9.6 0 0 0 15.35 20H4.6a19.4 19.4 0 0 1 34.3-5L33.55 24a9.6 9.6 0 0 0-9.55-9.6Z" fill="#DB4437" />
-      <path d="M33.6 24a9.6 9.6 0 0 1-4.95 8.4L23.3 42.8A19.4 19.4 0 0 0 43.4 20H31.75a9.56 9.56 0 0 1 1.85 4Z" fill="#4285F4" />
-      <path d="M28.65 32.4A9.6 9.6 0 0 1 14.4 24a9.56 9.56 0 0 1 .95-4.1L10 10.3A19.4 19.4 0 0 0 23.3 42.8l5.35-10.4Z" fill="#0F9D58" />
-      <circle cx="24" cy="24" r="9.6" fill="#F1F1F1" />
-      <circle cx="24" cy="24" r="6" fill="#4285F4" />
-    </svg>
-  );
-}
-
-const FEATURE_ICONS = [Chrome, GraduationCap, Layers, Shield, Workflow];
 const PLACEHOLDER_LOGOS = ['STUDY FLOW', 'CHROME READY', 'THREAD SAVED', 'MODE SELECT', 'QUIZ LATER'];
+const HERO_DEMO_STATS = [
+  { value: '15', label: 'Free questions' },
+  { value: '4', label: 'Core modes' },
+  { value: '1', label: 'Thread per solve' },
+  { value: 'Web + Chrome', label: 'Same account' },
+];
+const HOW_IT_WORKS_STEPS = [
+  {
+    step: '01',
+    title: 'Capture',
+    description: 'Open the extension and grab the question without retyping everything.',
+    mediaLabel: 'Add capture GIF or short video',
+  },
+  {
+    step: '02',
+    title: 'Solve',
+    description: 'Choose the response mode once, then let Oryx generate a cleaner explanation.',
+    mediaLabel: 'Add solving flow demo',
+  },
+  {
+    step: '03',
+    title: 'Learn',
+    description: 'Review the answer, ask follow-ups in the same thread, and keep the context together.',
+    mediaLabel: 'Add follow-up or review demo',
+  },
+];
 
 const PRICING_PREVIEW = [
   {
@@ -62,24 +82,6 @@ const PRICING_PREVIEW = [
 export default function LandingPage() {
   const navigate = useNavigate();
   const extensionUrl = String(import.meta.env.VITE_CHROME_EXTENSION_URL ?? '').trim();
-  const [features, setFeatures] = useState<ProductFeature[]>(FALLBACK_PUBLIC_CONFIG.features);
-
-  useEffect(() => {
-    let active = true;
-    async function loadFeatures() {
-      try {
-        const config = await fetchPublicAppConfig();
-        if (!active) return;
-        setFeatures(config.features);
-      } catch (error) {
-        console.error('Failed to load landing features:', error);
-      }
-    }
-    void loadFeatures();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const handleCreateAccountClick = (location: string) => {
     trackEvent('cta_click', { location, action: 'signup' });
@@ -93,6 +95,42 @@ export default function LandingPage() {
       return;
     }
     navigate('/how-it-works');
+  };
+
+  const getFeaturePresentation = (feature: LandingFeatureItem, index: number) => {
+    const toneMap = {
+      orange: {
+        iconWrap: 'from-orange-500 to-amber-400 text-white shadow-[0_18px_40px_-20px_rgba(249,115,22,0.5)]',
+        arrow: 'text-orange-500 dark:text-orange-300',
+      },
+      violet: {
+        iconWrap: 'from-violet-500 to-fuchsia-400 text-white shadow-[0_18px_40px_-20px_rgba(139,92,246,0.5)]',
+        arrow: 'text-violet-500 dark:text-violet-300',
+      },
+      blue: {
+        iconWrap: 'from-sky-500 to-blue-400 text-white shadow-[0_18px_40px_-20px_rgba(59,130,246,0.45)]',
+        arrow: 'text-sky-500 dark:text-sky-300',
+      },
+      green: {
+        iconWrap: 'from-emerald-500 to-teal-400 text-white shadow-[0_18px_40px_-20px_rgba(16,185,129,0.45)]',
+        arrow: 'text-emerald-500 dark:text-emerald-300',
+      },
+      sky: {
+        iconWrap: 'from-cyan-500 to-sky-400 text-white shadow-[0_18px_40px_-20px_rgba(6,182,212,0.45)]',
+        arrow: 'text-cyan-500 dark:text-cyan-300',
+      },
+      indigo: {
+        iconWrap: 'from-indigo-500 to-blue-400 text-white shadow-[0_18px_40px_-20px_rgba(99,102,241,0.45)]',
+        arrow: 'text-indigo-500 dark:text-indigo-300',
+      },
+    } as const;
+
+    const icons = [Camera, Brain, Layers, Shield, Chrome, GraduationCap, Workflow];
+    const Icon = icons[index % icons.length];
+    return {
+      Icon,
+      ...toneMap[feature.tone],
+    };
   };
 
   return (
@@ -115,7 +153,27 @@ export default function LandingPage() {
               Screenshot a question, choose how you want it explained, and keep the whole solve inside one cleaner study flow.
             </p>
 
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <button
+                onClick={() => handleInstallClick('hero_install')}
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-slate-200 bg-white px-8 py-4 text-base font-black text-slate-950 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.38)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white sm:w-auto dark:border-white/12 dark:bg-white dark:text-slate-950 dark:hover:border-white/20 dark:hover:bg-slate-100"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-[0_6px_16px_-12px_rgba(15,23,42,0.4)]">
+                  <img
+                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                    width="18"
+                    height="18"
+                    alt="Google"
+                  />
+                </span>
+                <span className="flex flex-col items-start leading-none">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    Google
+                  </span>
+                  <span className="mt-1">Install extension</span>
+                </span>
+                {extensionUrl ? <ExternalLink size={16} /> : <ArrowRight size={18} />}
+              </button>
               <button
                 onClick={() => handleCreateAccountClick('hero_signup')}
                 className="gradient-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01] sm:w-auto"
@@ -123,14 +181,23 @@ export default function LandingPage() {
                 Create free account
                 <ArrowRight size={18} />
               </button>
-              <button
-                onClick={() => handleInstallClick('hero_install')}
-                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-slate-200/90 bg-white/86 px-7 py-4 text-base font-bold text-slate-900 shadow-sm backdrop-blur transition hover:border-slate-300 hover:bg-white sm:w-auto dark:border-white/12 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-              >
-                <ChromeIcon className="h-5 w-5" />
-                Install extension
-                {extensionUrl ? <ExternalLink size={16} /> : <ArrowRight size={18} />}
-              </button>
+            </div>
+
+            <div className="mx-auto mt-8 max-w-5xl overflow-hidden rounded-[34px] border border-slate-200/75 bg-white/75 shadow-[0_34px_120px_-60px_rgba(15,23,42,0.45)] backdrop-blur dark:border-white/10 dark:bg-[#07101b]/82">
+              <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.12),transparent_45%),linear-gradient(180deg,#0b1220,#090f1b)] px-6 py-8 sm:px-10 sm:py-10">
+                <div className="absolute inset-0 opacity-60" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08), transparent 55%)' }} />
+                <div className="absolute inset-x-[10%] bottom-0 h-28 rounded-full bg-sky-500/8 blur-[90px]" />
+                <div className="relative flex min-h-[240px] items-center justify-center rounded-[28px] border border-white/8 bg-[#050b16] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[300px]">
+                  <button
+                    type="button"
+                    onClick={() => handleInstallClick('hero_demo')}
+                    className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-white/14 text-white shadow-[0_18px_40px_-24px_rgba(255,255,255,0.45)] transition hover:scale-[1.03] hover:bg-white/18"
+                    aria-label="Open demo placeholder"
+                  >
+                    <CirclePlay className="h-10 w-10 fill-white/90 stroke-[1.8]" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-5 text-sm font-medium text-slate-600 dark:text-slate-400">
@@ -150,100 +217,61 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-14 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-[36px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.3)] backdrop-blur dark:border-white/10 dark:bg-[#07111e]/80">
-              <div className="flex items-center justify-between border-b border-slate-200/70 pb-4 dark:border-white/10">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Demo preview</p>
-                  <h2 className="marketing-heading mt-2 text-3xl font-extrabold text-slate-950 dark:text-white">
-                    Put your real product walkthrough here.
-                  </h2>
-                </div>
-                <div className="rounded-2xl border border-slate-200/70 bg-white/85 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-sky-700 dark:border-white/10 dark:bg-white/5 dark:text-teal-200">
-                  Demo slot
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-[28px] border border-dashed border-slate-300/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(238,245,255,0.82))] p-5 dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(10,18,35,0.85))]">
-                <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[24px] border border-slate-200/80 bg-white/78 text-center dark:border-white/10 dark:bg-white/[0.03]">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-sky-200/80 bg-sky-50 text-sky-700 dark:border-teal-400/20 dark:bg-teal-400/10 dark:text-teal-200">
-                    <CirclePlay className="h-8 w-8" />
+            <div className="lg:col-span-2">
+              <div className="grid grid-cols-2 divide-x divide-y divide-slate-200/70 overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/86 shadow-[0_20px_70px_-46px_rgba(15,23,42,0.32)] dark:divide-white/8 dark:border-white/10 dark:bg-[#050b16]/88 sm:grid-cols-4 sm:divide-y-0">
+                {HERO_DEMO_STATS.map((stat) => (
+                  <div key={stat.label} className="px-5 py-5 text-center sm:px-6 sm:py-6">
+                    <div className="text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white sm:text-3xl">
+                      {stat.value}
+                    </div>
+                    <div className="mt-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                      {stat.label}
+                    </div>
                   </div>
-                  <h3 className="mt-6 text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
-                    Demo video placeholder
-                  </h3>
-                  <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                    Drop your walkthrough video, GIF, or screen recording here when it is ready. The layout is already sized for a real product demo.
-                  </p>
-                </div>
+                ))}
               </div>
             </div>
 
-            <div className="flex flex-col gap-4">
-              <div className="oryx-marketing-panel-strong rounded-[30px] p-6">
-                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Threaded solving</p>
-                <h2 className="marketing-heading mt-2 text-3xl font-extrabold text-slate-950 dark:text-white">
-                  One question. Cleaner follow-ups.
+            <div className="lg:col-span-2 py-2">
+              <div className="text-center">
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">How it works</p>
+                <h2 className="marketing-heading mt-3 text-3xl font-extrabold text-slate-950 dark:text-white sm:text-4xl">
+                  Three steps to clarity
                 </h2>
-                <div className="mt-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-                  {[
-                    ['1', 'Capture', 'Grab the question quickly instead of retyping everything.'],
-                    ['2', 'Choose mode', 'Pick the tone before you start so the thread stays consistent.'],
-                    ['3', 'Keep context', 'Follow-ups stay inside the same conversation.'],
-                  ].map(([step, title, body]) => (
-                    <div key={title} className="rounded-[24px] border border-slate-200/70 bg-white/88 p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                      <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl" style={{ background: 'var(--brand-gradient-soft)', color: 'var(--mode-standard)' }}>
-                        <span className="text-sm font-black">{step}</span>
-                      </div>
-                      <h3 className="text-xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">{title}</h3>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{body}</p>
-                    </div>
-                  ))}
-                </div>
+                <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300 sm:text-base">
+                  Keep this section simple: title first, media second, description last.
+                </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="oryx-marketing-panel rounded-[30px] p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="oryx-marketing-icon h-11 w-11">
-                      <Clock3 className="h-5 w-5" />
+              <div className="mt-10 grid gap-8 lg:grid-cols-3">
+                {HOW_IT_WORKS_STEPS.map((item) => (
+                  <div key={item.title} className="px-1 text-center">
+                    <div className="mx-auto mb-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_30px_-18px_rgba(15,23,42,0.55)] dark:bg-white dark:text-slate-950">
+                      {item.step}
                     </div>
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Mode selection</p>
-                      <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Choose it once before the thread starts.</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    {[
-                      ['Standard', 'oryx-chip-standard'],
-                      ['Exam', 'oryx-chip-exam'],
-                      ['ELI5', 'oryx-chip-eli5'],
-                      ['Step-by-step', 'oryx-chip-steps'],
-                    ].map(([label, className]) => (
-                      <div key={label} className={`oryx-mode-chip ${className} rounded-full px-4 py-2 text-sm font-bold`}>
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                    <h3 className="text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
+                      {item.title}
+                    </h3>
 
-                <div className="oryx-marketing-panel rounded-[30px] p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="oryx-marketing-icon h-11 w-11">
-                      <FolderKanban className="h-5 w-5" />
+                    <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-200/70 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.12),transparent_45%),linear-gradient(180deg,#0b1220,#090f1b)] p-3 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.48)] dark:border-white/10">
+                      <div className="relative flex min-h-[180px] items-center justify-center rounded-[22px] border border-white/8 bg-[#050b16] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                        <div className="absolute inset-0 opacity-60" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.12), transparent 60%)' }} />
+                        <div className="relative flex flex-col items-center text-center">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-white/12 text-white">
+                            <CirclePlay className="h-7 w-7 fill-white/90 stroke-[1.8]" />
+                          </div>
+                          <p className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-slate-300">
+                            {item.mediaLabel}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Prompt starters</p>
-                      <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Good defaults for the first message.</p>
-                    </div>
+
+                    <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                      {item.description}
+                    </p>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {['Explain the first step', 'Check my answer', 'Summarize this faster', 'Make a practice question'].map((prompt) => (
-                      <span key={prompt} className="rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                        {prompt}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
@@ -275,35 +303,87 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="relative border-y border-slate-200/70 bg-white/60 px-4 py-20 sm:px-6 dark:border-white/5 dark:bg-black/10">
+      <section id="features" className="relative border-y border-slate-200/70 bg-transparent px-4 py-20 sm:px-6 dark:border-white/5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.06),transparent_42%)] dark:bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.05),transparent_42%)]" />
         <div className="mx-auto max-w-6xl">
           <div className="mb-12 max-w-2xl">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Features</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{LANDING_FEATURES_INTRO.eyebrow}</p>
             <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-              Built for how students actually move through a problem.
+              {LANDING_FEATURES_INTRO.title}
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-600 dark:text-slate-300">
-              The content below stays honest on purpose. It shows what already exists and leaves room for future visuals without pretending they are live today.
+              {LANDING_FEATURES_INTRO.description}
             </p>
           </div>
 
-          <div className="oryx-marketing-grid md:grid-cols-2 xl:grid-cols-3">
-            {features.map((feature, index) => {
-              const Icon = FEATURE_ICONS[index % FEATURE_ICONS.length];
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-2">
+            {LANDING_FEATURES.map((feature, index) => {
+              const presentation = getFeaturePresentation(feature, index);
+              const Icon = presentation.Icon;
               return (
-                <div key={feature.title} className="oryx-marketing-card rounded-[30px] p-8">
-                  <div className="oryx-marketing-icon h-14 w-14">
+                <div
+                  key={feature.id}
+                  className="group rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(247,250,255,0.88))] p-8 shadow-[0_28px_80px_-54px_rgba(15,23,42,0.3)] transition duration-200 hover:-translate-y-1 hover:border-slate-300/90 dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(8,12,24,0.92),rgba(7,11,22,0.82))] dark:hover:border-white/14"
+                >
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-[18px] bg-gradient-to-br ${presentation.iconWrap}`}>
                     <Icon className="h-6 w-6" />
                   </div>
-                  <h3 className="marketing-heading mt-6 text-2xl font-bold text-slate-950 dark:text-white">
+                  <h3 className="mt-6 text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
                     {feature.title}
                   </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                  <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
                     {feature.description}
                   </p>
+                  <div className={`mt-6 flex items-center gap-2 text-sm font-bold ${presentation.arrow}`}>
+                    <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative px-4 py-20 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-amber-700 dark:border-amber-300/15 dark:bg-amber-400/8 dark:text-amber-200">
+              <Star className="h-3.5 w-3.5 fill-current" />
+              {LANDING_REVIEWS_INTRO.eyebrow}
+            </div>
+            <h2 className="marketing-heading mt-6 text-4xl font-extrabold text-slate-950 dark:text-white sm:text-5xl">
+              {LANDING_REVIEWS_INTRO.titlePrefix}{' '}
+              <span className="gradient-text-animated">{LANDING_REVIEWS_INTRO.titleHighlight}</span>
+            </h2>
+          </div>
+
+          <div className="mt-12 grid gap-5 lg:grid-cols-3">
+            {LANDING_REVIEWS.map((review) => (
+              <div
+                key={review.id}
+                className="rounded-[30px] border border-slate-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,248,255,0.88))] p-7 shadow-[0_28px_80px_-54px_rgba(15,23,42,0.3)] dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(12,17,30,0.96),rgba(9,13,24,0.9))]"
+              >
+                <div className="flex items-center gap-1 text-amber-400">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Star key={`${review.id}-${index}`} className="h-4 w-4 fill-current" />
+                  ))}
+                </div>
+
+                <p className="mt-5 text-lg leading-relaxed text-slate-700 dark:text-slate-200">
+                  "{review.quote}"
+                </p>
+
+                <div className="mt-8 flex items-center gap-4">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${review.accent} text-sm font-black text-white shadow-[0_18px_40px_-20px_rgba(15,23,42,0.45)]`}>
+                    {review.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-base font-black text-slate-950 dark:text-white">{review.name}</p>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{review.role}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

@@ -9,6 +9,50 @@ type PromptContext = {
   isFollowUp?: boolean;
 };
 
+function isConversationalPrompt(question: string, styleMode: StyleMode, hasImages: boolean): boolean {
+  if (hasImages) return false;
+  if (styleMode === 'exam' || styleMode === 'step_by_step') return false;
+
+  const text = question.trim();
+  const lower = text.toLowerCase();
+  if (!text) return false;
+  if (text.length > 220) return false;
+
+  const conversationalPatterns = [
+    /^(hi|hello|hey|yo|sup|hola)\b/i,
+    /\bwho are you\b/i,
+    /\bwhat('?s| is) your name\b/i,
+    /\bhow are you\b/i,
+    /\bthank(s| you)\b/i,
+    /\bcan you help me\b/i,
+    /\bi('?m| am) (tired|bored|stressed|sick) of stud/i,
+    /\bmotivate me\b/i,
+    /\bgive me (an )?example\b/i,
+    /\bmake me a practice question\b/i,
+    /\bquiz me\b/i,
+    /\btalk to me\b/i,
+  ];
+
+  const academicSignals = [
+    /[=+\-*/^]/,
+    /\bsolve\b/i,
+    /\bcalculate\b/i,
+    /\bfind\b/i,
+    /\bderive\b/i,
+    /\bexplain\b.*\b(step|steps)\b/i,
+    /\bformula\b/i,
+    /\bequation\b/i,
+    /\bmatrix\b/i,
+    /\bderivative\b/i,
+    /\bintegral\b/i,
+  ];
+
+  if (conversationalPatterns.some((pattern) => pattern.test(lower))) return true;
+  if (academicSignals.some((pattern) => pattern.test(lower))) return false;
+
+  return /^(what|why|how|can|could|would|do|are|is)\b/i.test(lower) && text.length <= 80;
+}
+
 const BASE_PROMPT = `
 You are OryxSolver, an AI Homework Helper.
 Prioritize correctness, clarity, and learning.
@@ -129,6 +173,7 @@ export function buildPrompt(context: PromptContext): string {
     : 'Provide 4 to 7 concise steps.';
 
   const isBulkAsk = question.includes("Create an answer key for these practice questions");
+  const conversationalPrompt = isConversationalPrompt(question, styleMode, hasImages);
 
   if (isBulkAsk) {
     return [
@@ -151,6 +196,27 @@ export function buildPrompt(context: PromptContext): string {
       '- You MUST answer ALL questions. Do not skip or stop early.',
       '',
       question
+    ].join('\n');
+  }
+
+  if (conversationalPrompt) {
+    return [
+      generationMode === 'fast_fallback'
+        ? 'You are OryxSolver in low-latency mode.'
+        : 'You are OryxSolver, a concise homework helper.',
+      inferLanguageInstruction(question),
+      getModeRawPrompt(styleMode),
+      'The user is making a conversational or lightweight request.',
+      'Respond naturally in plain prose.',
+      'Rules:',
+      '- Do not use FINAL_ANSWER, STEPS, or EXPLANATION labels.',
+      '- Do not force a math-solution format.',
+      '- Keep the reply to 1 to 4 sentences unless the user explicitly asks for more.',
+      '- If the user asks for an example or a practice question, provide it directly with light formatting.',
+      '- Stay helpful, direct, and human-sounding.',
+      '- No preface like "sure" or "okay".',
+      '',
+      `Question: ${question}`,
     ].join('\n');
   }
 

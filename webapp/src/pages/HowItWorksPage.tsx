@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import MarketingLayout from '../components/MarketingLayout';
 import {
   ArrowRight,
+  Calculator,
   Camera,
   CheckCircle2,
   FolderKanban,
@@ -20,64 +21,86 @@ import {
 const STEPS = [
   {
     num: '01',
-    title: 'Open the question where it already lives',
-    description: 'Use the extension when the problem is already on the page, or jump into the web app when you want a larger workspace.',
+    title: 'Install the Extension',
+    description: 'Add OryxSolver to Chrome and pin it so capture is one click away when a question is already on the page.',
     icon: <Monitor className="h-7 w-7" />,
-    notes: ['Chrome extension for faster capture', 'Web app for review, history, and settings'],
+    notes: ['Open the Chrome Web Store', 'Click Add to Chrome', 'Pin it for instant access'],
+    mediaLabel: 'Extension setup demo',
+    accent: 'from-indigo-500 to-blue-500',
+    glow: 'rgba(99,102,241,0.38)',
+    wash: 'linear-gradient(135deg, rgba(99,102,241,0.18), transparent 60%)',
   },
   {
     num: '02',
-    title: 'Capture or paste the problem',
-    description: 'You can upload an image, paste text, or grab the visible question instead of copying everything into another tool.',
+    title: 'Capture the Question',
+    description: 'Grab the visible problem, upload a screenshot, or paste the text without rebuilding the task in another app.',
     icon: <Camera className="h-7 w-7" />,
-    notes: ['Screenshots and uploads', 'Text pasted directly', 'Designed to reduce setup friction'],
+    notes: ['Screenshot or upload', 'Paste raw question text', 'Start from where the work already is'],
+    mediaLabel: 'Capture flow GIF',
+    accent: 'from-orange-500 to-amber-400',
+    glow: 'rgba(249,115,22,0.34)',
+    wash: 'linear-gradient(135deg, rgba(249,115,22,0.16), transparent 60%)',
   },
   {
     num: '03',
-    title: 'Choose the explanation style once',
-    description: 'Pick the response mode before you begin so the thread stays consistent instead of changing tone every follow-up.',
+    title: 'Choose the Mode',
+    description: 'Pick the explanation style once at the start so the thread stays consistent as you keep asking follow-ups.',
     icon: <Lightbulb className="h-7 w-7" />,
     notes: ['Standard for balance', 'Exam for formal structure', 'ELI5 for simpler language'],
+    mediaLabel: 'Mode selection demo',
+    accent: 'from-violet-500 to-fuchsia-400',
+    glow: 'rgba(168,85,247,0.34)',
+    wash: 'linear-gradient(135deg, rgba(168,85,247,0.16), transparent 60%)',
   },
   {
     num: '04',
-    title: 'Keep follow-ups inside the same thread',
-    description: 'The goal is a final answer, ordered steps, and follow-up questions that stay attached to the original solve.',
+    title: 'Keep Learning in One Thread',
+    description: 'Get the answer, review the steps, then keep follow-ups attached to the same solve instead of starting over.',
     icon: <Zap className="h-7 w-7" />,
     notes: ['Clear final answer first', 'Steps after that', 'Follow-ups keep context'],
+    mediaLabel: 'Threaded follow-up demo',
+    accent: 'from-emerald-500 to-teal-400',
+    glow: 'rgba(16,185,129,0.34)',
+    wash: 'linear-gradient(135deg, rgba(16,185,129,0.16), transparent 60%)',
   },
 ];
 
-const PRODUCT_AREAS = [
+const FUTURE_FEATURES = [
   {
+    title: 'LMS Integration',
+    description: 'Placeholder: future support for launching Oryx closer to school platforms and assignment flows.',
     icon: <Scan className="h-5 w-5" />,
-    title: 'Capture flow',
-    description: 'Current product area: starting from screenshots, uploaded images, or copied question text.',
+    accent: 'from-indigo-500 to-blue-500',
   },
   {
-    icon: <MessageSquare className="h-5 w-5" />,
-    title: 'Threaded solving',
-    description: 'Current product area: one main question and follow-up questions inside the same conversation.',
-  },
-  {
-    icon: <Wand2 className="h-5 w-5" />,
-    title: 'Math rendering',
-    description: 'Current product area: cleaner formatted math and more readable answer structure.',
-  },
-  {
+    title: 'Mobile Sync',
+    description: 'Placeholder: review history, saved solves, and progress across devices from the same account.',
     icon: <Smartphone className="h-5 w-5" />,
-    title: 'Shared account data',
-    description: 'Current product area: profile, usage, and history syncing between the extension and web app.',
+    accent: 'from-sky-500 to-cyan-400',
   },
   {
+    title: 'Smart Extraction',
+    description: 'Placeholder: stronger OCR and cleaner math/text extraction from rough screenshots and handwriting.',
+    icon: <Wand2 className="h-5 w-5" />,
+    accent: 'from-violet-500 to-fuchsia-400',
+  },
+  {
+    title: 'STEM Optimized',
+    description: 'Placeholder: deeper flows for subjects like calculus, chemistry, and physics.',
+    icon: <Calculator className="h-5 w-5" />,
+    accent: 'from-orange-500 to-amber-400',
+  },
+  {
+    title: 'Contextual Chat',
+    description: 'Placeholder: richer clarification threads that stay tied to the exact problem and explanation.',
+    icon: <MessageSquare className="h-5 w-5" />,
+    accent: 'from-emerald-500 to-teal-400',
+  },
+  {
+    title: 'Study Library',
+    description: 'Placeholder: organize solves into reusable collections for review and later practice.',
     icon: <FolderKanban className="h-5 w-5" />,
-    title: 'Feature placeholders',
-    description: 'Reserved space for future visuals, walkthrough GIFs, and richer product previews without changing the layout again.',
-  },
-  {
-    icon: <MousePointerClick className="h-5 w-5" />,
-    title: 'Billing status',
-    description: 'Current product area: pricing is visible, but payment actions still route to the coming-soon flow.',
+    accent: 'from-blue-500 to-indigo-400',
   },
 ];
 
@@ -94,11 +117,11 @@ export default function HowItWorksPage() {
               How it works
             </div>
             <h1 className="marketing-heading mt-8 text-[3.3rem] font-extrabold text-slate-950 dark:text-white sm:text-[4.1rem] md:text-[5.1rem] md:leading-[0.98]">
-              From question
-              <span className="block gradient-text-animated">to cleaner understanding.</span>
+              Simple steps from
+              <span className="block gradient-text-animated">question to clarity.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-3xl text-xl font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-              OryxSolver is meant to remove friction, not add a theatrical AI layer on top. The workflow below is the real product shape today.
+              OryxSolver is built to be fast, accurate, and intuitive. The workflow below is the clearest version of how the product should feel.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
@@ -120,64 +143,56 @@ export default function HowItWorksPage() {
 
         <section className="px-4 py-16 sm:px-6">
           <div className="mx-auto max-w-6xl">
-            <div className="grid gap-6 lg:grid-cols-2">
-              {STEPS.map((step) => (
-                <div key={step.num} className="oryx-marketing-panel rounded-[32px] p-7">
-                  <div className="flex items-start gap-5">
-                    <div className="inline-flex h-14 w-14 items-center justify-center rounded-[20px]" style={{ background: 'var(--brand-gradient-soft)', color: 'var(--mode-standard)' }}>
-                      {step.icon}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">{step.num}</span>
-                        <div className="h-px flex-1 bg-slate-200/80 dark:bg-white/10" />
+            <div className="space-y-10">
+              {STEPS.map((step, index) => (
+                <div key={step.num} className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+                  <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
+                    <div
+                      className="relative overflow-hidden rounded-[36px] border border-slate-200/80 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.1),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,255,0.92))] p-6 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] dark:border-white/10 dark:bg-[linear-gradient(180deg,#0b1220,#090f1b)] sm:p-8"
+                      style={{ boxShadow: `0 30px 90px -48px ${step.glow}` }}
+                    >
+                      <div className="absolute inset-0 opacity-80" style={{ background: step.wash }} />
+                      <div className="relative flex min-h-[300px] items-center justify-center rounded-[28px] border border-slate-200/80 bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/8 dark:bg-[#0b1020] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                        <span className="absolute left-6 top-6 text-6xl font-black tracking-[-0.05em] text-white/6 sm:text-7xl">
+                          {step.num}
+                        </span>
+                        <div className="flex flex-col items-center text-center">
+                          <div
+                            className={`flex h-28 w-28 items-center justify-center rounded-[30px] bg-gradient-to-br ${step.accent} text-white`}
+                            style={{ boxShadow: `0 30px 60px -30px ${step.glow}` }}
+                          >
+                            {step.icon}
+                          </div>
+                          <p className="mt-6 text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
+                            {step.mediaLabel}
+                          </p>
+                        </div>
                       </div>
-                      <h2 className="marketing-heading mt-4 text-3xl font-bold text-slate-950 dark:text-white">
-                        {step.title}
-                      </h2>
-                      <p className="mt-4 text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                        {step.description}
-                      </p>
-                      <ul className="mt-6 space-y-3">
-                        {step.notes.map((note) => (
-                          <li key={note} className="flex items-start gap-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-                            <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500 dark:text-emerald-300" />
-                            <span>{note}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
 
-        <section className="border-y border-slate-200/70 bg-white/60 px-4 py-20 sm:px-6 dark:border-white/5 dark:bg-black/10">
-          <div className="mx-auto max-w-6xl">
-            <div className="mb-12 max-w-3xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Product areas</p>
-              <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-                Honest now, expandable later.
-              </h2>
-              <p className="mt-4 text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                This section is intentionally straightforward. Some areas are already active in the product, and some are shaped as placeholders so richer visuals can be added later without redesigning the page.
-              </p>
-            </div>
-
-            <div className="oryx-marketing-grid md:grid-cols-2 xl:grid-cols-3">
-              {PRODUCT_AREAS.map((item) => (
-                <div key={item.title} className="oryx-marketing-card rounded-[30px] p-8">
-                  <div className="oryx-marketing-icon h-12 w-12">
-                    {item.icon}
+                  <div className={index % 2 === 1 ? 'lg:order-1' : ''}>
+                    <div
+                      className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${step.accent} text-sm font-black text-white`}
+                      style={{ boxShadow: `0 20px 40px -24px ${step.glow}` }}
+                    >
+                      {step.num}
+                    </div>
+                    <h2 className="mt-6 text-4xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
+                      {step.title}
+                    </h2>
+                    <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-600 dark:text-slate-300">
+                      {step.description}
+                    </p>
+                    <ul className="mt-8 space-y-4">
+                      {step.notes.map((note) => (
+                        <li key={note} className="flex items-start gap-3 text-base font-semibold text-slate-700 dark:text-slate-200">
+                          <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500 dark:text-emerald-300" />
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <h3 className="marketing-heading mt-6 text-2xl font-bold text-slate-950 dark:text-white">
-                    {item.title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                    {item.description}
-                  </p>
                 </div>
               ))}
             </div>
@@ -234,11 +249,49 @@ export default function HowItWorksPage() {
           </div>
         </section>
 
+        <section className="border-y border-slate-200/70 bg-white/60 px-4 py-20 sm:px-6 dark:border-white/5 dark:bg-black/10">
+          <div className="mx-auto max-w-6xl">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Future placeholders</p>
+              <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white sm:text-5xl">
+                Premium features for
+                <span className="block gradient-text-animated">faster learning.</span>
+              </h2>
+              <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
+                These are intentionally placeholders for future expansion. The layout is ready now, and the product detail can be replaced later when each area becomes real.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {FUTURE_FEATURES.map((feature) => (
+                <div
+                  key={feature.title}
+                  className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(246,249,255,0.9))] p-8 shadow-[0_28px_80px_-54px_rgba(15,23,42,0.28)] dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(12,17,30,0.96),rgba(9,13,24,0.9))]"
+                >
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-[18px] bg-gradient-to-br ${feature.accent} text-white shadow-[0_18px_40px_-20px_rgba(15,23,42,0.38)]`}>
+                    {feature.icon}
+                  </div>
+                  <h3 className="mt-6 text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-3 text-base leading-relaxed text-slate-600 dark:text-slate-300">
+                    {feature.description}
+                  </p>
+                  <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    Placeholder
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="px-4 pb-20 sm:px-6">
           <div className="mx-auto max-w-4xl rounded-[36px] border border-slate-200/80 bg-white/88 p-10 text-center shadow-[0_30px_90px_-44px_rgba(15,23,42,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#08111d]/82 sm:p-14">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Next step</p>
             <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-              Use the workflow first. Judge it after.
+              Solve your homework faster.
+              <span className="block gradient-text-animated">Learn better.</span>
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base font-medium leading-relaxed text-slate-600 dark:text-slate-300">
               Start with the free plan, try one real assignment question, and decide whether the flow actually saves you time.

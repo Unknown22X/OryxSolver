@@ -86,6 +86,19 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
     return { answer: 'Answer available in explanation', explanation: raw, steps: [] };
   }
 
+  const hasExplicitSections = lines.some((line) =>
+    /^(FINAL_ANSWER|ANSWER|RESULT|STEPS|EXPLANATION)\s*:/i.test(line),
+  );
+
+  if (!hasExplicitSections) {
+    const plainText = raw.trim();
+    const normalizedMcq = normalizeMcqAnswer(question, plainText);
+    if (normalizedMcq !== plainText && normalizedMcq.length === 1) {
+      return { answer: normalizedMcq, explanation: plainText, steps: [] };
+    }
+    return { answer: plainText, explanation: '', steps: [] };
+  }
+
   let answerRaw = '';
   const steps: string[] = [];
   const explanationLines: string[] = [];
