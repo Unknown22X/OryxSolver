@@ -2,20 +2,38 @@ import type { SupabaseLookupUser } from './auth.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 type ExistingProfile = {
+  id: string;
   display_name: string | null;
   photo_url: string | null;
+  role: string | null;
 };
 
 type AccessProfile = {
   id: string;
   role: string | null;
-  subscription_tier: string | null;
-  subscription_status: string | null;
-  all_credits: number | null;
-  used_credits: number | null;
-  monthly_images_used: number | null;
-  monthly_images_period: string | null;
 };
+
+type Subscription = {
+  tier: string | null;
+  status: string | null;
+};
+
+export async function getUserSubscription(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Subscription> {
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('tier, status')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { tier: 'free', status: 'inactive' };
+  }
+
+  return { tier: data.tier, status: data.status };
+}
 
 export async function upsertProfileFromAuthUser(
   supabase: SupabaseClient,
@@ -23,8 +41,8 @@ export async function upsertProfileFromAuthUser(
 ) {
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
-    .select('display_name, photo_url')
-    .eq('id', user.id)
+    .select('id, display_name, photo_url, role')
+    .eq('auth_user_id', user.id)
     .maybeSingle<ExistingProfile>();
 
   if (existingProfileError) {
@@ -33,19 +51,28 @@ export async function upsertProfileFromAuthUser(
 
   const displayName = user.displayName ?? existingProfile?.display_name ?? null;
   const photoUrl = user.photoUrl ?? existingProfile?.photo_url ?? null;
+  const nextRole =
+    existingProfile?.role === 'admin'
+      ? 'admin'
+      : existingProfile?.role === 'authenticated'
+        ? 'authenticated'
+        : user.emailVerified
+          ? 'authenticated'
+          : 'pending';
 
-  const { error: upsertError } = await supabase.from('profiles').upsert(
-    {
-      auth_user_id: user.id,
-      email: user.email ?? null,
-      email_verified: user.emailVerified ?? false,
-      role: user.emailVerified ? 'authenticated' : 'pending',
-      display_name: displayName,
-      photo_url: photoUrl,
-      last_seen_at: new Date().toISOString(),
-    },
-    { onConflict: 'auth_user_id' },
-  );
+  const upsertPayload = {
+    auth_user_id: user.id,
+    email: user.email ?? null,
+    email_verified: user.emailVerified ?? false,
+    role: nextRole,
+    display_name: displayName,
+    photo_url: photoUrl,
+    last_seen_at: new Date().toISOString(),
+  };
+
+  const { error: upsertError } = await supabase.from('profiles').upsert(upsertPayload, {
+    onConflict: 'auth_user_id',
+  });
 
   if (upsertError) {
     throw new Error(`Profile upsert failed: ${upsertError.message}`);
@@ -58,7 +85,7 @@ export async function getProfileForSolve(
 ): Promise<AccessProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role, subscription_tier, subscription_status, all_credits, used_credits, monthly_images_used, monthly_images_period')
+    .select('id, role')
     .eq('auth_user_id', authUid)
     .maybeSingle<AccessProfile>();
 
@@ -67,58 +94,4 @@ export async function getProfileForSolve(
   }
 
   return data ?? null;
-}
-
-export async function consumeCreditForFreeTier(
-  supabase: SupabaseClient,
-  profileId: string,
-  currentCreditsUsed: number,
-) {
-  const nextCredits = currentCreditsUsed + 1;
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      used_credits: nextCredits,
-      last_seen_at: new Date().toISOString(),
-    })
-    .eq('id', profileId);
-
-  if (error) {
-    throw new Error(`Credit update failed: ${error.message}`);
-  }
-
-  return nextCredits;
-}
-
-export function currentMonthStartIsoDate(): string {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  return start.toISOString().slice(0, 10);
-}
-
-export async function consumeMonthlyImageQuotaForFreeTier(
-  supabase: SupabaseClient,
-  profileId: string,
-  currentMonthlyUsed: number,
-  monthlyPeriod: string | null,
-  imagesUsedNow: number,
-) {
-  const monthStart = currentMonthStartIsoDate();
-  const normalizedCurrent = monthlyPeriod === monthStart ? currentMonthlyUsed : 0;
-  const nextMonthlyUsed = normalizedCurrent + imagesUsedNow;
-
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      monthly_images_used: nextMonthlyUsed,
-      monthly_images_period: monthStart,
-      last_seen_at: new Date().toISOString(),
-    })
-    .eq('id', profileId);
-
-  if (error) {
-    throw new Error(`Monthly image quota update failed: ${error.message}`);
-  }
-
-  return { monthStart, nextMonthlyUsed };
 }

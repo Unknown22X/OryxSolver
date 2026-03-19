@@ -1,8 +1,16 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { createSupabaseAdminClient } from '../_shared/db.ts';
-import { jsonOk } from '../_shared/http.ts';
+import { jsonError, jsonOk } from '../_shared/http.ts';
+import { hasValidInternalToken } from '../_shared/security.ts';
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if (req.method !== 'POST') {
+    return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
+  }
+  if (!hasValidInternalToken(req)) {
+    return jsonError(401, 'UNAUTHORIZED_INTERNAL_CALL', 'Unauthorized');
+  }
+
   const supabase = createSupabaseAdminClient();
 
   const { error } = await supabase.from('questions_cache').select('id').limit(1);
@@ -26,6 +34,20 @@ Deno.serve(async () => {
     
     await supabase.rpc('exec_sql', {
       query: `ALTER TABLE public.questions_cache ENABLE ROW LEVEL SECURITY`
+    });
+
+    await supabase.rpc('exec_sql', {
+      query: `DROP POLICY IF EXISTS "questions_cache_read" ON public.questions_cache;
+      DROP POLICY IF EXISTS "questions_cache_insert" ON public.questions_cache;
+      DROP POLICY IF EXISTS "questions_cache_public_read" ON public.questions_cache;
+      DROP POLICY IF EXISTS "questions_cache_public_insert" ON public.questions_cache;
+      DROP POLICY IF EXISTS "questions_cache_service_read" ON public.questions_cache;
+      DROP POLICY IF EXISTS "questions_cache_service_insert" ON public.questions_cache;
+      DROP POLICY IF EXISTS "questions_cache_service_access" ON public.questions_cache;
+      CREATE POLICY "questions_cache_service_access" ON public.questions_cache
+        FOR ALL TO service_role
+        USING (true)
+        WITH CHECK (true)`
     });
     
     return jsonOk({ ok: true, message: 'Table created' });

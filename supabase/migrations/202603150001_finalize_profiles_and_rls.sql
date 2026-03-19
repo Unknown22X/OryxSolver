@@ -10,7 +10,6 @@ alter table if exists public.profiles
   add column if not exists all_credits integer not null default 50,
   add column if not exists used_credits integer not null default 0,
   add column if not exists last_seen_at timestamptz;
-
 -- 2) Backfill auth_user_id from legacy columns where possible.
 do $$
 begin
@@ -26,11 +25,9 @@ begin
     where auth_user_id is null;
   end if;
 end $$;
-
 update public.profiles
   set auth_user_id = coalesce(auth_user_id, id::text)
 where auth_user_id is null;
-
 -- 3) Enforce constraints if safe.
 do $$
 begin
@@ -47,10 +44,8 @@ begin
     end if;
   end if;
 end $$;
-
 create unique index if not exists profiles_auth_user_id_key
   on public.profiles (auth_user_id);
-
 -- Role check constraint (if missing).
 do $$
 begin
@@ -64,7 +59,6 @@ begin
       check (role in ('pending', 'authenticated', 'admin'));
   end if;
 end $$;
-
 -- 4) Solve runs: ensure auth_user_id column exists and RLS uses it.
 do $$
 begin
@@ -95,81 +89,65 @@ begin
       add column auth_user_id text;
   end if;
 end $$;
-
 create index if not exists solve_runs_auth_user_id_created_at_idx
   on public.solve_runs (auth_user_id, created_at desc);
-
 -- 5) Standardize RLS policies on auth_user_id / user_id.
 alter table if exists public.profiles enable row level security;
-
 drop policy if exists "Users can view own profile" on public.profiles;
 drop policy if exists "Users can update own profile" on public.profiles;
 drop policy if exists "profiles_select_own" on public.profiles;
 drop policy if exists "profiles_insert_own" on public.profiles;
 drop policy if exists "profiles_update_own" on public.profiles;
-
 create policy "profiles_select_own"
 on public.profiles
 for select
 to authenticated
 using (auth_user_id::text = auth.jwt()->>'sub');
-
 create policy "profiles_insert_own"
 on public.profiles
 for insert
 to authenticated
 with check (auth_user_id::text = auth.jwt()->>'sub');
-
 create policy "profiles_update_own"
 on public.profiles
 for update
 to authenticated
 using (auth_user_id::text = auth.jwt()->>'sub')
 with check (auth_user_id::text = auth.jwt()->>'sub');
-
 alter table if exists public.solve_runs enable row level security;
-
 drop policy if exists "solve_runs_select_own" on public.solve_runs;
 drop policy if exists "solve_runs_insert_own" on public.solve_runs;
-
 create policy "solve_runs_select_own"
 on public.solve_runs
 for select
 to authenticated
 using (auth_user_id::text = auth.jwt()->>'sub');
-
 create policy "solve_runs_insert_own"
 on public.solve_runs
 for insert
 to authenticated
 with check (auth_user_id::text = auth.jwt()->>'sub');
-
 alter table if exists public.history_entries enable row level security;
-
 drop policy if exists "history_entries_select_own" on public.history_entries;
 drop policy if exists "history_entries_insert_own" on public.history_entries;
 drop policy if exists "history_entries_update_own" on public.history_entries;
 drop policy if exists "history_entries_delete_own" on public.history_entries;
-
 create policy "history_entries_select_own"
 on public.history_entries
 for select
 to authenticated
 using (user_id::text = auth.jwt()->>'sub');
-
 create policy "history_entries_insert_own"
 on public.history_entries
 for insert
 to authenticated
 with check (user_id::text = auth.jwt()->>'sub');
-
 create policy "history_entries_update_own"
 on public.history_entries
 for update
 to authenticated
 using (user_id::text = auth.jwt()->>'sub')
 with check (user_id::text = auth.jwt()->>'sub');
-
 create policy "history_entries_delete_own"
 on public.history_entries
 for delete

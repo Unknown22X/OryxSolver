@@ -1,4 +1,4 @@
-import { getAccessToken } from '../auth/supabaseAuthClient';
+import { getAccessToken, getCurrentUserId } from '../auth/supabaseAuthClient';
 
 export type AnalyticsEvent = 
   | 'app_opened'
@@ -20,35 +20,47 @@ class AnalyticsService {
   async track(eventName: AnalyticsEvent, properties: Record<string, any> = {}) {
     if (!this.isEnabled()) return;
 
-    try {
-      const token = await getAccessToken();
-      if (!token) return;
+    // Fire and forget to not block UI or critical flows
+    void (async () => {
+      try {
+        const token = await getAccessToken();
+        const userId = await getCurrentUserId();
+        if (!token || !userId) return;
 
-      // We'll use a direct Supabase call via an Edge Function or just a standard Post
-      // To keep it simple, we'll assume a generic endpoint exists or use the Supabase REST API directly
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      if (!supabaseUrl || !supabaseAnonKey) return;
+        if (!supabaseUrl || !supabaseAnonKey) return;
 
-      await fetch(`${supabaseUrl}/rest/v1/analytics_events`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${token}`,
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify({
-          event_name: eventName,
-          properties: properties,
-          platform: 'chrome_extension'
-        })
-      });
-    } catch (error) {
-      // Analytics should never crash the main app
-      console.error('Analytics Error:', error);
-    }
+        // Ensure URL is clean
+        const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+        const fullUrl = `${baseUrl}/rest/v1/analytics_events`;
+
+        const resp = await fetch(fullUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            event_name: eventName,
+            properties: properties,
+            platform: 'chrome_extension'
+          })
+        });
+
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => 'No body');
+          console.warn(`[Analytics] POST failed (${resp.status}): ${body}`);
+        }
+      } catch (error) {
+        // Silently log; analytics should never impact user experience
+        console.warn(`[Analytics Service] Failed to track "${eventName}":`, error);
+      }
+    })();
   }
 }
 

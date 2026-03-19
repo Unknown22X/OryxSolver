@@ -3,59 +3,65 @@ import { CreditCard, ArrowRight, Sun, Moon, Menu } from 'lucide-react';
 type SidePanelHeaderProps = {
   logoUrl: string;
   appName: string;
-  usedCredits: number;
-  totalCredits: number;
+  monthlyUsed: number;
+  monthlyLimit: number;
   isSignedIn: boolean;
   userEmail?: string | null;
   userPhotoUrl?: string | null;
   isPro?: boolean;
+  planLabel?: string;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
   onToggleHistory?: () => void;
   onOpenSettings?: () => void;
   showCredits?: boolean;
   onOpenUpgrade?: () => void;
+  webAppBaseUrl?: string;
 };
 
 export default function SidePanelHeader({
   logoUrl,
   appName,
-  usedCredits,
-  totalCredits,
+  monthlyUsed,
+  monthlyLimit,
   isSignedIn,
   userEmail,
   userPhotoUrl,
   isPro,
+  planLabel,
   isDarkMode,
   onToggleDarkMode,
   onToggleHistory,
   onOpenSettings,
   showCredits = false,
   onOpenUpgrade,
+  webAppBaseUrl = 'https://oryxsolver.com',
 }: SidePanelHeaderProps) {
-  const creditPercentage = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
-  const isUsageWarning = usedCredits >= 40;
-  const remainingCredits = Math.max(totalCredits - usedCredits, 0);
+  const usagePercentage = monthlyLimit > 0 ? (monthlyUsed / monthlyLimit) * 100 : 0;
+  const isUsageWarning = monthlyLimit > 0 && usagePercentage >= 80;
+  const remainingQuestions = monthlyLimit === -1 ? -1 : Math.max(monthlyLimit - monthlyUsed, 0);
   const avatarInitial = (userEmail?.trim().charAt(0) || 'U').toUpperCase();
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-slate-200/50 bg-white/70 px-4 shadow-sm backdrop-blur-3xl dark:border-slate-800/80 dark:bg-slate-900/80">
+    <header className="oryx-shell-header sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b px-4">
       <div className="flex items-center gap-3">
         {isSignedIn && (
           <button
             onClick={onToggleHistory}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <Menu size={20} />
           </button>
         )}
-        <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-white shadow-xl shadow-indigo-100 ring-1 ring-slate-100 transition-transform hover:scale-105 duration-300 dark:bg-slate-800 dark:shadow-none dark:ring-slate-700">
+        <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-white shadow-xl shadow-indigo-100 ring-1 ring-slate-100 transition-transform duration-300 hover:scale-105 dark:bg-slate-800 dark:shadow-none dark:ring-slate-700">
           <img src={logoUrl} alt={appName} className="h-full w-full object-cover p-1 rounded-lg" />
         </div>
         <div>
           <h1 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100">{appName}</h1>
           {isSignedIn && isPro && (
-            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Pro Account</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+              {planLabel ?? 'Pro Account'}
+            </p>
           )}
         </div>
       </div>
@@ -75,18 +81,19 @@ export default function SidePanelHeader({
           {showCredits && (
             <div 
               className={`group relative flex items-center gap-2 rounded-2xl border px-3 py-1.5 transition-all hover:scale-105 ${
-                isUsageWarning ? 'border-red-200 bg-red-50/80 shadow-inner dark:bg-red-900/20 dark:border-red-700/50' : 'border-blue-100 bg-blue-50/50 shadow-inner dark:bg-blue-900/20 dark:border-blue-700/30'
+                isUsageWarning ? 'border-red-200 bg-red-50/80 shadow-inner dark:bg-red-900/20 dark:border-red-700/50' : 'shadow-inner'
               }`}
-              title={`${remainingCredits} credits remaining`}
+              style={!isUsageWarning ? { backgroundColor: 'var(--oryx-panel-soft)', borderColor: 'var(--oryx-border-soft)' } : undefined}
+              title={remainingQuestions === -1 ? 'High monthly limit' : `${remainingQuestions} questions remaining in your monthly plan`}
             >
               <CreditCard size={12} className={isUsageWarning ? 'text-red-600' : 'text-blue-600 dark:text-blue-400'} />
               <span className={`text-[11px] font-black tracking-tight ${isUsageWarning ? 'text-red-800' : 'text-blue-800 dark:text-blue-300'}`}>
-                {remainingCredits} left
+                {remainingQuestions === -1 ? 'High limit' : `${remainingQuestions} left`}
               </span>
               <div className="absolute bottom-0 left-3 right-3 h-[2px] overflow-hidden rounded-full bg-slate-200/50">
                 <div 
                   className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-red-500' : 'bg-blue-500'}`}
-                  style={{ width: `${creditPercentage}%` }}
+                  style={{ width: `${usagePercentage}%` }}
                 />
               </div>
             </div>
@@ -96,7 +103,8 @@ export default function SidePanelHeader({
           <button
             type="button"
             onClick={onToggleDarkMode}
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:scale-110 hover:border-indigo-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+            className="flex h-8 w-8 items-center justify-center rounded-xl border text-slate-500 shadow-sm transition-all hover:scale-110 hover:border-indigo-300 hover:bg-slate-50 active:scale-95 dark:text-slate-400 dark:hover:bg-slate-700"
+            style={{ backgroundColor: 'var(--oryx-panel-strong)', borderColor: 'var(--oryx-border-soft)' }}
             title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
           >
             {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
@@ -122,7 +130,7 @@ export default function SidePanelHeader({
       ) : (
         <button
           type="button"
-          onClick={() => window.open('https://oryxsolver.com', '_blank')}
+          onClick={() => window.open(webAppBaseUrl, '_blank')}
           className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-slate-200 transition-all hover:scale-105 active:scale-95 hover:bg-slate-800"
         >
           Explore

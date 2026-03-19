@@ -1,15 +1,13 @@
+import "../instrument";
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../index.css';
 import 'katex/dist/katex.min.css';
 import App from './App.tsx';
-import { initSentry } from './services/sentry';
 import * as Sentry from "@sentry/react";
 
-initSentry();
-
-const root = document.getElementById('root');
-if (!root) {
+const rootElement = document.getElementById('root');
+if (!rootElement) {
   throw new Error('Root element not found for sidepanel app');
 }
 
@@ -28,7 +26,13 @@ const SentryApp = Sentry.withErrorBoundary(App, {
   ),
 });
 
-createRoot(root).render(
+const root = createRoot(rootElement, {
+  onUncaughtError: Sentry.reactErrorHandler(),
+  onCaughtError: Sentry.reactErrorHandler(),
+  onRecoverableError: Sentry.reactErrorHandler(),
+});
+
+root.render(
   <StrictMode>
     <SentryApp />
   </StrictMode>,

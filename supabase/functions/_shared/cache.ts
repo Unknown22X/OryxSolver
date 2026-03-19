@@ -16,24 +16,39 @@ export function normalizeForCache(question: string): string {
 
 async function ensureCacheTable(): Promise<void> {
   const supabase = createSupabaseAdminClient();
-  try {
-    await supabase.from('questions_cache').select('id').limit(1);
-  } catch {
-    console.log('[CACHE] Creating questions_cache table...');
-    await supabase.rpc('exec_sql', {
-      query: `CREATE TABLE IF NOT EXISTS public.questions_cache (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        question_normalized text NOT NULL UNIQUE,
-        question_text text NOT NULL,
-        answer text NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS idx_questions_cache_normalized ON public.questions_cache (question_normalized);
-      ALTER TABLE public.questions_cache ENABLE ROW LEVEL SECURITY;
-      CREATE POLICY "questions_cache_read" ON public.questions_cache FOR SELECT TO authenticated USING (true);
-      CREATE POLICY "questions_cache_insert" ON public.questions_cache FOR INSERT TO authenticated WITH CHECK (true);`
-    });
+  const { error } = await supabase.from('questions_cache').select('id').limit(1);
+
+  if (!error) {
+    return;
   }
+
+  if (error.code !== '42P01') {
+    throw error;
+  }
+
+  console.log('[CACHE] Creating questions_cache table...');
+  await supabase.rpc('exec_sql', {
+    query: `CREATE TABLE IF NOT EXISTS public.questions_cache (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      question_normalized text NOT NULL UNIQUE,
+      question_text text NOT NULL,
+      answer text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_questions_cache_normalized ON public.questions_cache (question_normalized);
+    ALTER TABLE public.questions_cache ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "questions_cache_read" ON public.questions_cache;
+    DROP POLICY IF EXISTS "questions_cache_insert" ON public.questions_cache;
+    DROP POLICY IF EXISTS "questions_cache_public_read" ON public.questions_cache;
+    DROP POLICY IF EXISTS "questions_cache_public_insert" ON public.questions_cache;
+    DROP POLICY IF EXISTS "questions_cache_service_read" ON public.questions_cache;
+    DROP POLICY IF EXISTS "questions_cache_service_insert" ON public.questions_cache;
+    DROP POLICY IF EXISTS "questions_cache_service_access" ON public.questions_cache;
+    CREATE POLICY "questions_cache_service_access" ON public.questions_cache
+      FOR ALL TO service_role
+      USING (true)
+      WITH CHECK (true);`
+  });
 }
 
 export async function getCachedAnswer(question: string): Promise<CachedAnswer | null> {

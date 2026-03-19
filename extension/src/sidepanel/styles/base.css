@@ -1,22 +1,42 @@
-/*  ──────────────────────────────────────────────
-    OryxSolver – Base Styles
-    Global element-level resets & defaults.
-    ────────────────────────────────────────────── */
+/* OryxSolver Styles */
 
 @layer base {
+  :root {
+    --oryx-bg-base: #f4f7fb;
+    --oryx-shell-bg: radial-gradient(circle at top, rgba(191, 219, 254, 0.62) 0%, rgba(244, 247, 251, 0.96) 34%, #ffffff 100%);
+    --oryx-panel: rgba(255, 255, 255, 0.84);
+    --oryx-panel-strong: rgba(255, 255, 255, 0.94);
+    --oryx-panel-soft: rgba(237, 242, 255, 0.82);
+    --oryx-header: rgba(255, 255, 255, 0.78);
+    --oryx-border-soft: rgba(148, 163, 184, 0.26);
+    --oryx-shadow-soft: 0 28px 60px -36px rgba(15, 23, 42, 0.2);
+    --oryx-shadow-panel: 0 34px 70px -38px rgba(15, 23, 42, 0.26);
+  }
+
+  .dark {
+    --oryx-bg-base: #0a0c1b;
+    --oryx-shell-bg: radial-gradient(circle at top, #1f2940 0%, #0a0c1b 36%, #060714 100%);
+    --oryx-panel: rgba(15, 23, 42, 0.84);
+    --oryx-panel-strong: rgba(15, 23, 42, 0.92);
+    --oryx-panel-soft: rgba(30, 41, 59, 0.72);
+    --oryx-header: rgba(10, 12, 27, 0.82);
+    --oryx-border-soft: rgba(255, 255, 255, 0.1);
+    --oryx-shadow-soft: 0 28px 60px -36px rgba(0, 0, 0, 0.42);
+    --oryx-shadow-panel: 0 36px 74px -36px rgba(0, 0, 0, 0.48);
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: #e2e8f0 transparent;
   }
 
   body {
-    @apply bg-[#f8fafc] text-slate-900 font-sans antialiased selection:bg-indigo-100 overflow-x-hidden;
-    background-image:
-      radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.03) 0, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.03) 0, transparent 50%);
+    @apply text-slate-900 font-sans antialiased selection:bg-indigo-100 overflow-x-hidden;
+    background-color: var(--oryx-bg-base);
+    background-image: var(--oryx-shell-bg);
   }
 
-  /* ─── Custom Scrollbar (WebKit) ─── */
+  /* --- Custom Scrollbar (WebKit) --- */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -36,5 +56,36 @@
   }
   .dark ::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-600;
+  }
+
+  .oryx-shell-bg {
+    background-color: var(--oryx-bg-base);
+    background-image: var(--oryx-shell-bg);
+  }
+
+  .oryx-shell-panel {
+    background-color: var(--oryx-panel);
+    border-color: var(--oryx-border-soft);
+    box-shadow: var(--oryx-shadow-panel);
+    backdrop-filter: blur(24px);
+  }
+
+  .oryx-shell-panel-strong {
+    background-color: var(--oryx-panel-strong);
+    border-color: var(--oryx-border-soft);
+    box-shadow: var(--oryx-shadow-panel);
+    backdrop-filter: blur(24px);
+  }
+
+  .oryx-shell-soft {
+    background-color: var(--oryx-panel-soft);
+    border-color: var(--oryx-border-soft);
+  }
+
+  .oryx-shell-header {
+    background-color: var(--oryx-header);
+    border-color: var(--oryx-border-soft);
+    backdrop-filter: blur(20px);
+    box-shadow: var(--oryx-shadow-soft);
   }
 }

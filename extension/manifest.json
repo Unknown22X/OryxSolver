@@ -13,7 +13,7 @@
   },
   "action": {},
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://api.polar.sh https://objizntvrmckzdpdgqjo.supabase.co ;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://objizntvrmckzdpdgqjo.supabase.co https://*.sentry.io ;"
   },
   "background": {
     "service_worker": "src/background.ts",
@@ -25,7 +25,18 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
+        "https://docs.google.com/forms/*",
+        "https://forms.office.com/*",
+        "https://forms.microsoft.com/*",
+        "https://*.instructure.com/*",
+        "https://1600.lol/*",
+        "https://oneprep.xyz/*",
+        "https://oneprep.com/*",
+        "https://oneprep.io/*",
+        "https://oneprep.app/*",
+        "https://cracksat.net/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
       ],
       "js": [
         "src/content/cropOverlay.ts",
@@ -39,21 +50,22 @@
   "permissions": [
     "sidePanel",
     "storage",
-    "cookies",
     "activeTab",
     "tabs",
     "scripting"
   ], 
   "host_permissions": [
-    "<all_urls>",
     "http://localhost/*",
     "http://127.0.0.1/*",
-    "https://api.polar.sh/*",
     "https://*.supabase.co/*"
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/*.png", "assets/*", "assets/katex/*", "assets/katex/fonts/*"],
+      "resources": [
+        "icons/*.png",
+        "assets/katex/*",
+        "assets/katex/fonts/*"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

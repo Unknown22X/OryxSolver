@@ -1,6 +1,8 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { buildPrompt, buildSuggestions, type GenerationMode, type StyleMode } from './modePrompts.ts';
 import { AppError, jsonError } from '../_shared/http.ts';
+import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
+import { hasValidInternalToken } from '../_shared/security.ts';
 
 
 type InlineImagePart = { inlineData: { mimeType: string; data: string } };
@@ -21,7 +23,7 @@ function isComplexPrompt(question: string, imageParts: InlineImagePart[], styleM
   const text = question.trim();
   const lower = text.toLowerCase();
   if (text.length > 550) return true;
-  if ((text.match(/\n/g) ?? []).length >= 4) return true;
+  if ((text.match(/\n/g) || []).length >= 4) return true;
 
   const complexSignals = [
     /\bprove\b/i,
@@ -42,6 +44,15 @@ function isComplexPrompt(question: string, imageParts: InlineImagePart[], styleM
 }
 
 function normalizeMcqAnswer(question: string, answer: string): string {
+  const text = answer.trim();
+  if (!text) return 'Answer available in explanation';
+
+  // 1. Explicit Conclusion Patterns (Higher Confidence)
+  // Match "Final Answer: B", "Choice: B", "Option B", "Answer: B"
+  const conclusionMatch = text.match(/\b(final\s+)?(answer|choice|option|result)\s*:\s*\b([A-D])\b/i);
+  if (conclusionMatch?.[3]) return conclusionMatch[3].toUpperCase();
+
+  // 2. MCQ Signal Check
   const hasMcqSignal =
     /\b(a|b|c|d)\b[\).:-]/i.test(question) ||
     /\boption\b/i.test(question) ||
@@ -49,21 +60,24 @@ function normalizeMcqAnswer(question: string, answer: string): string {
     /\bwhich\b/i.test(question) ||
     /\bmcq\b/i.test(question);
 
-  if (!hasMcqSignal) return answer.trim();
+  if (!hasMcqSignal) return text;
 
-  // HEURISTIC: If the answer text is short and starts with a letter, it's definitely that letter.
-  const startMatch = answer.match(/^\s*([A-D])\b[\).:-]?/i);
+  // 3. Start-of-string Letter Pattern (Common in well-formatted output)
+  // Match "B) Explanation..." or "B. Explanation..." or just "B"
+  const startMatch = text.match(/^\s*([A-D])\b[\).:-]?/i);
   if (startMatch?.[1]) return startMatch[1].toUpperCase();
 
-  // If the text is longer, look for the LAST letter mentioned in isolation (avoiding "Option A is wrong")
-  // or a very specific "Final Answer: B" pattern.
-  const matches = Array.from(answer.matchAll(/\b([A-D])\b/gi));
+  // 4. Fallback: Last isolated letter mentioned
+  const matches = Array.from(text.matchAll(/\b([A-D])\b/gi));
   if (matches.length > 0) {
-      // Pick the last match if it's the only one or if it looks like the conclusion
       return matches[matches.length - 1][1].toUpperCase();
   }
 
-  return answer.trim();
+  return text;
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').replace(/[*`]/g, '').trim().toLowerCase();
 }
 
 function parseStructuredOutput(raw: string, question: string): { answer: string; explanation: string; steps: string[] } {
@@ -72,32 +86,64 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
     return { answer: 'Answer available in explanation', explanation: raw, steps: [] };
   }
 
-  // 1. Extract Final Answer (Prefer the LAST one if the AI repeated it or self-corrected)
   let answerRaw = '';
-  for (let i = lines.length - 1; i >= 0; i--) {
-      if (/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i.test(lines[i])) {
-          answerRaw = lines[i].replace(/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i, '').trim();
-          break;
+  const steps: string[] = [];
+  const explanationLines: string[] = [];
+  let currentSection: 'steps' | 'explanation' | null = null;
+
+  for (const line of lines) {
+    if (/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i.test(line)) {
+      answerRaw = line.replace(/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i, '').trim();
+      currentSection = null;
+      continue;
+    }
+
+    if (/^STEPS\s*:/i.test(line)) {
+      currentSection = 'steps';
+      const inlineStep = line.replace(/^STEPS\s*:/i, '').trim();
+      if (inlineStep) {
+        steps.push(inlineStep.replace(/^[-*]\s*/, '').replace(/^\d+[\).:-]\s*/, '').trim());
       }
+      continue;
+    }
+
+    if (/^EXPLANATION\s*:/i.test(line)) {
+      currentSection = 'explanation';
+      const inlineExplanation = line.replace(/^EXPLANATION\s*:/i, '').trim();
+      if (inlineExplanation) {
+        explanationLines.push(inlineExplanation);
+      }
+      continue;
+    }
+
+    if (currentSection === 'steps') {
+      const normalizedStep = line.replace(/^[-*]\s*/, '').replace(/^\d+[\).:-]\s*/, '').trim();
+      if (normalizedStep) {
+        steps.push(normalizedStep);
+      }
+      continue;
+    }
+
+    if (currentSection === 'explanation') {
+      explanationLines.push(line);
+    }
   }
-  
+
+  if (!answerRaw && lines.length <= 3) {
+    answerRaw = lines[lines.length - 1];
+  }
+
   const answer = normalizeMcqAnswer(question, answerRaw || 'Answer available in explanation');
+  const rawExplanation = explanationLines.join('\n').trim() || (steps.length > 0 ? '' : raw);
+  const explanation =
+    normalizeComparableText(rawExplanation) === normalizeComparableText(steps.join('\n'))
+      ? ''
+      : rawExplanation;
 
-  // 2. Extract Steps/Explanation
-  const stepStartIndex = lines.findIndex((line) => /^STEPS\s*:/i.test(line));
-  const rawStepLines = stepStartIndex >= 0 ? lines.slice(stepStartIndex + 1) : lines;
-  
-  const steps = rawStepLines
-    .filter((line) => !/^(FINAL_ANSWER|ANSWER|RESULT)\s*:/i.test(line)) // Remove the answer line if at the end
-    .filter((line) => !/^STEPS\s*:/i.test(line)) // Defensive
-    .map((line) => line.replace(/^[-*]\s*/, '').replace(/^\d+[\).:-]\s*/, '').trim())
-    .filter(Boolean);
-
-  const explanation = steps.length > 0 ? steps.join('\n') : raw;
   return { answer, explanation, steps };
 }
 
-/** Dedicated parser for bulk answer keys — extracts ANSWER_KEY section and strips number prefixes */
+/** Dedicated parser for bulk answer keys - extracts ANSWER_KEY section and strips number prefixes */
 function parseBulkOutput(raw: string): { answer: string; explanation: string; steps: string[] } {
   const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
   
@@ -134,8 +180,8 @@ function hasUsableStructuredOutput(question: string, raw: string): boolean {
   // For bulk questions, answers might end in a number or letter (e.g., '1. A' or '2. 42')
   const isBulkAsk = question.includes("Create an answer key for these practice questions");
   const endsCleanly = isBulkAsk 
-    ? /[.!?):a-zA-Z0-9\s]$/.test(explanationText)
-    : /[.!?):]$/.test(explanationText);
+    ? /[.!-):a-zA-Z0-9\s]$/.test(explanationText)
+    : /[.!-):]$/.test(explanationText);
 
   const isPlaceholderAnswer =
     parsed.answer.trim().length === 0 ||
@@ -149,8 +195,7 @@ function hasUsableStructuredOutput(question: string, raw: string): boolean {
   }
 
   if (!isPlaceholderAnswer) {
-    // For standard answers, we still want high quality.
-    return parsed.steps.length >= 2 && explanationText.length >= 120;
+    return parsed.steps.length >= 1 && (explanationText.length === 0 || explanationText.length >= 20);
   }
 
   // For conversational/quiz responses, we allow fewer steps and shorter length.
@@ -179,7 +224,7 @@ async function callGemini(
   const isBulkAsk = 
     question.includes("answer key for the following questions") ||
     question.includes("Create an answer key for these practice questions") ||
-    (question.match(/QUESTION\s*\d+:/gi) ?? []).length >= 2;
+    (question.match(/QUESTION\s*\d+:/gi) || []).length >= 2;
 
   const complexPrompt = isComplexPrompt(question, imageParts, styleMode);
 
@@ -252,7 +297,7 @@ async function callGemini(
         const errText = await res.text();
         lastErrorText = errText;
         lastStatus = res.status;
-        console.warn(`[ai-proxy] Model ${model} failed: ${res.status} — ${errText.slice(0, 200)}`);
+        console.warn(`[ai-proxy] Model ${model} failed: ${res.status} - ${errText.slice(0, 200)}`);
         const shouldTryNext =
           res.status === 429 ||
           res.status === 404 ||
@@ -267,10 +312,10 @@ async function callGemini(
 
       const data = await res.json();
       const candidate = data?.candidates?.[0];
-      const finishReason = String(candidate?.finishReason ?? '');
+      const finishReason = String(candidate?.finishReason || '');
       const parts = candidate?.content?.parts;
       fullText = Array.isArray(parts)
-        ? parts.map((p: { text?: string }) => p?.text ?? '').join('\n').trim()
+        ? parts.map((p: { text?: string }) => p?.text || '').join('\n').trim()
         : '';
 
       if (!fullText) {
@@ -280,7 +325,7 @@ async function callGemini(
       }
 
       if (finishReason === 'MAX_TOKENS') {
-        // For bulk answers, just accept whatever we got — don't retry
+        // For bulk answers, just accept whatever we got - don't retry
         if (isBulkAsk) {
           resolvedModel = model;
           break;
@@ -302,7 +347,7 @@ async function callGemini(
               'Previous output was truncated. Continue exactly from where it stopped.',
               'Rules:',
               '- Do not restart or repeat FINAL_ANSWER.',
-              '- Continue with remaining STEPS only.',
+              '- Continue with the remaining STEPS and EXPLANATION only.',
               '- Keep the same language and format.',
               '',
               'Previous partial output:',
@@ -332,7 +377,7 @@ async function callGemini(
               const continuationJson = await continuationRes.json();
               const continuationParts = continuationJson?.candidates?.[0]?.content?.parts;
               const continuationText = Array.isArray(continuationParts)
-                ? continuationParts.map((p: { text?: string }) => p?.text ?? '').join('\n').trim()
+                ? continuationParts.map((p: { text?: string }) => p?.text || '').join('\n').trim()
                 : '';
 
               if (continuationText) {
@@ -421,22 +466,35 @@ Deno.serve(async (req) => {
     return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
 
+  const clientIp = getClientIp(req);
+  const rateLimit = await checkRateLimit('/ai-proxy', clientIp);
+  if (!rateLimit.allowed) {
+    return jsonError(429, 'RATE_LIMITED', 'Too many requests');
+  }
+
   try {
-    const expectedInternalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
-    const providedInternalToken = req.headers.get('x-internal-token') ?? '';
-    if (!expectedInternalToken || providedInternalToken !== expectedInternalToken) {
+    if (!hasValidInternalToken(req)) {
       return jsonError(401, 'UNAUTHORIZED_INTERNAL_CALL', 'Unauthorized internal call');
     }
 
     const body = (await req.json()) as AiProxyRequest;
-    const question = String(body.question ?? '').trim();
+    const question = String(body.question || '').trim();
     const imageParts = Array.isArray(body.imageParts) ? body.imageParts : [];
     const mode = body.mode === 'fast_fallback' ? 'fast_fallback' : 'normal';
-    const styleMode: StyleMode = body.styleMode ?? 'standard';
+    const styleMode: StyleMode = body.styleMode || 'standard';
     const history = Array.isArray(body.history) ? body.history : [];
 
     if (!question) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
+    }
+    if (question.length > 12000) {
+      return jsonError(413, 'QUESTION_TOO_LARGE', 'Question is too long.');
+    }
+    if (imageParts.length > 20) {
+      return jsonError(413, 'IMAGE_LIMIT_EXCEEDED', 'Too many image parts.');
+    }
+    if (history.length > 12) {
+      return jsonError(413, 'HISTORY_TOO_LARGE', 'Too many history items.');
     }
 
     const ai = await callGemini(question, imageParts, mode, styleMode, history);

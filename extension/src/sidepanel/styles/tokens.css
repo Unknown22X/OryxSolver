@@ -1,34 +1,29 @@
-/*  ──────────────────────────────────────────────
-    OryxSolver – Design Tokens
-    Centralized design values for Tailwind v4.
-    Use @theme to register CSS variables that
-    Tailwind can reference as utilities.
-    ────────────────────────────────────────────── */
+/* OryxSolver Styles */
 
 @theme {
-  /* ─── Brand Colors ─── */
+  /* --- Brand Colors --- */
   --color-brand: #4f46e5;
   --color-brand-hover: #4338ca;
   --color-brand-light: #818cf8;
   --color-brand-surface: rgba(79, 70, 229, 0.06);
 
-  /* ─── Radius Scale ─── */
+  /* --- Radius Scale --- */
   --radius-panel: 40px;
   --radius-card: 32px;
   --radius-button: 16px;
   --radius-input: 16px;
   --radius-pill: 9999px;
 
-  /* ─── Shadows ─── */
+  /* --- Shadows --- */
   --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.04);
   --shadow-elevated: 0 20px 50px rgba(0, 0, 0, 0.1);
   --shadow-glow: 0 0 40px rgba(79, 70, 229, 0.15);
 
-  /* ─── Transitions ─── */
+  /* --- Transitions --- */
   --transition-premium: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-fast: all 0.2s ease;
 
-  /* ─── Animation Tokens ─── */
+  /* --- Animation Tokens --- */
   --animate-sparkle: sparkle 2.4s ease-in-out infinite;
   --animate-float: float 6s ease-in-out infinite;
   --animate-pulse-slow: pulseSlow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -55,4 +50,34 @@
     0%, 100% { box-shadow: 0 0 15px 0 rgba(79, 70, 229, 0.15); border-color: rgba(99, 102, 241, 0.3); }
     50% { box-shadow: 0 0 25px 5px rgba(129, 140, 248, 0.25); border-color: rgba(165, 180, 252, 0.6); }
   }
+}
+
+:root {
+  --oryx-page-shell:
+    radial-gradient(circle at top, #e7eeff 0%, #f6f8fc 34%, #eef2f7 100%);
+  --oryx-surface-panel: rgba(255, 255, 255, 0.88);
+  --oryx-surface-panel-strong: rgba(255, 255, 255, 0.94);
+  --oryx-surface-soft: rgba(237, 242, 255, 0.8);
+  --oryx-surface-sidebar: rgba(248, 250, 252, 0.86);
+  --oryx-header-surface: rgba(255, 255, 255, 0.8);
+  --oryx-input-surface: rgba(255, 255, 255, 0.94);
+  --oryx-border: rgba(148, 163, 184, 0.22);
+  --oryx-text-primary: #0f172a;
+  --oryx-shadow-panel: 0 34px 70px -38px rgba(15, 23, 42, 0.26);
+  --oryx-shadow-soft: 0 28px 60px -36px rgba(15, 23, 42, 0.2);
+}
+
+.dark {
+  --oryx-page-shell:
+    radial-gradient(circle at top, #1b2843 0%, #0a0c1b 36%, #060714 100%);
+  --oryx-surface-panel: rgba(15, 23, 42, 0.84);
+  --oryx-surface-panel-strong: rgba(15, 23, 42, 0.92);
+  --oryx-surface-soft: rgba(30, 41, 59, 0.72);
+  --oryx-surface-sidebar: rgba(12, 16, 30, 0.94);
+  --oryx-header-surface: rgba(10, 12, 27, 0.82);
+  --oryx-input-surface: rgba(10, 12, 27, 0.92);
+  --oryx-border: rgba(255, 255, 255, 0.1);
+  --oryx-text-primary: #f8fafc;
+  --oryx-shadow-panel: 0 36px 74px -36px rgba(0, 0, 0, 0.48);
+  --oryx-shadow-soft: 0 28px 60px -36px rgba(0, 0, 0, 0.42);
 }

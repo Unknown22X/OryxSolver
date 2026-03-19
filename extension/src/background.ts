@@ -1,15 +1,15 @@
+import "./instrument";
 // Background script handles side panel behavior and capture messaging.
-import { initSentry } from './sidepanel/services/sentry';
 import {
   MSG_CAPTURE_VISIBLE_TAB, MSG_START_CROP_CAPTURE, MSG_SHOW_CROP_OVERLAY,
   MSG_CROP_RECT_SELECTED, MSG_CROP_SELECTION_CANCELLED, MSG_CROP_CAPTURE_READY,
   MSG_CROP_CAPTURE_ERROR, MSG_EXTRACT_PAGE_CONTEXT,
   MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT
 } from './shared/messageTypes';
-
-initSentry();
-
-// ==============================
+import {
+  sanitizePendingInlineQuestion,
+  savePendingInlineQuestion,
+} from './shared/inlineQuestionStore';
 // === side panel click and open  ===
 // ==============================
 
@@ -32,6 +32,9 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab.windowId) return;
+    if (isInjectableTab(tab)) {
+      await ensureContentScripts(tab.id);
+    }
     await chrome.sidePanel.open({ windowId: tab.windowId });
   } catch (error) {
     console.warn('Failed to open side panel on action click:', error);
@@ -100,13 +103,43 @@ async function getActiveTab() {
   return activeTab;
 }
 
-async function ensureCropOverlayContentScript(tabId: number) {
-  const manifest = chrome.runtime.getManifest();
-  const scriptFiles = manifest.content_scripts?.flatMap((entry) => entry.js ?? []) ?? [];
+function isOwnExtensionSender(sender: chrome.runtime.MessageSender) {
+  return !sender.id || sender.id === chrome.runtime.id;
+}
+
+function isExtensionPageSender(sender: chrome.runtime.MessageSender) {
+  return isOwnExtensionSender(sender) && !sender.tab;
+}
+
+function isContentScriptSender(sender: chrome.runtime.MessageSender) {
+  return isOwnExtensionSender(sender) && typeof sender.tab?.id === 'number';
+}
+
+function isInjectableUrl(url: string | undefined) {
+  if (!url) return false;
+  return !/^(about|chrome|chrome-extension|devtools|edge|moz-extension|view-source):/i.test(url);
+}
+
+function isInjectableTab(tab: chrome.tabs.Tab | undefined | null): tab is chrome.tabs.Tab & { id: number } {
+  return Boolean(tab && typeof tab.id === 'number' && isInjectableUrl(tab.url));
+}
+
+async function getInjectableActiveTab() {
+  const activeTab = await getActiveTab();
+  if (!isInjectableTab(activeTab)) {
+    throw new Error('Open a standard webpage before using this feature.');
+  }
+  return activeTab;
+}
+
+async function ensureContentScripts(tabId: number, files?: string[]) {
+  const scriptFiles =
+    files && files.length > 0
+      ? files
+      : chrome.runtime.getManifest().content_scripts?.flatMap((entry) => entry.js ?? []) ?? [];
   if (scriptFiles.length === 0) {
     throw new Error('No content script files configured in manifest.');
   }
-
   await chrome.scripting.executeScript({
     target: { tabId },
     files: scriptFiles,
@@ -120,31 +153,13 @@ async function ensureCropOverlayContentScript(tabId: number) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
-      if (message?.type === 'ORYX_DEBUG_SCAN' && message?.payload) {
-        // #region agent log
-        fetch('http://127.0.0.1:7794/ingest/b652e707-afc6-4371-818d-e03308b77077', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '8f43c7',
-          },
-          body: JSON.stringify({
-            sessionId: '8f43c7',
-            runId: message.payload.runId,
-            hypothesisId: message.payload.hypothesisId,
-            location: message.payload.location,
-            message: message.payload.message,
-            data: message.payload.data,
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion agent log
-        sendResponse({ ok: true });
-        return;
-      }
-
       if (message?.type === MSG_CAPTURE_VISIBLE_TAB) {
-        const activeTab = await getActiveTab();
+        if (!isExtensionPageSender(sender)) {
+          sendResponse({ ok: false, error: 'Unauthorized sender.' });
+          return;
+        }
+
+        const activeTab = await getInjectableActiveTab();
         if (!activeTab?.windowId) {
           sendResponse({ ok: false, error: 'No active tab found.' });
           return;
@@ -159,7 +174,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       if (message?.type === MSG_START_CROP_CAPTURE) {
-        const activeTab = await getActiveTab();
+        if (!isExtensionPageSender(sender)) {
+          sendResponse({ ok: false, error: 'Unauthorized sender.' });
+          return;
+        }
+
+        const activeTab = await getInjectableActiveTab();
         if (!activeTab?.id) {
           sendResponse({ ok: false, error: 'No active tab found.' });
           return;
@@ -172,7 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!messageText.includes('Receiving end does not exist')) {
             throw error;
           }
-          await ensureCropOverlayContentScript(activeTab.id);
+          await ensureContentScripts(activeTab.id, ['src/content/cropOverlay.ts']);
           await chrome.tabs.sendMessage(activeTab.id, { type: MSG_SHOW_CROP_OVERLAY });
         }
 
@@ -181,26 +201,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       if (message?.type === MSG_EXTRACT_PAGE_CONTEXT) {
-        const activeTab = await getActiveTab();
+        if (!isExtensionPageSender(sender)) {
+          sendResponse({ ok: false, error: 'Unauthorized sender.' });
+          return;
+        }
+
+        const activeTab = await getInjectableActiveTab();
         if (!activeTab?.id) {
           sendResponse({ ok: false, error: 'No active tab found.' });
           return;
         }
         
         try {
-          // This will inject if needed, or if already there just execute
-          await ensureCropOverlayContentScript(activeTab.id);
           const response = await chrome.tabs.sendMessage(activeTab.id, { type: MSG_EXTRACT_PAGE_CONTEXT });
           sendResponse(response);
         } catch (error) {
            const messageText = error instanceof Error ? error.message : String(error);
+           if (messageText.includes('Receiving end does not exist')) {
+             try {
+               await ensureContentScripts(activeTab.id, ['src/content/domExtractor.ts']);
+               const response = await chrome.tabs.sendMessage(activeTab.id, { type: MSG_EXTRACT_PAGE_CONTEXT });
+               sendResponse(response);
+               return;
+             } catch (retryError) {
+               const retryText = retryError instanceof Error ? retryError.message : String(retryError);
+               sendResponse({ ok: false, error: retryText });
+               return;
+             }
+           }
            sendResponse({ ok: false, error: messageText });
         }
         return;
       }
 
       if (message?.type === MSG_INLINE_EXTRACT_QUESTION || message?.type === MSG_INLINE_SOLVE_AND_INJECT) {
-        const windowId = sender.tab?.windowId || (await getActiveTab())?.windowId;
+        if (!isContentScriptSender(sender) || !sender.tab?.id) {
+          sendResponse({ ok: false, error: 'Unauthorized sender.' });
+          return;
+        }
+
+        const pendingQuestion = sanitizePendingInlineQuestion({
+          type: message.type,
+          text: message.payload?.text,
+          images: message.payload?.images,
+          injectionId: message.payload?.injectionId,
+          isBulk: message.payload?.isBulk,
+          timestamp: Date.now(),
+          tabId: sender.tab.id,
+        });
+
+        if (!pendingQuestion) {
+          sendResponse({ ok: false, error: 'Invalid inline question payload.' });
+          return;
+        }
+
+        const windowId = sender.tab.windowId;
         if (windowId) {
           try {
             await chrome.sidePanel.open({ windowId });
@@ -208,29 +263,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             console.warn('Failed to open sidepanel:', e);
           }
         }
-        await chrome.storage.local.set({
-          pendingInlineQuestion: {
-            type: message.type,
-            text: message.payload?.text,
-            images: message.payload?.images || [],
-            injectionId: message.payload?.injectionId,
-            isBulk: message.payload?.isBulk,
-            timestamp: Date.now(),
-            tabId: sender.tab?.id
-          }
-        });
+        await savePendingInlineQuestion(pendingQuestion);
         // We still send response and let the content script continue
         sendResponse({ ok: true });
         return;
       }
 
       if (message?.type === MSG_CROP_RECT_SELECTED) {
+        if (!isContentScriptSender(sender)) {
+          sendResponse({ ok: false, error: 'Unauthorized sender.' });
+          return;
+        }
+
         const rect = message.payload as CropRectPayload;
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           throw new Error('Invalid crop selection.');
         }
 
-        const windowId = sender.tab?.windowId ?? (await getActiveTab())?.windowId;
+        const windowId = sender.tab?.windowId;
         if (!windowId) {
           throw new Error('No active tab window found for crop capture.');
         }
@@ -247,6 +297,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       if (message?.type === MSG_CROP_SELECTION_CANCELLED) {
+        if (!isContentScriptSender(sender)) {
+          sendResponse({ ok: false, error: 'Unauthorized sender.' });
+          return;
+        }
+
         await chrome.runtime.sendMessage({
           type: MSG_CROP_CAPTURE_ERROR,
           error: 'Capture cancelled.',

@@ -19,16 +19,17 @@ type ProfileModalProps = {
   onToggleAnalytics: (val: boolean) => void;
   autoCopy: boolean;
   onToggleAutoCopy: (val: boolean) => void;
-  totalCredits: number;
-  usedCredits: number;
+  monthlyQuestionsLimit: number;
+  monthlyQuestionsUsed: number;
   monthlyImagesUsed: number;
   monthlyImagesLimit: number;
+  supportEmail: string;
   webAppBaseUrl: string;
   onClearHistory: () => void;
   onDeleteAccount: () => void;
   profileMessage: string | null;
   isBusy: boolean;
-  tier: 'pro' | 'free';
+  tier: 'pro' | 'premium' | 'free';
   settingsPanel: 'menu' | 'profile' | 'appearance' | 'history' | 'usage' | 'password' | 'support';
   onSetSettingsPanel: (panel: 'menu' | 'profile' | 'appearance' | 'history' | 'usage' | 'password' | 'support') => void;
   newPassword: string;
@@ -56,10 +57,11 @@ export default function ProfileModal({
   onToggleAnalytics,
   autoCopy,
   onToggleAutoCopy,
-  totalCredits,
-  usedCredits,
+  monthlyQuestionsLimit,
+  monthlyQuestionsUsed,
   monthlyImagesUsed,
   monthlyImagesLimit,
+  supportEmail,
   webAppBaseUrl,
   onClearHistory,
   onDeleteAccount,
@@ -78,14 +80,14 @@ export default function ProfileModal({
   const openWeb = (path: string) => {
     if (!webAppBaseUrl) return;
     try {
-      const url = path.startsWith('http') ? path : new URL(path, webAppBaseUrl).toString();
+      const url = path.startsWith('http') || path.startsWith('mailto:') ? path : new URL(path, webAppBaseUrl).toString();
       window.open(url, '_blank');
     } catch {
       // ignore malformed URL
     }
   };
-  const hasWebApp = !!webAppBaseUrl;
-  const creditUsagePercent = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
+  
+  const creditUsagePercent = monthlyQuestionsLimit > 0 ? (monthlyQuestionsUsed / monthlyQuestionsLimit) * 100 : 0;
   const imageUsagePercent = monthlyImagesLimit > 0 ? (monthlyImagesUsed / monthlyImagesLimit) * 100 : 0;
 
   const PANEL_TITLES: Record<string, string> = {
@@ -128,7 +130,7 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* ─── Menu View ─── */}
+          {/* --- Menu View --- */}
           {settingsPanel === 'menu' && (
             <div className="space-y-4">
               <div className="flex items-center gap-4 mb-8">
@@ -206,12 +208,11 @@ export default function ProfileModal({
               <div className="mt-8 rounded-2xl bg-indigo-50 px-5 py-4 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/20">
                 <p className="oryx-caption text-indigo-500 mb-1">Current Plan</p>
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-black text-slate-900 dark:text-white">{tier === 'pro' ? 'Oryx Pro' : 'Free Tier'}</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white">{tier === 'premium' ? 'Oryx Premium' : tier === 'pro' ? 'Oryx Pro' : 'Free Tier'}</p>
                   <button
                     type="button"
                     onClick={() => openWeb('/pricing')}
-                    disabled={!hasWebApp}
-                    className="text-[11px] font-black text-indigo-600 hover:underline disabled:opacity-50 disabled:pointer-events-none"
+                    className="text-[11px] font-black text-indigo-600 hover:underline"
                   >
                     Manage
                   </button>
@@ -220,7 +221,7 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* ─── Profile View ─── */}
+          {/* --- Profile View --- */}
           {settingsPanel === 'profile' && (
             <div className="space-y-6">
               <div>
@@ -249,7 +250,7 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* ─── Appearance View ─── */}
+          {/* --- Appearance View --- */}
           {settingsPanel === 'appearance' && (
             <div className="space-y-6">
               <div className="rounded-2xl border border-slate-100 bg-white/60 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
@@ -314,7 +315,7 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* ─── Usage View ─── */}
+          {/* --- Usage View --- */}
           {settingsPanel === 'usage' && (
             <div className="space-y-6">
               <div className="rounded-2xl border border-slate-100 bg-white/60 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
@@ -324,8 +325,8 @@ export default function ProfileModal({
                 <div className="space-y-3">
                   <div>
                     <div className="mb-2 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-400">
-                      <span>Credits</span>
-                      <span>{Math.max(totalCredits - usedCredits, 0)} left</span>
+                      <span>Questions</span>
+                      <span>{monthlyQuestionsLimit === -1 ? 'High limit' : Math.max(monthlyQuestionsLimit - monthlyQuestionsUsed, 0)} left</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                       <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${Math.min(creditUsagePercent, 100)}%` }} />
@@ -343,17 +344,16 @@ export default function ProfileModal({
                 </div>
                 <button
                   type="button"
-                  onClick={() => openWeb('/account/usage')}
-                  disabled={!hasWebApp}
-                  className="mt-6 w-full rounded-xl border border-slate-200 bg-white/70 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white disabled:pointer-events-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
+                  onClick={() => openWeb('/profile')}
+                  className="mt-6 w-full rounded-xl border border-slate-200 bg-white/70 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
                 >
-                  View full usage on web
+                  View full insights on web
                 </button>
               </div>
             </div>
           )}
 
-          {/* ─── History View ─── */}
+          {/* --- History View --- */}
           {settingsPanel === 'history' && (
             <div className="space-y-6">
               <div className="rounded-2xl border border-slate-100 bg-white/60 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
@@ -398,7 +398,7 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* ─── Password View ─── */}
+          {/* --- Password View --- */}
           {settingsPanel === 'password' && (
             <div className="space-y-6">
               <div>
@@ -425,9 +425,8 @@ export default function ProfileModal({
 
               <button
                 type="button"
-                onClick={() => openWeb('/account/security')}
-                disabled={!hasWebApp}
-                className="oryx-btn-ghost disabled:pointer-events-none disabled:opacity-50"
+                onClick={() => openWeb('/settings')}
+                className="oryx-btn-ghost"
               >
                 Manage security on web
               </button>
@@ -443,40 +442,36 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* ─── Support View ─── */}
+          {/* --- Support View --- */}
           {settingsPanel === 'support' && (
             <div className="space-y-4">
               <button
-                onClick={() => openWeb('/tutorials')}
-                disabled={!hasWebApp}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+                onClick={() => openWeb('/how-it-works')}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800/60"
               >
                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200">View Tutorials</p>
                 <p className="text-[10px] text-slate-400">Learn how to use OryxSolver effectively</p>
               </button>
               <button
-                onClick={() => openWeb('/support')}
-                disabled={!hasWebApp}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+                onClick={() => openWeb('/faq')}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800/60"
               >
-                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Contact Support</p>
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Help Center</p>
                 <p className="text-[10px] text-slate-400">Get help with your account or solutions</p>
               </button>
               <button
-                onClick={() => openWeb('/support/bug-report')}
-                disabled={!hasWebApp}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+                onClick={() => openWeb('/settings#bug-report')}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800/60"
               >
                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Report a Bug</p>
-                <p className="text-[10px] text-slate-400">Tell us if something isn't working</p>
+                <p className="text-[10px] text-slate-400">Open the in-app bug report form</p>
               </button>
               <button
-                onClick={() => openWeb('/support/feedback')}
-                disabled={!hasWebApp}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800/60"
+                onClick={() => openWeb(`mailto:${supportEmail}`)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800/60"
               >
-                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Share Feedback</p>
-                <p className="text-[10px] text-slate-400">Help us improve with your suggestions</p>
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Direct Contact</p>
+                <p className="text-[10px] text-slate-400">{supportEmail}</p>
               </button>
             </div>
           )}

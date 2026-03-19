@@ -13,6 +13,8 @@ type HistoryPanelProps = {
   onRenameConversation: (id: string, newTitle: string) => Promise<void>;
   historyEnabled: boolean;
   onEnableHistory: () => void;
+  onOpenUpgrade?: () => void;
+  tier?: string;
 };
 
 export default function HistoryPanel({ 
@@ -24,6 +26,8 @@ export default function HistoryPanel({
   onRenameConversation,
   historyEnabled,
   onEnableHistory,
+  onOpenUpgrade,
+  tier,
 }: HistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,11 +116,20 @@ export default function HistoryPanel({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-lg shadow-indigo-200/50">
               <MessageSquare size={16} className="text-white fill-white/20" />
             </div>
-            <span className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100 italic">Oryx</span>
+            <span className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100 italic mr-1">Oryx</span>
+            {(!tier || tier === 'free') && onOpenUpgrade && (
+              <button 
+                onClick={onOpenUpgrade}
+                className="px-1.5 py-0.5 rounded-md bg-indigo-500 text-[8px] font-black uppercase tracking-widest text-white shadow-sm hover:bg-indigo-400 transition-colors"
+              >
+                Pro
+              </button>
+            )}
           </div>
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            title="Close sidebar"
           >
             <ChevronRight size={20} className="rotate-180" />
           </button>
@@ -125,14 +138,15 @@ export default function HistoryPanel({
         <button
           onClick={() => { onNewSolve(); onClose(); }}
           className="flex w-full items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3.5 text-sm font-black text-white shadow-xl shadow-slate-200/50 transition-all hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] dark:bg-indigo-600 dark:shadow-none dark:hover:bg-indigo-500"
+          title="Start a fresh solving session"
         >
           <Plus size={18} />
           New Solve
         </button>
       </div>
 
-      <div className="px-5 mb-2 mt-2">
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Past Solves</h3>
+      <div className="px-5 mb-2 mt-2 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400">
+        Past Solves
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 space-y-1.5 custom-scrollbar">
@@ -145,6 +159,7 @@ export default function HistoryPanel({
             <button
               onClick={onEnableHistory}
               className="rounded-xl bg-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-sm"
+              title="Enable cloud history sync"
             >
               Enable History
             </button>
@@ -177,7 +192,7 @@ export default function HistoryPanel({
                         if (e.key === 'Enter') {
                           if (conversationId) {
                             onRenameConversation(conversationId, editValue);
-                            setEntries(prev => prev.map(e => String(e.conversation_id || '') === conversationId ? { ...e, question: editValue } : e));
+                            setEntries(prev => prev.map(ev => String(ev.conversation_id || '') === conversationId ? { ...ev, question: editValue } : ev));
                           }
                           setEditingId(null);
                         } else if (e.key === 'Escape') {
@@ -190,17 +205,19 @@ export default function HistoryPanel({
                         onClick={() => {
                           if (conversationId) {
                             onRenameConversation(conversationId, editValue);
-                            setEntries(prev => prev.map(e => String(e.conversation_id || '') === conversationId ? { ...e, question: editValue } : e));
+                            setEntries(prev => prev.map(ev => String(ev.conversation_id || '') === conversationId ? { ...ev, question: editValue } : ev));
                           }
                           setEditingId(null);
                         }}
                         className="rounded-lg p-1 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
+                        title="Save new title"
                       >
                         <Check size={14} />
                       </button>
                       <button 
                         onClick={() => setEditingId(null)}
                         className="rounded-lg p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                        title="Discard changes"
                       >
                         <CloseIcon size={14} />
                       </button>
@@ -214,6 +231,7 @@ export default function HistoryPanel({
                         onSelect(conversationId);
                       }}
                       className="flex-1 flex flex-col gap-1 p-3 text-left"
+                      title="Click to view this conversation"
                     >
                       <p className="line-clamp-1 text-[13.5px] font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         {entry.question || 'Image capture'}
@@ -230,24 +248,25 @@ export default function HistoryPanel({
                           if (confirm('Delete this conversation?')) {
                             if (conversationId) {
                               await onDeleteConversation(conversationId);
-                              setEntries(prev => prev.filter(e => String(e.conversation_id || '') !== conversationId));
+                              setEntries(prev => prev.filter(ev => String(ev.conversation_id || '') !== conversationId));
                             }
                           }
                         }}
                         className="rounded-lg p-1.5 text-rose-400 opacity-0 group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 transition-all dark:hover:bg-rose-900/30"
-                        title="Delete"
+                        title="Permanently remove"
                       >
                         <Trash2 size={15} />
                       </button>
                       <button
                         onClick={() => setMenuOpenId(isMenuOpen ? null : conversationId)}
                         className={`rounded-lg p-1.5 transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-900 dark:bg-slate-800' : 'text-slate-400 opacity-0 group-hover:opacity-100'}`}
+                        title="More options"
                       >
                         <MoreVertical size={16} />
                       </button>
 
                       {isMenuOpen && (
-                        <div className="absolute right-2 top-10 z-20 w-32 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                        <div className="absolute right-2 top-10 z-20 w-32 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800 animate-in fade-in zoom-in-95 duration-200">
                           <button
                             onClick={() => {
                               if (!conversationId) return;
@@ -264,7 +283,7 @@ export default function HistoryPanel({
                             onClick={async () => {
                               if (conversationId) {
                                 await onDeleteConversation(conversationId);
-                                setEntries(prev => prev.filter(e => String(e.conversation_id || '') !== conversationId));
+                                setEntries(prev => prev.filter(ev => String(ev.conversation_id || '') !== conversationId));
                               }
                               setMenuOpenId(null);
                             }}
@@ -284,11 +303,46 @@ export default function HistoryPanel({
         )}
       </div>
 
+      <div className="border-t border-slate-100 p-4 pb-3 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="space-y-2 rounded-2xl border border-slate-200/80 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/70">
+          <p className="px-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+            Coming soon
+          </p>
+          <div className="rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 dark:border-amber-500/10 dark:from-amber-500/10 dark:to-orange-500/10">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-amber-900 dark:text-amber-100">Quiz me</p>
+                <p className="mt-1 text-[11px] font-medium leading-relaxed text-amber-700/90 dark:text-amber-200/80">
+                  Turn a topic into a quick practice round.
+                </p>
+              </div>
+              <span className="rounded-full bg-amber-900/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-amber-800 dark:bg-amber-100/10 dark:text-amber-100">
+                Soon
+              </span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-sky-200/70 bg-gradient-to-r from-sky-50 to-cyan-50 px-4 py-3 dark:border-sky-500/10 dark:from-sky-500/10 dark:to-cyan-500/10">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-sky-900 dark:text-sky-100">Flash cards</p>
+                <p className="mt-1 text-[11px] font-medium leading-relaxed text-sky-700/90 dark:text-sky-200/80">
+                  Save concepts into lightweight review cards.
+                </p>
+              </div>
+              <span className="rounded-full bg-sky-900/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-sky-800 dark:bg-sky-100/10 dark:text-sky-100">
+                Soon
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Sidebar Footer: Settings */}
-      <div className="border-t border-slate-100 p-4 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="border-t border-slate-100 p-4 pt-3 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
         <button
           onClick={() => { onOpenSettings(); onClose(); }}
           className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          title="Manage account and settings"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 shadow-sm group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 transition-colors">
             <Settings size={16} className="text-slate-500 group-hover:text-indigo-600 transition-colors" />
@@ -296,9 +350,7 @@ export default function HistoryPanel({
           <span className="text-[13px] font-bold">Account Settings</span>
         </button>
       </div>
-      {/* end sidebar */}
       </div>
-    {/* end overlay */}
-    </div>
+      </div>
   );
 }

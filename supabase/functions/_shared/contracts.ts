@@ -1,13 +1,17 @@
 export type StyleMode = 'standard' | 'exam' | 'eli5' | 'step_by_step' | 'gen_alpha';
 
 export type SolveUsage = {
-  subscriptionTier: 'free' | 'pro';
-  subscriptionStatus: 'active' | 'inactive' | 'canceled';
-  totalCredits: number;
-  usedCredits: number;
-  remainingCredits: number;
+  subscriptionTier: 'free' | 'pro' | 'premium';
+  subscriptionStatus: 'active' | 'inactive' | 'canceled' | 'trialing' | 'past_due';
+  monthlyQuestionsUsed: number;
+  monthlyQuestionsLimit: number;
+  monthlyQuestionsRemaining: number;
+  stepQuestionsUsed?: number;
   monthlyImagesUsed: number;
   monthlyImagesLimit: number;
+  monthlyBulkUsed: number;
+  monthlyBulkLimit: number;
+  paygoCreditsRemaining?: number;
 };
 
 export type SolveMetadata = {
@@ -15,6 +19,8 @@ export type SolveMetadata = {
   aiMode: 'normal' | 'fast_fallback';
   styleMode: StyleMode;
   conversationId: string;
+  isBulk?: boolean;
+  isFollowUp?: boolean;
 };
 
 export type SolveSuggestion = {

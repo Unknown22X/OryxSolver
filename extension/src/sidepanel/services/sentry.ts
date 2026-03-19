@@ -2,22 +2,20 @@ import * as Sentry from "@sentry/react";
 
 export function initSentry() {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
+  const isProd = import.meta.env.MODE === 'production';
+
   if (!dsn) {
-    console.warn("Sentry DSN not found. Error monitoring disabled.");
+    if (isProd) {
+      console.warn("Sentry DSN not found. Error monitoring disabled.");
+    }
     return;
   }
 
   Sentry.init({
     dsn,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration(),
-    ],
-    // Performance Monitoring
-    tracesSampleRate: 1.0, 
-    // Session Replay
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
+    integrations: [Sentry.browserTracingIntegration()],
+    tracesSampleRate: isProd ? 0.1 : 1.0,
+    sendDefaultPii: false,
     environment: import.meta.env.MODE,
   });
 }

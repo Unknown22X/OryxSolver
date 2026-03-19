@@ -14,36 +14,30 @@ begin
         null;
     end if;
 end $$;
-
 -- 3. Unify RLS on profiles
 alter table public.profiles enable row level security;
-
 drop policy if exists "Users can view own profile" on public.profiles;
 drop policy if exists "Users can update own profile" on public.profiles;
 drop policy if exists "profiles_select_own" on public.profiles;
 drop policy if exists "profiles_insert_own" on public.profiles;
 drop policy if exists "profiles_update_own" on public.profiles;
-
 create policy "profiles_select_own"
 on public.profiles
 for select
 to authenticated
 using ( auth.uid() = id );
-
 create policy "profiles_update_own"
 on public.profiles
 for update
 to authenticated
 using ( auth.uid() = id )
 with check ( auth.uid() = id );
-
 -- Allow the trigger/service role to insert
 create policy "service_role_insert_profiles"
 on public.profiles
 for insert
 to service_role
 with check ( true );
-
 -- 4. Fix solve_runs and history RLS
 -- Assuming these tables exist (referenced in previous migrations)
 

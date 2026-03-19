@@ -13,7 +13,6 @@ begin
     alter table public.profiles rename column firebase_uid to auth_user_id;
   end if;
 end $$;
-
 do $$
 begin
   if exists (
@@ -26,21 +25,18 @@ begin
     alter table public.solve_runs rename column firebase_uid to auth_user_id;
   end if;
 end $$;
-
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
 on public.profiles
 for select
 to authenticated
 using (auth_user_id = auth.jwt()->>'sub');
-
 drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own"
 on public.profiles
 for insert
 to authenticated
 with check (auth_user_id = auth.jwt()->>'sub');
-
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"
 on public.profiles
@@ -48,14 +44,12 @@ for update
 to authenticated
 using (auth_user_id = auth.jwt()->>'sub')
 with check (auth_user_id = auth.jwt()->>'sub');
-
 drop policy if exists "solve_runs_select_own" on public.solve_runs;
 create policy "solve_runs_select_own"
 on public.solve_runs
 for select
 to public
 using (auth_user_id = auth.jwt()->>'sub');
-
 drop policy if exists "solve_runs_insert_own" on public.solve_runs;
 create policy "solve_runs_insert_own"
 on public.solve_runs

@@ -9,7 +9,7 @@ type UpgradeModalProps = {
 };
 
 const FEATURES = [
-  { label: 'Unlimited Solutions', tone: 'bg-indigo-500' },
+  { label: 'Higher Monthly Limits', tone: 'bg-indigo-500' },
   { label: 'Priority AI Processing', tone: 'bg-amber-500' },
   { label: 'Advanced Vision AI', tone: 'bg-emerald-500' },
   { label: 'Math and STEM Excellence', tone: 'bg-violet-500' },
@@ -47,10 +47,10 @@ export default function UpgradeModal({
 
           <div className="text-center w-full">
             <h2 className="text-[28px] font-black tracking-tight text-white mb-2">
-              {upgradeMoment.title || 'Upgrade to Pro'}
+              {upgradeMoment.title || 'Payments are coming soon'}
             </h2>
             <p className="text-indigo-100/90 text-[14px] font-bold px-4 leading-snug mb-8">
-              {upgradeMoment.message || 'Unlock unlimited solutions and premium tools to excel in your studies.'}
+              {upgradeMoment.message || 'Upgrade and billing actions currently open the web app holding page while checkout is being finished.'}
             </p>
             
             {/* Current Usage Bar */}
@@ -82,15 +82,16 @@ export default function UpgradeModal({
             {/* Action Area */}
             <div className="mt-8 flex flex-col items-center">
               <button
-                onClick={() => window.open(upgradeUrl, '_blank')}
-                className="group flex w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 py-4 text-[15px] font-black text-white shadow-xl shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95"
+                onClick={() => window.open(upgradeUrl, '_blank', 'noopener,noreferrer')}
+                disabled={!upgradeUrl}
+                className="group flex w-full max-w-[280px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 py-4 text-[15px] font-black text-white shadow-xl shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100"
               >
-                <span>Get Pro Access</span>
+                <span>Open billing page</span>
                 <ChevronRight size={20} className="transition-transform group-hover:translate-x-1" />
               </button>
               
               <p className="mt-6 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-                Cancel anytime. Secure payment.
+                Billing is not live yet
               </p>
             </div>
           </div>

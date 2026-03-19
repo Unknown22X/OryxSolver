@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Lightbulb, ListOrdered } from 'lucide-react';
 import AnswerHeroCard from './AnswerHeroCard';
 import StepTimeline from './StepTimeline';
 import RichText from './RichText';
@@ -15,13 +14,66 @@ type ResponsePanelProps = {
   onSuggestionClick?: (s: any) => void;
 };
 
+function normalizeComparableText(value: string) {
+  return value.replace(/\s+/g, ' ').replace(/[*`]/g, '').trim().toLowerCase();
+}
+
+function getResponsePresentation(answer: string, steps: string[], explanation: string) {
+  const cleanAnswer = answer.trim();
+  const combined = `${cleanAnswer}\n${explanation}`.toLowerCase();
+  const looksLikeChoice =
+    /^(option\s+)?[a-d](?:[).:]\s*|\s*$)/i.test(cleanAnswer) ||
+    /^choice\s+[a-d]\b/i.test(cleanAnswer);
+  const shortSingleBlock = cleanAnswer.length > 0 && cleanAnswer.length <= 90 && !cleanAnswer.includes('\n');
+
+  if (steps.length > 0) {
+    return {
+      title: looksLikeChoice ? 'Selected answer' : 'Answer',
+      subtitle: looksLikeChoice ? 'Chosen result' : 'Main result',
+      explanationLabel: 'Why this works',
+    };
+  }
+
+  if (/(example|practice|quiz|flash[\s-]?card)/i.test(combined)) {
+    return {
+      title: 'Example',
+      subtitle: 'Practice-style response',
+      explanationLabel: 'How to use it',
+    };
+  }
+
+  if (shortSingleBlock) {
+    return {
+      title: 'Quick answer',
+      subtitle: 'Direct response',
+      explanationLabel: 'More context',
+    };
+  }
+
+  return {
+    title: 'Response',
+    subtitle: 'Main response',
+    explanationLabel: 'More context',
+  };
+}
+
 export default function ResponsePanel({ response, onQuoteStep }: ResponsePanelProps) {
-  const [showRawReasoning, setShowRawReasoning] = useState(false);
   const isBulk = response?.answer === 'Answer Key';
-  const parsedSteps = response ? parseExplanationSteps(response.explanation, isBulk) : [];
+  const parsedSteps =
+    response && (response.steps?.length ?? 0) === 0
+      ? parseExplanationSteps(response.explanation, isBulk)
+      : [];
   const steps: string[] = response
     ? ((response.steps?.length ?? 0) > 0 ? response.steps! : parsedSteps)
     : [];
+  const answerText = response?.answer?.trim() ?? '';
+  const explanationText = response?.explanation?.trim() ?? '';
+  const normalizedSteps = normalizeComparableText(steps.map((step) => step.trim()).filter(Boolean).join('\n'));
+  const showExplanation =
+    explanationText.length > 0 &&
+    normalizeComparableText(explanationText) !== normalizeComparableText(answerText) &&
+    normalizeComparableText(explanationText) !== normalizedSteps;
+  const presentation = getResponsePresentation(answerText, steps, explanationText);
 
   if (!response) {
     return (
@@ -39,44 +91,37 @@ export default function ResponsePanel({ response, onQuoteStep }: ResponsePanelPr
   return (
     <article className="mt-4 space-y-4">
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-        <AnswerHeroCard answer={response.answer} />
+        <AnswerHeroCard answer={response.answer} title={presentation.title} subtitle={presentation.subtitle} />
       </div>
-      <div className="animate-in fade-in slide-in-from-bottom-2 rounded-[32px] border border-white/70 bg-white/50 p-6 shadow-sm backdrop-blur-xl dark:bg-slate-800/40 dark:border-slate-700/50" style={{ animationDelay: '100ms' }}>
-        <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            {isBulk ? 'Bulk Answer Key' : 'Step-by-step reasoning'}
-          </p>
-          <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 dark:bg-emerald-900/20">
-            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">Verified Solution</span>
-          </div>
-        </div>
-        
+      <div className="animate-in fade-in slide-in-from-bottom-2 space-y-4 rounded-[32px] border border-white/70 bg-white/50 p-6 shadow-sm backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-800/40" style={{ animationDelay: '100ms' }}>
         {steps.length > 0 ? (
-          <StepTimeline steps={steps} isBulk={isBulk} onQuoteStep={onQuoteStep} />
-        ) : (
-          <div className="rounded-2xl border border-indigo-50 bg-white/60 p-4 shadow-inner dark:border-slate-800 dark:bg-slate-900/40">
-             <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
-          </div>
-        )}
+          <section className="rounded-[28px] border border-slate-200/70 bg-white/70 p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/30">
+            <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+              <ListOrdered size={16} className="text-indigo-500 dark:text-indigo-300" />
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                {isBulk ? 'Answer key' : 'Steps'}
+              </p>
+            </div>
+            <StepTimeline steps={steps} isBulk={isBulk} onQuoteStep={onQuoteStep} />
+          </section>
+        ) : explanationText ? (
+          <section className="rounded-[28px] border border-slate-200/70 bg-white/70 p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/30">
+            <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+              <Lightbulb size={16} className="text-indigo-500 dark:text-indigo-300" />
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Explanation</p>
+            </div>
+            <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
+          </section>
+        ) : null}
 
-        <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={() => setShowRawReasoning((v) => !v)}
-            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition dark:text-indigo-400"
-          >
-            {showRawReasoning ? 'Hide reasoning' : 'Show reasoning log'}
-          </button>
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
-             <Sparkles size={12} className="text-indigo-300" />
-             <span>AI Accuracy Checked</span>
-          </div>
-        </div>
-
-        {showRawReasoning && (
-          <div className="mt-4 rounded-2xl bg-slate-900 p-4 animate-in slide-in-from-top-2">
-            <pre className="text-[11px] font-mono text-indigo-200 whitespace-pre-wrap">{response.explanation}</pre>
-          </div>
+        {showExplanation && (
+          <section className="rounded-[28px] border border-indigo-100/80 bg-indigo-50/60 p-5 dark:border-indigo-500/20 dark:bg-indigo-950/20">
+            <div className="mb-3 flex items-center gap-2">
+              <Lightbulb size={16} className="text-indigo-500 dark:text-indigo-300" />
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">{presentation.explanationLabel}</p>
+            </div>
+            <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
+          </section>
         )}
       </div>
     </article>

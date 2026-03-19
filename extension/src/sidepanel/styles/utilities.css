@@ -1,12 +1,6 @@
-/*  ──────────────────────────────────────────────
-    OryxSolver – Custom Utilities
-    One-off utilities that don't belong in the
-    component layer but are useful app-wide.
-    
-    Tailwind CSS v4: use @utility for each class.
-    ────────────────────────────────────────────── */
+/* OryxSolver Styles */
 
-/* ─── Scrollbar Utilities ─── */
+/* --- Scrollbar Utilities --- */
 
 @utility no-scrollbar {
   -ms-overflow-style: none;
@@ -29,7 +23,7 @@
   }
 }
 
-/* ─── Background Patterns ─── */
+/* --- Background Patterns --- */
 
 @utility bg-dots {
   background-image: radial-gradient(#000000 1px, transparent 1px);
@@ -37,7 +31,7 @@
   opacity: 0.015;
 }
 
-/* ─── Animation Keyframes (global, outside @utility) ─── */
+/* --- Animation Keyframes (global, outside @utility) --- */
 
 @keyframes oryx-fade-in {
   from { opacity: 0; }
@@ -59,7 +53,7 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
-/* ─── Animation Base ─── */
+/* --- Animation Base --- */
 
 @utility animate-in {
   animation-duration: 300ms;
@@ -67,13 +61,13 @@
   animation-fill-mode: both;
 }
 
-/* ─── Fade ─── */
+/* --- Fade --- */
 
 @utility fade-in {
   animation-name: oryx-fade-in;
 }
 
-/* ─── Slide from Bottom ─── */
+/* --- Slide from Bottom --- */
 
 @utility slide-in-from-bottom-1 {
   --oryx-slide-y: 0.25rem;
@@ -95,7 +89,7 @@
   animation-name: oryx-slide-in-from-bottom;
 }
 
-/* ─── Slide from Top ─── */
+/* --- Slide from Top --- */
 
 @utility slide-in-from-top-1 {
   --oryx-slide-y: -0.25rem;
@@ -107,7 +101,7 @@
   animation-name: oryx-slide-in-from-top;
 }
 
-/* ─── Zoom ─── */
+/* --- Zoom --- */
 
 @utility zoom-in-95 {
   --oryx-zoom-scale: 0.95;

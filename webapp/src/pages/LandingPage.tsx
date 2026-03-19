@@ -1,227 +1,392 @@
-import { ChevronRight, Sparkles, Camera, BookOpen, Layout, Check, Zap, Shield, MessageSquare, Clock } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import MarketingLayout from '../components/MarketingLayout';
+import { trackEvent } from '../lib/analyticsClient';
+import { FALLBACK_PUBLIC_CONFIG, fetchPublicAppConfig, type ProductFeature } from '../lib/appConfig';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Chrome,
+  CirclePlay,
+  Clock3,
+  ExternalLink,
+  FolderKanban,
+  GraduationCap,
+  Layers,
+  Shield,
+  Workflow,
+} from 'lucide-react';
 
-const MODES = [
-  { name: 'Standard', desc: 'Balanced clarity and speed for daily tasks.', icon: <Zap size={20} className="text-amber-400" /> },
-  { name: 'Exam', desc: 'Formal, precise answers for test preparation.', icon: <Shield size={20} className="text-blue-400" /> },
-  { name: 'ELI5', desc: 'Simple words and concepts for quick grasping.', icon: <Sparkles size={20} className="text-purple-400" /> },
-  { name: 'Step-by-step', desc: 'Deep procedural breakdowns for math/STEM.', icon: <Layout size={20} className="text-emerald-400" /> },
-  { name: 'Gen Alpha', desc: 'Engaging casual tone with correct facts.', icon: <MessageSquare size={20} className="text-pink-400" /> },
+function ChromeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M24 14.4A9.6 9.6 0 0 0 15.35 20H4.6a19.4 19.4 0 0 1 34.3-5L33.55 24a9.6 9.6 0 0 0-9.55-9.6Z" fill="#DB4437" />
+      <path d="M33.6 24a9.6 9.6 0 0 1-4.95 8.4L23.3 42.8A19.4 19.4 0 0 0 43.4 20H31.75a9.56 9.56 0 0 1 1.85 4Z" fill="#4285F4" />
+      <path d="M28.65 32.4A9.6 9.6 0 0 1 14.4 24a9.56 9.56 0 0 1 .95-4.1L10 10.3A19.4 19.4 0 0 0 23.3 42.8l5.35-10.4Z" fill="#0F9D58" />
+      <circle cx="24" cy="24" r="9.6" fill="#F1F1F1" />
+      <circle cx="24" cy="24" r="6" fill="#4285F4" />
+    </svg>
+  );
+}
+
+const FEATURE_ICONS = [Chrome, GraduationCap, Layers, Shield, Workflow];
+const PLACEHOLDER_LOGOS = ['STUDY FLOW', 'CHROME READY', 'THREAD SAVED', 'MODE SELECT', 'QUIZ LATER'];
+
+const PRICING_PREVIEW = [
+  {
+    name: 'Free',
+    price: '$0',
+    detail: '15 monthly questions',
+    href: '/signup',
+    cta: 'Create account',
+    featured: false,
+  },
+  {
+    name: 'Oryx Pro',
+    price: '$3.99',
+    detail: 'Most popular when billing opens',
+    href: '/pricing',
+    cta: 'See Pro',
+    featured: true,
+  },
+  {
+    name: 'Premium',
+    price: '$9.99',
+    detail: 'Higher limits, billing soon',
+    href: '/pricing',
+    cta: 'See Premium',
+    featured: false,
+  },
 ];
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+  const extensionUrl = String(import.meta.env.VITE_CHROME_EXTENSION_URL ?? '').trim();
+  const [features, setFeatures] = useState<ProductFeature[]>(FALLBACK_PUBLIC_CONFIG.features);
+
+  useEffect(() => {
+    let active = true;
+    async function loadFeatures() {
+      try {
+        const config = await fetchPublicAppConfig();
+        if (!active) return;
+        setFeatures(config.features);
+      } catch (error) {
+        console.error('Failed to load landing features:', error);
+      }
+    }
+    void loadFeatures();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCreateAccountClick = (location: string) => {
+    trackEvent('cta_click', { location, action: 'signup' });
+    navigate('/signup');
+  };
+
+  const handleInstallClick = (location: string) => {
+    trackEvent('cta_click', { location, action: 'install_extension' });
+    if (extensionUrl) {
+      window.open(extensionUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate('/how-it-works');
+  };
+
   return (
-    <div className="min-h-screen bg-[#0a0c1b] text-white selection:bg-indigo-500/30 font-sans">
-      {/* Background Decor */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[10%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-indigo-600/10 blur-[120px] rounded-full" />
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_-20%,rgba(79,70,229,0.15)_0%,transparent_70%)]" />
+    <MarketingLayout className="oryx-shell-bg overflow-x-hidden text-slate-900 dark:text-white" headerVariant="glass" footerVariant="dark">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-[32rem]" style={{ background: 'var(--marketing-glow)' }} />
+        <div className="absolute left-[10%] top-[18%] h-56 w-56 rounded-full bg-sky-400/10 blur-[110px] dark:bg-teal-300/8" />
+        <div className="absolute right-[8%] top-[24%] h-72 w-72 rounded-full bg-blue-500/10 blur-[120px] dark:bg-sky-400/10" />
       </div>
 
-      {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#0a0c1b]/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Sparkles size={22} className="text-white" />
+      <section className="relative px-4 pb-18 pt-32 sm:px-6 sm:pb-24 sm:pt-40">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-4xl text-center">
+            <h1 className="marketing-heading mt-6 text-[3.25rem] font-extrabold text-slate-950 dark:text-white sm:text-[4rem] md:text-[4.2rem] md:leading-[0.98]">
+              Solve faster.
+              <span className="block gradient-text-animated">Understand better.</span>
+            </h1>
+
+            <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-slate-600 dark:text-slate-300 sm:text-xl">
+              Screenshot a question, choose how you want it explained, and keep the whole solve inside one cleaner study flow.
+            </p>
+
+            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <button
+                onClick={() => handleCreateAccountClick('hero_signup')}
+                className="gradient-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01] sm:w-auto"
+              >
+                Create free account
+                <ArrowRight size={18} />
+              </button>
+              <button
+                onClick={() => handleInstallClick('hero_install')}
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-slate-200/90 bg-white/86 px-7 py-4 text-base font-bold text-slate-900 shadow-sm backdrop-blur transition hover:border-slate-300 hover:bg-white sm:w-auto dark:border-white/12 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+              >
+                <ChromeIcon className="h-5 w-5" />
+                Install extension
+                {extensionUrl ? <ExternalLink size={16} /> : <ArrowRight size={18} />}
+              </button>
             </div>
-            <span className="text-2xl font-black tracking-tight uppercase italic">Oryx<span className="text-indigo-500 text-3xl not-italic">.</span></span>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-5 text-sm font-medium text-slate-600 dark:text-slate-400">
+              <span className="inline-flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-300" />
+                15 free monthly questions
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-300" />
+                Start in Chrome, continue on web
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-300" />
+                Billing pages staged, not live yet
+              </span>
+            </div>
           </div>
-          <div className="hidden md:flex items-center gap-10 text-sm font-black uppercase tracking-widest text-slate-400">
-            <a href="#how" className="hover:text-white transition-colors">How it works</a>
-            <a href="#modes" className="hover:text-white transition-colors">Modes</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-          </div>
-          <div className="flex items-center gap-6">
-            <Link to="/login" className="text-sm font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">Sign in</Link>
-            <Link to="/signup" className="gradient-btn px-6 py-3 rounded-full text-xs shadow-xl shadow-indigo-500/30 uppercase tracking-widest">Get Pro</Link>
+
+          <div className="mt-14 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-[36px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.3)] backdrop-blur dark:border-white/10 dark:bg-[#07111e]/80">
+              <div className="flex items-center justify-between border-b border-slate-200/70 pb-4 dark:border-white/10">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Demo preview</p>
+                  <h2 className="marketing-heading mt-2 text-3xl font-extrabold text-slate-950 dark:text-white">
+                    Put your real product walkthrough here.
+                  </h2>
+                </div>
+                <div className="rounded-2xl border border-slate-200/70 bg-white/85 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-sky-700 dark:border-white/10 dark:bg-white/5 dark:text-teal-200">
+                  Demo slot
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-[28px] border border-dashed border-slate-300/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(238,245,255,0.82))] p-5 dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(10,18,35,0.85))]">
+                <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[24px] border border-slate-200/80 bg-white/78 text-center dark:border-white/10 dark:bg-white/[0.03]">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-sky-200/80 bg-sky-50 text-sky-700 dark:border-teal-400/20 dark:bg-teal-400/10 dark:text-teal-200">
+                    <CirclePlay className="h-8 w-8" />
+                  </div>
+                  <h3 className="mt-6 text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
+                    Demo video placeholder
+                  </h3>
+                  <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    Drop your walkthrough video, GIF, or screen recording here when it is ready. The layout is already sized for a real product demo.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="oryx-marketing-panel-strong rounded-[30px] p-6">
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Threaded solving</p>
+                <h2 className="marketing-heading mt-2 text-3xl font-extrabold text-slate-950 dark:text-white">
+                  One question. Cleaner follow-ups.
+                </h2>
+                <div className="mt-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                  {[
+                    ['1', 'Capture', 'Grab the question quickly instead of retyping everything.'],
+                    ['2', 'Choose mode', 'Pick the tone before you start so the thread stays consistent.'],
+                    ['3', 'Keep context', 'Follow-ups stay inside the same conversation.'],
+                  ].map(([step, title, body]) => (
+                    <div key={title} className="rounded-[24px] border border-slate-200/70 bg-white/88 p-5 dark:border-white/10 dark:bg-white/[0.03]">
+                      <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl" style={{ background: 'var(--brand-gradient-soft)', color: 'var(--mode-standard)' }}>
+                        <span className="text-sm font-black">{step}</span>
+                      </div>
+                      <h3 className="text-xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">{title}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{body}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="oryx-marketing-panel rounded-[30px] p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="oryx-marketing-icon h-11 w-11">
+                      <Clock3 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Mode selection</p>
+                      <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Choose it once before the thread starts.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {[
+                      ['Standard', 'oryx-chip-standard'],
+                      ['Exam', 'oryx-chip-exam'],
+                      ['ELI5', 'oryx-chip-eli5'],
+                      ['Step-by-step', 'oryx-chip-steps'],
+                    ].map(([label, className]) => (
+                      <div key={label} className={`oryx-mode-chip ${className} rounded-full px-4 py-2 text-sm font-bold`}>
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="oryx-marketing-panel rounded-[30px] p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="oryx-marketing-icon h-11 w-11">
+                      <FolderKanban className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Prompt starters</p>
+                      <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Good defaults for the first message.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {['Explain the first step', 'Check my answer', 'Summarize this faster', 'Make a practice question'].map((prompt) => (
+                      <span key={prompt} className="rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                        {prompt}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </nav>
+      </section>
 
-      <main className="relative z-10">
-        {/* Hero */}
-        <section className="pt-40 pb-32 px-6">
-          <div className="max-w-5xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] mb-10 animate-in fade-in slide-in-from-bottom-4 shadow-2xl">
-              <Sparkles size={14} />
-              <span>THE ULTIMATE STUDY EDGE</span>
-            </div>
-            <h1 className="text-7xl md:text-9xl font-black tracking-tighter mb-10 leading-[0.85] animate-in fade-in slide-in-from-bottom-8 duration-700">
-              Snap<span className="text-indigo-500">.</span> Solve<span className="text-indigo-500">.</span><br />Learn<span className="text-indigo-500 text-[1.2em]">.</span>
-            </h1>
-            <p className="max-w-2xl mx-auto text-xl md:text-2xl text-slate-400 font-bold leading-relaxed mb-16 animate-in fade-in slide-in-from-bottom-10 duration-1000">
-              OryxSolver captures anything on your screen—text, images, or math—and provides instant, step-by-step reasoning designed for the modern student.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 animate-in fade-in slide-in-from-bottom-12 duration-1000">
-              <Link to="/signup" className="gradient-btn px-10 py-5 rounded-[2rem] text-xl w-full sm:w-auto shadow-2xl shadow-indigo-500/40 hover:scale-105 transition-transform">Start Solving Now</Link>
-              <a href="#how" className="px-10 py-5 rounded-[2rem] text-xl font-black bg-white/5 border border-white/10 hover:bg-white/10 transition-all w-full sm:w-auto flex items-center justify-center gap-2">
-                <span>See it in action</span>
-                <ChevronRight size={20} className="text-indigo-500" />
-              </a>
-            </div>
-          </div>
-        </section>
-
-        {/* How it Works Section */}
-        <section id="how" className="py-32 px-6 bg-white/[0.02] border-y border-white/5">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row items-end justify-between mb-20 gap-8">
-              <div className="max-w-2xl">
-                <p className="text-indigo-500 font-black uppercase tracking-[0.3em] text-xs mb-4">The Workflow</p>
-                <h2 className="text-5xl font-black tracking-tight leading-tight">Master your studies in three simple steps</h2>
+      <section className="relative px-4 pb-18 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="oryx-marketing-panel rounded-[30px] px-6 py-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Social proof</p>
+                <h2 className="marketing-heading mt-2 text-2xl font-bold text-slate-950 dark:text-white">
+                  Placeholder wordmarks for the workflow we're building.
+                </h2>
               </div>
-              <p className="text-slate-400 font-bold max-w-sm">No more typing out long equations. Just point, click, and understand.</p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-12">
-              <Step 
-                num="01" 
-                title="Capture" 
-                desc="Use the extension camera to draw a box around any question on any website." 
-                icon={<Camera size={32} />}
-                color="text-indigo-500"
-              />
-              <Step 
-                num="02" 
-                title="Process" 
-                desc="Our AI instantly decodes the image, detects math, and analyzes the context." 
-                icon={<Zap size={32} />}
-                color="text-blue-500"
-              />
-              <Step 
-                num="03" 
-                title="Understand" 
-                desc="Get a clear answer followed by a chronological timeline of reasoning steps." 
-                icon={<BookOpen size={32} />}
-                color="text-emerald-500"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Modes Grid */}
-        <section id="modes" className="py-32 px-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-24">
-              <h2 className="text-5xl font-black tracking-tight mb-6">Choose your learning style</h2>
-              <p className="text-slate-400 font-bold max-w-xl mx-auto">One question, five ways to learn. Switch modes instantly to get the perfect explanation.</p>
-            </div>
-            
-            <div className="grid md:grid-cols-5 gap-6">
-              {MODES.map((m) => (
-                <div key={m.name} className="bg-[#161927] p-8 rounded-[32px] border border-white/5 hover:border-indigo-500/30 transition-all group">
-                  <div className="mb-6 w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    {m.icon}
+              <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                {PLACEHOLDER_LOGOS.map((logo) => (
+                  <div
+                    key={logo}
+                    className="rounded-full border border-slate-200/80 bg-white/85 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-slate-500"
+                  >
+                    {logo}
                   </div>
-                  <h3 className="text-xl font-black mb-3">{m.name}</h3>
-                  <p className="text-sm font-bold text-slate-500 leading-relaxed">{m.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Pricing Section */}
-        <section id="pricing" className="py-32 px-6 bg-white/[0.01]">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-24">
-              <h2 className="text-5xl font-black tracking-tight mb-6">Simple, transparent pricing</h2>
-              <p className="text-slate-400 font-bold">Start for free, upgrade for unlimited power.</p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              {/* Free Tier */}
-              <div className="bg-[#161927] p-10 rounded-[40px] border border-white/5 flex flex-col">
-                <div className="mb-8">
-                  <h3 className="text-2xl font-black mb-2">Free</h3>
-                  <p className="text-slate-500 font-bold">Essential tools for every student.</p>
-                </div>
-                <div className="text-5xl font-black mb-10">$0<span className="text-lg text-slate-500 font-bold ml-2">/month</span></div>
-                <div className="space-y-5 mb-12 flex-1">
-                  <PriceItem text="15 Solves per day" />
-                  <PriceItem text="3 Modes (Standard, Exam, ELI5)" />
-                  <PriceItem text="Screenshot Capture" />
-                  <PriceItem text="Local History" disabled />
-                  <PriceItem text="Priority AI Support" disabled />
-                </div>
-                <Link to="/signup" className="w-full py-4 rounded-2xl border border-white/10 font-black uppercase tracking-widest text-xs hover:bg-white/5 transition-all text-center">Get Started</Link>
-              </div>
-
-              {/* Pro Tier */}
-              <div className="bg-[#161927] p-10 rounded-[40px] border-2 border-indigo-500 shadow-2xl shadow-indigo-500/20 flex flex-col relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-indigo-500 text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-bl-xl">Best Value</div>
-                <div className="mb-8">
-                  <h3 className="text-2xl font-black mb-2 text-indigo-400">Oryx Pro</h3>
-                  <p className="text-slate-500 font-bold">Unlimited power for power students.</p>
-                </div>
-                <div className="text-5xl font-black mb-10">$9.99<span className="text-lg text-slate-500 font-bold ml-2">/month</span></div>
-                <div className="space-y-5 mb-12 flex-1">
-                  <PriceItem text="Unlimited AI Solves" highlight />
-                  <PriceItem text="All 5 AI Modes included" highlight />
-                  <PriceItem text="Advanced Vision AI detection" highlight />
-                  <PriceItem text="Sync Cloud History" highlight />
-                  <PriceItem text="Priority 24/7 AI Processing" highlight />
-                </div>
-                <Link to="/signup" className="gradient-btn w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs text-center">Go Pro Now</Link>
+                ))}
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* CTA */}
-        <section className="py-32 px-6 text-center">
-          <div className="max-w-4xl mx-auto bg-gradient-to-br from-indigo-600 to-blue-700 p-16 rounded-[60px] shadow-2xl shadow-indigo-500/30">
-            <h2 className="text-5xl font-black tracking-tight text-white mb-8">Ready to ace your next assignment?</h2>
-            <p className="text-indigo-100 text-xl font-bold mb-12 opacity-90">Join 2,000+ students using OryxSolver to learn faster and smarter every day.</p>
-            <Link to="/signup" className="bg-white text-indigo-600 px-12 py-5 rounded-2xl text-xl font-black hover:scale-105 transition-transform inline-flex items-center gap-3">
-              Create Free Account
-              <ChevronRight size={24} />
+      <section id="features" className="relative border-y border-slate-200/70 bg-white/60 px-4 py-20 sm:px-6 dark:border-white/5 dark:bg-black/10">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-12 max-w-2xl">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Features</p>
+            <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
+              Built for how students actually move through a problem.
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-slate-600 dark:text-slate-300">
+              The content below stays honest on purpose. It shows what already exists and leaves room for future visuals without pretending they are live today.
+            </p>
+          </div>
+
+          <div className="oryx-marketing-grid md:grid-cols-2 xl:grid-cols-3">
+            {features.map((feature, index) => {
+              const Icon = FEATURE_ICONS[index % FEATURE_ICONS.length];
+              return (
+                <div key={feature.title} className="oryx-marketing-card rounded-[30px] p-8">
+                  <div className="oryx-marketing-icon h-14 w-14">
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <h3 className="marketing-heading mt-6 text-2xl font-bold text-slate-950 dark:text-white">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    {feature.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-4 py-20 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-10 flex items-end justify-between gap-6">
+            <div className="max-w-2xl">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Pricing preview</p>
+              <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
+                Start free. See the paid plans before billing opens.
+              </h2>
+            </div>
+            <Link to="/pricing" className="hidden text-sm font-bold text-sky-700 hover:text-teal-700 md:inline-flex dark:text-teal-300 dark:hover:text-teal-200">
+              Full pricing
             </Link>
           </div>
-        </section>
-      </main>
 
-      <footer className="py-20 px-6 border-t border-white/5 text-center">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-indigo-600 rounded-md flex items-center justify-center">
-              <Sparkles size={12} className="text-white" />
-            </div>
-            <span className="font-black uppercase tracking-widest text-sm">OryxSolver</span>
+          <div className="grid gap-6 lg:grid-cols-3">
+            {PRICING_PREVIEW.map((plan) => (
+              <div
+                key={plan.name}
+                className={`rounded-[30px] border p-7 ${
+                  plan.featured
+                    ? 'relative border-sky-300 bg-gradient-to-b from-sky-100/90 to-teal-100/70 shadow-[0_26px_60px_-34px_rgba(8,145,178,0.35)] dark:border-teal-300/35 dark:from-sky-500/12 dark:to-teal-500/10'
+                    : 'oryx-marketing-panel'
+                }`}
+              >
+                {plan.featured && (
+                  <div className="absolute -top-4 left-6 rounded-full bg-slate-950 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white dark:bg-white dark:text-slate-950">
+                    Most popular
+                  </div>
+                )}
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">{plan.name}</p>
+                <div className="mt-4 flex items-end gap-2">
+                  <span className="align-super text-lg font-bold text-slate-500">$</span>
+                  <span className="text-5xl font-black tabular-nums text-slate-950 dark:text-white">
+                    {plan.price.replace('$', '')}
+                  </span>
+                  <span className="pb-2 text-sm font-bold text-slate-500 dark:text-slate-400">/ month</span>
+                </div>
+                <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">{plan.detail}</p>
+                <p className="mt-6 rounded-2xl border border-slate-200/80 bg-white/82 px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
+                  Billing is coming soon. For now, this routes to the staged payment page.
+                </p>
+                <Link
+                  to={plan.href}
+                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black transition ${
+                    plan.featured
+                      ? 'gradient-btn shadow-lg shadow-sky-500/15 hover:scale-[1.01]'
+                      : 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10'
+                  }`}
+                >
+                  {plan.cta}
+                  <ArrowRight size={16} />
+                </Link>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-10 text-xs font-black uppercase tracking-widest text-slate-500">
-            <a href="#" className="hover:text-white">Privacy</a>
-            <a href="#" className="hover:text-white">Terms</a>
-            <a href="#" className="hover:text-white">Contact</a>
-          </div>
-          <p className="text-slate-600 font-bold text-sm">&copy; 2026 OryxSolver. Built for students.</p>
         </div>
-      </footer>
-    </div>
-  );
-}
+      </section>
 
-function Step({ num, title, desc, icon, color }: { num: string, title: string, desc: string, icon: React.ReactNode, color: string }) {
-  return (
-    <div className="relative group">
-      <div className="text-[120px] font-black text-white/[0.03] absolute -top-20 -left-4 leading-none select-none group-hover:text-indigo-500/10 transition-colors duration-700">{num}</div>
-      <div className={`mb-8 w-16 h-16 bg-white/5 rounded-3xl flex items-center justify-center ${color} shadow-2xl relative z-10`}>
-        {icon}
-      </div>
-      <h3 className="text-2xl font-black mb-4 relative z-10">{title}</h3>
-      <p className="text-slate-400 font-bold leading-relaxed relative z-10">{desc}</p>
-    </div>
-  );
-}
+      <section className="px-4 pb-20 sm:px-6 sm:pb-28">
+        <div className="mx-auto max-w-4xl rounded-[36px] border border-slate-200/80 bg-white/85 p-10 text-center shadow-[0_30px_90px_-44px_rgba(15,23,42,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#08111d]/82 sm:p-14">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Ready to start</p>
+          <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
+            Run one real question through the workflow.
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+            Start with the free account, install the extension if you want the fastest capture flow, and keep the explanation clean enough to review later.
+          </p>
 
-function PriceItem({ text, highlight, disabled }: { text: string, highlight?: boolean, disabled?: boolean }) {
-  return (
-    <div className={`flex items-center gap-3 text-sm font-bold ${disabled ? 'opacity-30 grayscale' : 'opacity-100'}`}>
-      <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${highlight ? 'bg-indigo-500 text-white' : 'bg-white/10 text-slate-400'}`}>
-        <Check size={12} strokeWidth={4} />
-      </div>
-      <span className={highlight ? 'text-white' : 'text-slate-400'}>{text}</span>
-    </div>
+          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <button
+              onClick={() => handleCreateAccountClick('final_signup')}
+              className="gradient-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01] sm:w-auto"
+            >
+              Create free account
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      </section>
+    </MarketingLayout>
   );
 }

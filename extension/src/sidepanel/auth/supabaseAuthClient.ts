@@ -1,4 +1,5 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { getApiUrl } from '../services/apiConfig';
 import { supabase } from '../services/supabaseClient';
 
 export type AuthUser = {
@@ -48,6 +49,16 @@ export async function getAccessToken(): Promise<string> {
   return token;
 }
 
+export async function getCurrentUserId(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    console.warn('Failed to load user for analytics:', error.message);
+    return null;
+  }
+  return data.user?.id ?? null;
+}
+
 export async function signInWithPassword(email: string, password: string): Promise<AuthUser> {
   if (!supabase) {
     throw new Error('Supabase Auth is not configured. Check extension/.env values.');
@@ -59,14 +70,29 @@ export async function signInWithPassword(email: string, password: string): Promi
   return user;
 }
 
-export async function signUpWithPassword(email: string, password: string): Promise<AuthUser | null> {
+type SignUpMetadata = {
+  accepted_terms?: boolean;
+  accepted_privacy?: boolean;
+  accepted_legal_at?: string;
+  accepted_terms_version?: string;
+  accepted_privacy_version?: string;
+};
+
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+  metadata?: SignUpMetadata,
+): Promise<AuthUser | null> {
   if (!supabase) {
     throw new Error('Supabase Auth is not configured. Check extension/.env values.');
   }
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: getAuthRedirectUrl() },
+    options: {
+      emailRedirectTo: getAuthRedirectUrl(),
+      data: metadata,
+    },
   });
   if (error) throw error;
   return mapUser(data.user ?? null);
@@ -75,6 +101,7 @@ export async function signUpWithPassword(email: string, password: string): Promi
 export async function sendEmailOtp(
   email: string,
   shouldCreateUser: boolean,
+  metadata?: SignUpMetadata,
 ): Promise<void> {
   if (!supabase) {
     throw new Error('Supabase Auth is not configured. Check extension/.env values.');
@@ -84,6 +111,7 @@ export async function sendEmailOtp(
     options: {
       shouldCreateUser,
       emailRedirectTo: getAuthRedirectUrl(),
+      data: metadata,
     },
   });
   if (error) throw error;
@@ -163,6 +191,22 @@ export async function updateCurrentUserProfile(
     },
   });
   if (error) throw error;
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  const syncUrl = getApiUrl('/sync-profile', import.meta.env.VITE_SYNC_PROFILE_API_URL);
+  if (!accessToken || !syncUrl) return;
+
+  try {
+    await fetch(syncUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch (syncError) {
+    console.error('Extension profile sync failed:', syncError);
+  }
 }
 
 export async function updateUserPassword(password: string): Promise<void> {

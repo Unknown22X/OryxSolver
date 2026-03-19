@@ -9,7 +9,7 @@ type RichTextProps = {
   className?: string;
 };
 
-/* ── Error Boundary ────────────────────────────────── */
+/* -- Error Boundary ---------------------------------- */
 
 type BoundaryProps = { fallback: ReactNode; children: ReactNode };
 type BoundaryState = { hasError: boolean };
@@ -30,7 +30,7 @@ class MarkdownErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
-/* ── Inner Markdown renderer ───────────────────────── */
+/* -- Inner Markdown renderer ------------------------- */
 
 function MarkdownRenderer({ text, className }: { text: string; className: string }) {
   return (
@@ -85,7 +85,7 @@ function MarkdownRenderer({ text, className }: { text: string; className: string
   );
 }
 
-/* ── Public component ──────────────────────────────── */
+/* -- Public component -------------------------------- */
 
 export default function RichText({ content, className = '' }: RichTextProps) {
   const text = content?.trim() ?? '';

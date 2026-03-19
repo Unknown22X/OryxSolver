@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChatTurn, StyleMode, UsageSnapshot } from '../types';
 import { postSolveRequest } from '../services/solveApi';
 import { mapSolveErrorMessage } from '../services/mapSolveError';
@@ -20,6 +20,34 @@ export function useSolve(
   const [chatSession, setChatSession] = useState<ChatTurn[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [lastSendTime, setLastSendTime] = useState(0);
+  const managedObjectUrlsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const stillUsed = new Set<string>();
+    for (const turn of chatSession) {
+      for (const image of turn.images ?? []) {
+        if (image.startsWith('blob:')) {
+          stillUsed.add(image);
+        }
+      }
+    }
+
+    for (const url of managedObjectUrlsRef.current) {
+      if (!stillUsed.has(url)) {
+        URL.revokeObjectURL(url);
+        managedObjectUrlsRef.current.delete(url);
+      }
+    }
+  }, [chatSession]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of managedObjectUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+      managedObjectUrlsRef.current.clear();
+    };
+  }, []);
 
   const clearSession = useCallback(() => {
     setChatSession([]);
@@ -40,7 +68,7 @@ export function useSolve(
     }
     
     // Limits
-    if (quotedStep && usage.subscriptionTier !== 'pro' && (usage.stepQuestionsUsed || 0) >= 3) {
+    if (quotedStep && usage.subscriptionTier === 'free' && (usage.stepQuestionsUsed || 0) >= 3) {
       setSendError("Step question limit reached. Upgrade to Pro!");
       onLimitExceeded();
       return null;
@@ -78,10 +106,17 @@ export function useSolve(
         const nextUsage = buildUsageSnapshot(response.usage);
         setUsage(prev => mergeUsageSnapshot(prev, nextUsage));
 
+        const previewImages = payload.images.map((img) => {
+          if (!(img instanceof File)) return img.url;
+          const objectUrl = URL.createObjectURL(img);
+          managedObjectUrlsRef.current.add(objectUrl);
+          return objectUrl;
+        });
+
         const turn: ChatTurn = {
           id: turnId + '-' + Date.now(),
           question: quotedStep ? `[Step ${quotedStep.index + 1}] ${payload.text}` : payload.text,
-          images: payload.images.map(img => (img instanceof File ? URL.createObjectURL(img) : img.url)),
+          images: previewImages,
           isBulk: payload.isBulk,
           response: {
             answer: response.answer,
@@ -103,11 +138,11 @@ export function useSolve(
       }
       return null;
     } catch (error: any) {
-      const code = error.code || null;
+      const code = String(error.status || error.code || '');
       setSendError(mapSolveErrorMessage(code, error.message));
       setSendErrorCode(code);
       analytics.track('solve_failed', { code, message: error.message });
-      if (code === 'LIMIT_EXCEEDED' || code === 'CREDIT_LIMIT_REACHED' || code === 'IMAGE_LIMIT_REACHED') {
+      if (code === 'LIMIT_EXCEEDED' || code === 'CREDIT_LIMIT_REACHED' || code === 'IMAGE_LIMIT_REACHED' || code === '429') {
         onLimitExceeded();
       }
       return null;

@@ -16,10 +16,8 @@ ON public.questions_cache (question_normalized);
 -- Enable RLS
 ALTER TABLE public.questions_cache ENABLE ROW LEVEL SECURITY;
 
--- Allow read for authenticated users (for caching lookups)
-CREATE POLICY "questions_cache_read" ON public.questions_cache
-FOR SELECT TO authenticated USING (true);
-
--- Allow insert for authenticated users (for saving new cache entries)
-CREATE POLICY "questions_cache_insert" ON public.questions_cache
-FOR INSERT TO authenticated WITH CHECK (true);
+-- Cache entries are shared across users, so only server-side service access is allowed.
+CREATE POLICY "questions_cache_service_access" ON public.questions_cache
+FOR ALL TO service_role
+USING (true)
+WITH CHECK (true);

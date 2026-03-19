@@ -23,12 +23,16 @@ export type AuthView = 'sign-in' | 'sign-up';
 export type AuthMethod = 'password' | 'code';
 
 export type UsageSnapshot = {
-  subscriptionTier: 'free' | 'pro';
-  subscriptionStatus: 'active' | 'inactive' | 'canceled';
-  totalCredits: number;
-  usedCredits: number;
+  subscriptionTier: 'free' | 'pro' | 'premium';
+  subscriptionStatus: 'active' | 'inactive' | 'canceled' | 'trialing' | 'past_due';
+  monthlyQuestionsUsed: number;
+  monthlyQuestionsLimit: number;
+  monthlyQuestionsRemaining: number;
   monthlyImagesUsed: number;
   monthlyImagesLimit: number;
+  monthlyBulkUsed: number;
+  monthlyBulkLimit: number;
+  paygoCreditsRemaining?: number;
   stepQuestionsUsed: number;
 };
 

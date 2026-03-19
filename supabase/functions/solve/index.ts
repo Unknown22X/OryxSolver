@@ -4,15 +4,15 @@ import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/
 import { callAiProxy, AiError } from '../_shared/ai.ts';
 import { saveHistoryEntry } from '../_shared/history.ts';
 import { logSolveRun } from '../_shared/solveRuns.ts';
-import { recordUsageEvent } from '../_shared/usage.ts';
+import { getMonthlyUsage, getPlanLimits, isUnlimited, recordUsageEvent } from '../_shared/usage.ts';
 import { getCachedAnswer, saveToCache } from '../_shared/cache.ts';
-import { AppError, jsonError } from '../_shared/http.ts';
+import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
+import { AppError, corsHeaders, handleOptions, jsonError } from '../_shared/http.ts';
 import {
-  consumeCreditForFreeTier,
-  consumeMonthlyImageQuotaForFreeTier,
-  currentMonthStartIsoDate,
   getProfileForSolve,
+  getUserSubscription,
 } from '../_shared/profile.ts';
+import { consumePaygoCredit, getPaygoCreditsRemaining } from '../_shared/creditWallet.ts';
 import type { SolveSuccessResponse, StyleMode } from '../_shared/contracts.ts';
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -25,11 +25,80 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { mimeType: string; data: string } }>> {
+type ImagePart = { inlineData: { mimeType: string; data: string } };
+
+type ExtractedImages = {
+  acceptedUrls: string[];
+  parts: ImagePart[];
+};
+
+function assertQuestionLength(question: string) {
+  if (question.length > 12000) {
+    throw new AppError(413, 'QUESTION_TOO_LARGE', 'Question is too long. Please shorten it and retry.');
+  }
+}
+
+function sanitizeConversationId(input: FormDataEntryValue | null): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return crypto.randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(raw)) {
+    throw new AppError(400, 'INVALID_CONVERSATION_ID', 'conversation_id must be a UUID.');
+  }
+  return raw;
+}
+
+function parseHistory(input: FormDataEntryValue | null): Array<{ role: 'user' | 'model'; text: string }> {
+  if (!input) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(input));
+  } catch {
+    throw new AppError(400, 'INVALID_HISTORY', 'history must be valid JSON.');
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new AppError(400, 'INVALID_HISTORY', 'history must be an array.');
+  }
+
+  if (parsed.length > 12) {
+    throw new AppError(413, 'HISTORY_TOO_LARGE', 'Too many history items. Send up to 12 turns.');
+  }
+
+  let totalChars = 0;
+  return parsed.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new AppError(400, 'INVALID_HISTORY', `history[${index}] must be an object.`);
+    }
+
+    const role = (entry as { role?: unknown }).role;
+    const text = String((entry as { text?: unknown }).text ?? '').trim();
+    if (role !== 'user' && role !== 'model') {
+      throw new AppError(400, 'INVALID_HISTORY', `history[${index}].role is invalid.`);
+    }
+    if (!text) {
+      throw new AppError(400, 'INVALID_HISTORY', `history[${index}].text is required.`);
+    }
+    if (text.length > 2000) {
+      throw new AppError(413, 'HISTORY_TOO_LARGE', `history[${index}] is too long.`);
+    }
+
+    totalChars += text.length;
+    if (totalChars > 12000) {
+      throw new AppError(413, 'HISTORY_TOO_LARGE', 'Combined history is too large.');
+    }
+
+    return { role, text };
+  });
+}
+
+async function extractImageParts(form: FormData): Promise<ExtractedImages> {
   const images = form.getAll('images');
   const imageUrls = form.getAll('image_urls').filter(Boolean);
   const imageEntries = [...images, form.get('image')].filter(Boolean);
-  
+
+  console.log('[SOLVE] Image entries:', imageEntries.length, 'Image URLs:', imageUrls.length);
+
   const uniqueFiles: File[] = [];
   const seen = new Set<string>();
 
@@ -39,16 +108,24 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
     if (seen.has(key)) continue;
     seen.add(key);
     uniqueFiles.push(entry);
+    console.log('[SOLVE] File image:', entry.name, entry.size, entry.type);
   }
 
-  const parts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
+  const acceptedUrls: string[] = [];
+  const parts: ImagePart[] = [];
   const maxFileSizeBytes = 5 * 1024 * 1024;
+  const maxAggregateImageBytes = 15 * 1024 * 1024;
+  let totalBytes = 0;
 
   // Process standard file uploads
   for (const file of uniqueFiles) {
     if (!file.type.startsWith('image/')) continue;
     if (file.size > maxFileSizeBytes) {
       throw new AppError(413, 'IMAGE_TOO_LARGE', `Image "${file.name}" is too large. Max size is 5MB.`);
+    }
+    totalBytes += file.size;
+    if (totalBytes > maxAggregateImageBytes) {
+      throw new AppError(413, 'IMAGE_BATCH_TOO_LARGE', 'Combined image uploads exceed the 15MB request limit.');
     }
     const bytes = new Uint8Array(await file.arrayBuffer());
     parts.push({
@@ -62,6 +139,7 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
   // Process image URLs
   for (const urlEntry of imageUrls) {
     const url = String(urlEntry);
+    console.log('[SOLVE] Image URL:', url?.substring(0, 80));
     if (!url) continue;
     
     // Support Data URLs (base64) directly to avoid fetch errors
@@ -70,13 +148,22 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
         const [meta, b64] = url.split(',');
         const mimeMatch = meta.match(/data:(.*?);base64/);
         const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-        if (b64 && b64.length < 10000000) { // ~7MB limit for data urls
+        const estimatedBytes = Math.ceil((b64?.length ?? 0) * 0.75);
+        if (estimatedBytes > maxFileSizeBytes) {
+          throw new AppError(413, 'IMAGE_TOO_LARGE', 'Inline image is too large. Max size is 5MB.');
+        }
+        totalBytes += estimatedBytes;
+        if (totalBytes > maxAggregateImageBytes) {
+          throw new AppError(413, 'IMAGE_BATCH_TOO_LARGE', 'Combined image uploads exceed the 15MB request limit.');
+        }
+        if (b64 && b64.length < 8_000_000) {
           parts.push({
             inlineData: {
               mimeType: mime,
               data: b64,
             },
           });
+          acceptedUrls.push(url);
           continue;
         }
       } catch (err) {
@@ -84,28 +171,16 @@ async function extractImageParts(form: FormData): Promise<Array<{ inlineData: { 
       }
     }
 
-    if (!url.startsWith('http')) continue;
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) continue;
-      const contentType = resp.headers.get('content-type') || 'image/png';
-      if (!contentType.startsWith('image/')) continue;
-      
-      const bytes = new Uint8Array(await resp.arrayBuffer());
-      if (bytes.length > maxFileSizeBytes) continue;
-
-      parts.push({
-        inlineData: {
-          mimeType: contentType,
-          data: bytesToBase64(bytes),
-        },
-      });
-    } catch (err) {
-      console.warn(`Failed to fetch image from URL: ${url}`, err);
+    if (/^https?:\/\//i.test(url)) {
+      throw new AppError(
+        400,
+        'REMOTE_IMAGE_URLS_NOT_ALLOWED',
+        'Remote image URLs are not supported. Upload the image directly instead.',
+      );
     }
   }
 
-  return parts;
+  return { acceptedUrls, parts };
 }
 
 function chooseAiMode(
@@ -181,9 +256,9 @@ function normalizeQuestionForAi(raw: string): string {
   const text = raw
     .replace(/\r\n?/g, '\n')
     .replace(/\u00A0/g, ' ')
-    .replace(/[−–—]/g, '-')
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
+    .replace(/[\u2212\u2013\u2014]/g, '-')
+    .replace(/[\u201C\u201D\u200C]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
     .trim();
 
   if (!text) return '';
@@ -282,6 +357,8 @@ function hasAmbiguousEquationFormatting(text: string): boolean {
 }
 
 Deno.serve(async (req) => {
+  const options = handleOptions(req);
+  if (options) return options;
   const requestStartedAt = Date.now();
   const reqId = req.headers.get('x-request-id') || crypto.randomUUID();
   let runAuthUserId: string | null = null;
@@ -294,52 +371,20 @@ Deno.serve(async (req) => {
     return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
 
+  const clientIp = getClientIp(req);
+  const rateLimit = await checkRateLimit('/solve', clientIp);
+  if (!rateLimit.allowed) {
+    return jsonError(429, 'RATE_LIMITED', 'Too many requests. Please wait before trying again.', {
+      retryAfter: rateLimit.retryAfter
+    });
+  }
+
   const token = getBearerToken(req);
   if (!token) {
     return jsonError(401, 'MISSING_AUTH_HEADER', 'Missing or invalid Authorization header');
   }
 
   try {
-    const form = await req.formData();
-    const rawQuestion = String(form.get('question') ?? '').trim();
-    const styleMode = parseStyleMode(String(form.get('style_mode') ?? 'standard').trim());
-    runStyleMode = styleMode;
-    const imageParts = await extractImageParts(form);
-    const question =
-      rawQuestion.length > 0
-        ? rawQuestion
-        : imageParts.length > 0
-          ? 'Solve the attached question image.'
-          : '';
-
-    let history: Array<{ role: 'user' | 'model', text: string }> = [];
-    const isBulk = form.get('is_bulk') === 'true';
-    const historyRaw = form.get('history');
-    if (historyRaw) {
-      try {
-        history = JSON.parse(String(historyRaw));
-      } catch (err) {
-        console.warn(`[${reqId}] Failed to parse history:`, err);
-      }
-    }
-    const providedConversationId = String(form.get('conversation_id') || '').trim();
-    const conversationId = providedConversationId || crypto.randomUUID();
-    const normalizedQuestion = normalizeQuestionForAi(question);
-    if (!normalizedQuestion) {
-      return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
-    }
-    const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
-
-    // Check cache first (skip if has images - can't cache images)
-    let cachedAnswer: string | null = null;
-    if (imageParts.length === 0) {
-      const cached = await getCachedAnswer(repairedQuestion);
-      if (cached) {
-        cachedAnswer = cached.answer;
-        console.log(`[CACHE HIT] "${repairedQuestion.substring(0, 50)}..."`);
-      }
-    }
-
     const user = await verifySupabaseAccessToken(token);
     runAuthUserId = user.id;
     const supabase = createSupabaseUserClient(token);
@@ -357,59 +402,138 @@ Deno.serve(async (req) => {
       return jsonError(403, 'ROLE_REQUIRED', 'User must complete onboarding');
     }
 
-    const tier = profile.subscription_tier ?? 'free';
-    const status = profile.subscription_status ?? 'inactive';
-    const allCredits = profile.all_credits && profile.all_credits > 0 ? profile.all_credits : 50;
-    const creditsUsed = profile.used_credits ?? 0;
+    const subscription = await getUserSubscription(supabase, user.id);
+    const rawTier = (subscription.tier ?? 'free') as 'free' | 'pro' | 'premium';
+    const rawStatus = subscription.status ?? 'inactive';
+    const isActiveSubscription = rawStatus === 'active' || rawStatus === 'trialing';
+    const tier = isActiveSubscription
+      ? (rawTier === 'premium' ? 'premium' : rawTier === 'pro' ? 'pro' : 'free')
+      : 'free';
+    const status = isActiveSubscription ? rawStatus : 'inactive';
+    const planLimits = getPlanLimits(tier);
+    const monthlyUsage = await getMonthlyUsage(supabaseAdmin, user.id);
 
-    if (imageParts.length === 0 && tier !== 'pro' && hasAmbiguousEquationFormatting(repairedQuestion)) {
+    const paygoRemaining = await getPaygoCreditsRemaining(supabaseAdmin, user.id);
+
+    const form = await req.formData();
+    const rawQuestion = String(form.get('question') ?? '').trim();
+    assertQuestionLength(rawQuestion);
+    const styleMode = parseStyleMode(String(form.get('style_mode') ?? 'standard').trim());
+    runStyleMode = styleMode;
+    const { acceptedUrls: acceptedImageUrls, parts: imageParts } = await extractImageParts(form);
+    const question =
+      rawQuestion.length > 0
+        ? rawQuestion
+        : imageParts.length > 0
+          ? 'Solve the attached question image.'
+          : '';
+
+    const isBulk = form.get('is_bulk') === 'true';
+    const history = parseHistory(form.get('history'));
+    const isFollowUp = history.length > 0 && !isBulk;
+    const conversationId = sanitizeConversationId(form.get('conversation_id'));
+    const normalizedQuestion = normalizeQuestionForAi(question);
+    if (!normalizedQuestion) {
+      return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
+    }
+    const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
+
+    // Check cache first (skip if has images - can't cache images)
+    let cachedAnswer: string | null = null;
+    if (imageParts.length === 0) {
+      const cached = await getCachedAnswer(repairedQuestion);
+      if (cached) {
+        cachedAnswer = cached.answer;
+        console.log(`[CACHE HIT] "${repairedQuestion.substring(0, 50)}..."`);
+      }
+    }
+
+    if (imageParts.length === 0 && tier === 'free' && hasAmbiguousEquationFormatting(repairedQuestion)) {
       return jsonError(
         422,
         'QUESTION_INCOMPLETE',
         'Equation formatting is ambiguous after copy. Please paste the full equation in plain text or attach a screenshot.',
       );
     }
-    if (tier === 'pro' && status !== 'active') {
-      return jsonError(402, 'PRO_SUBSCRIPTION_INACTIVE', 'Pro subscription is inactive');
-    }
 
-    if (tier === 'pro' && imageParts.length > 20) {
-      return jsonError(400, 'IMAGE_LIMIT_EXCEEDED_PRO', 'Pro users can upload up to 20 images per bulk message.');
-    }
-
-    const freeImageLimit = isBulk ? 10 : 1;
-    if (tier !== 'pro' && imageParts.length > freeImageLimit) {
-      // For Free users, instead of erroring on auto-extracted images, we truncate.
-      // This prevents "IMAGE_LIMIT_EXCEEDED" errors for Inline/Bulk solves.
-      imageParts.splice(freeImageLimit);
+    if (tier === 'free' && (styleMode === 'gen_alpha' || styleMode === 'step_by_step')) {
+      return jsonError(403, 'MODE_LOCKED', 'This mode is not available on the Free plan.');
     }
 
     const imageCount = imageParts.length;
+    const maxImagesPerRequest = 20;
+    if (imageCount > maxImagesPerRequest) {
+      return jsonError(400, 'IMAGE_LIMIT_EXCEEDED', `You can upload up to ${maxImagesPerRequest} images per request.`);
+    }
+    const nextQuestionsUsed = monthlyUsage.questionsUsed + (isFollowUp ? 0 : 1);
+    const nextBulkUsed = monthlyUsage.bulkUsed + (isBulk ? 1 : 0);
+    const nextStepQuestionsUsed = monthlyUsage.stepQuestionsUsed + (isFollowUp ? 1 : 0);
+    const nextImagesUsed = monthlyUsage.imagesUsed + imageCount;
 
-    let nextCreditsUsed = creditsUsed;
-    let nextMonthlyImagesUsed = profile.monthly_images_used ?? 0;
-    if (tier !== 'pro') {
-      if (creditsUsed >= allCredits) {
-        return jsonError(429, 'CREDIT_LIMIT_REACHED', 'You have reached your free question limit. Upgrade to Pro for unlimited solutions.');
-      }
-      if (imageCount > 0) {
-        const monthStart = currentMonthStartIsoDate();
-        const currentMonthlyImagesUsed =
-          profile.monthly_images_period === monthStart ? (profile.monthly_images_used ?? 0) : 0;
-        if (currentMonthlyImagesUsed + imageCount > 10) {
-          return jsonError(429, 'IMAGE_LIMIT_REACHED', 'Monthly image limit reached. Upgrade to Pro for more uploads.');
-        }
+    let usePaygoCredit = false;
+
+    if (!isFollowUp && !isUnlimited(planLimits.questions) && nextQuestionsUsed > planLimits.questions) {
+      if (tier === 'free' && paygoRemaining > 0) {
+        usePaygoCredit = true;
+      } else {
+        return jsonError(429, 'QUESTION_LIMIT_REACHED', 'Monthly question limit reached. Upgrade to Pro or Premium for more usage.');
       }
     }
 
-    // Return cached answer if we have one (skip AI, still check credits for tracking)
+    if (isBulk && !isUnlimited(planLimits.bulk) && nextBulkUsed > planLimits.bulk) {
+      return jsonError(429, 'BULK_LIMIT_REACHED', 'Bulk solve limit reached for this plan.');
+    }
+
+    if (imageCount > 0 && !isUnlimited(planLimits.images) && nextImagesUsed > planLimits.images) {
+      return jsonError(429, 'IMAGE_LIMIT_REACHED', 'Monthly image limit reached for this plan.');
+    }
+
+    const buildUsagePayload = (
+      questionsUsed: number,
+      imagesUsed: number,
+      bulkUsed: number,
+      stepQuestionsUsed: number,
+      paygoRemainingOverride: number,
+    ) => ({
+      subscriptionTier: tier,
+      subscriptionStatus: status,
+      monthlyQuestionsUsed: questionsUsed,
+      monthlyQuestionsLimit: planLimits.questions,
+      monthlyQuestionsRemaining: isUnlimited(planLimits.questions)
+        ? -1
+        : Math.max(planLimits.questions - questionsUsed, 0),
+      stepQuestionsUsed,
+      monthlyImagesUsed: imagesUsed,
+      monthlyImagesLimit: planLimits.images,
+      monthlyBulkUsed: bulkUsed,
+      monthlyBulkLimit: planLimits.bulk,
+      paygoCreditsRemaining: paygoRemainingOverride,
+    });
+    // Return cached answer if we have one (skip AI, still count usage)
     if (cachedAnswer) {
-      if (tier !== 'pro') {
-        nextCreditsUsed = await consumeCreditForFreeTier(
-          supabaseAdmin,
-          profile.id,
-          creditsUsed,
-        );
+      const nextPaygoRemaining = usePaygoCredit ? Math.max(paygoRemaining - 1, 0) : paygoRemaining;
+      if (usePaygoCredit) {
+        await consumePaygoCredit(supabaseAdmin, user.id, 1, {
+          conversationId,
+          mode: runMode,
+          styleMode,
+          source: 'cache_hit',
+        });
+      }
+
+      await recordUsageEvent(supabaseAdmin, user.id, isFollowUp ? 'step_followup' : isBulk ? 'bulk_solve' : 'solve', 1, {
+        mode: runMode,
+        style: styleMode,
+        images: imageCount,
+        is_follow_up: isFollowUp,
+        conversation_id: conversationId,
+      });
+      if (imageCount > 0) {
+        await recordUsageEvent(supabaseAdmin, user.id, 'image_vision', imageCount, {
+          mode: runMode,
+          style: styleMode,
+          conversation_id: conversationId,
+        });
       }
 
       const responseBody: SolveSuccessResponse = {
@@ -417,21 +541,14 @@ Deno.serve(async (req) => {
         ok: true,
         answer: cachedAnswer,
         explanation: '[This answer was retrieved from cache - asked before]',
-        usage: {
-          subscriptionTier: tier === 'pro' ? 'pro' : 'free',
-          subscriptionStatus: status === 'active' ? 'active' : status === 'canceled' ? 'canceled' : 'inactive',
-          totalCredits: allCredits,
-          usedCredits: nextCreditsUsed,
-          remainingCredits: Math.max(allCredits - nextCreditsUsed, 0),
-          monthlyImagesUsed: 0,
-          monthlyImagesLimit: 10,
-        },
+        usage: buildUsagePayload(nextQuestionsUsed, nextImagesUsed, nextBulkUsed, nextStepQuestionsUsed, nextPaygoRemaining),
         metadata: {
           model: 'cache',
-          aiMode: 'cached',
+          aiMode: 'normal',
           styleMode,
           conversationId,
-          isBulk
+          isBulk,
+          isFollowUp,
         },
         suggestions: [],
         steps: ['Answer retrieved from cache (no AI call needed)'],
@@ -439,7 +556,7 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify(responseBody), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -501,26 +618,8 @@ Deno.serve(async (req) => {
     runMode = aiFallbackUsed ? 'fast_fallback' : initialMode;
     runModel = ai.model ?? null;
 
-    if (tier !== 'pro') {
-      nextCreditsUsed = await consumeCreditForFreeTier(
-        supabaseAdmin,
-        profile.id,
-        creditsUsed,
-      );
-      if (imageCount > 0) {
-        const imageQuota = await consumeMonthlyImageQuotaForFreeTier(
-          supabaseAdmin,
-          profile.id,
-          profile.monthly_images_used ?? 0,
-          profile.monthly_images_period ?? null,
-          imageCount,
-        );
-        nextMonthlyImagesUsed = imageQuota.nextMonthlyUsed;
-      }
-    }
-
     // Save to cache for future (only for text-only questions)
-    if (imageCount === 0) {
+    if (imageCount === 0 && ai.answer.trim().toUpperCase() !== 'INCOMPLETE_QUESTION') {
       try {
         await saveToCache(repairedQuestion, ai.answer);
         console.log(`[CACHE SAVE] "${repairedQuestion.substring(0, 50)}..."`);
@@ -530,51 +629,44 @@ Deno.serve(async (req) => {
     }
 
     // History persistence is best-effort and should never fail solve.
-    const { id: historyId } = await saveHistoryEntry(supabaseAdmin, {
+    await saveHistoryEntry(supabaseAdmin, {
       authUserId: user.id,
       question: repairedQuestion,
       answer: ai.answer,
       explanation: ai.explanation,
       conversationId,
       styleMode,
-      image_urls: form.getAll('image_urls').filter(Boolean).map(url => String(url)),
+      image_urls: acceptedImageUrls,
       is_bulk: isBulk,
       steps: ai.steps,
     });
 
-    const isBulkAsk = 
-      question.includes("answer key for the following questions") ||
-      question.includes("Create an answer key for these practice questions");
+    const nextPaygoRemaining = usePaygoCredit ? Math.max(paygoRemaining - 1, 0) : paygoRemaining;
+    if (usePaygoCredit) {
+      await consumePaygoCredit(supabaseAdmin, user.id, 1, {
+        conversationId,
+        mode: runMode,
+        styleMode,
+        source: 'solve',
+      });
+    }
 
     const responseBody: SolveSuccessResponse = {
       api_version: 'v1',
       ok: true,
       answer: ai.answer,
       explanation: ai.explanation,
-      usage: {
-        subscriptionTier: tier === 'pro' ? 'pro' : 'free',
-        subscriptionStatus: status === 'active' ? 'active' : status === 'canceled' ? 'canceled' : 'inactive',
-        totalCredits: allCredits,
-        usedCredits: nextCreditsUsed,
-        remainingCredits: Math.max(allCredits - nextCreditsUsed, 0),
-        monthlyImagesUsed: nextMonthlyImagesUsed,
-        monthlyImagesLimit: 10,
-      },
+      usage: buildUsagePayload(nextQuestionsUsed, nextImagesUsed, nextBulkUsed, nextStepQuestionsUsed, nextPaygoRemaining),
       metadata: {
         model: ai.model,
         aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
         styleMode,
         conversationId,
-        isBulk
+        isBulk,
+        isFollowUp,
       },
       suggestions: ai.suggestions,
-      steps: isBulkAsk ? ai.steps : [
-        ...ai.steps,
-        ...(aiFallbackUsed ? ['Fast fallback mode was used to reduce latency.'] : []),
-        tier === 'pro'
-          ? 'Pro plan: usage not capped by credits.'
-          : `Credits used: ${nextCreditsUsed}/${allCredits}. Images this month: ${nextMonthlyImagesUsed}/10`,
-      ],
+      steps: ai.steps,
     };
 
     void logSolveRun(supabaseAdmin, {
@@ -589,15 +681,24 @@ Deno.serve(async (req) => {
       console.error(`[${reqId}] Solve run logging failed:`, error);
     });
 
-    void recordUsageEvent(supabaseAdmin, user.id, isBulk ? 'bulk_solve' : 'solve', 1, {
+    await recordUsageEvent(supabaseAdmin, user.id, isFollowUp ? 'step_followup' : isBulk ? 'bulk_solve' : 'solve', 1, {
       mode: runMode,
       style: styleMode,
-      images: imageCount
+      images: imageCount,
+      is_follow_up: isFollowUp,
+      conversation_id: conversationId,
     });
+    if (imageCount > 0) {
+      await recordUsageEvent(supabaseAdmin, user.id, 'image_vision', imageCount, {
+        mode: runMode,
+        style: styleMode,
+        conversation_id: conversationId,
+      });
+    }
 
     return new Response(JSON.stringify(responseBody), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
     if (runAuthUserId) {

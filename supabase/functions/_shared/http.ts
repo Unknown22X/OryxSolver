@@ -21,6 +21,23 @@ export class AppError extends Error {
   }
 }
 
+export const corsHeaders: HeadersInit = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+};
+
+export function withCors(headers: HeadersInit = {}): HeadersInit {
+  return { ...corsHeaders, ...headers };
+}
+
+export function handleOptions(req: Request): Response | null {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  return null;
+}
+
 /**
  * Returns a JSON `Response` for error conditions.
  */
@@ -32,7 +49,7 @@ export function jsonError(
 ): Response {
   return new Response(
     JSON.stringify({ error: message, code, ...(details ? { details } : {}) }),
-    { status, headers: { 'Content-Type': 'application/json' } },
+    { status, headers: withCors({ 'Content-Type': 'application/json' }) },
   );
 }
 
@@ -42,6 +59,6 @@ export function jsonError(
 export function jsonOk(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: withCors({ 'Content-Type': 'application/json' }),
   });
 }

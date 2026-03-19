@@ -1,14 +1,4 @@
-/*  ──────────────────────────────────────────────
-    OryxSolver – Main Stylesheet Entry Point
-    
-    This file imports Tailwind CSS and then layers
-    our design system on top in a logical order:
-    
-    1. tokens      → Color palette, spacing, animations
-    2. base        → HTML resets, body defaults, scrollbars
-    3. components  → Reusable UI classes (buttons, inputs…)
-    4. utilities   → App-specific utility helpers
-    ────────────────────────────────────────────── */
+/* OryxSolver Styles */
 
 @import "tailwindcss";
 

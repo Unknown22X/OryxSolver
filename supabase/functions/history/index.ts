@@ -1,7 +1,8 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
 import { createSupabaseUserClient } from '../_shared/db.ts';
-import { jsonError, jsonOk } from '../_shared/http.ts';
+import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
+import { handleOptions, jsonError, jsonOk } from '../_shared/http.ts';
 import type { HistoryEntry, HistoryListResponse } from '../_shared/contracts.ts';
 
 const DEFAULT_LIMIT = 50;
@@ -13,9 +14,21 @@ function parseLimit(raw: string | null): number {
   return Math.min(Math.max(parsed, 1), MAX_LIMIT);
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value);
+}
+
 Deno.serve(async (req) => {
+  const options = handleOptions(req);
+  if (options) return options;
   if (!['GET', 'DELETE', 'PATCH'].includes(req.method)) {
     return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
+  }
+
+  const clientIp = getClientIp(req);
+  const rateLimit = await checkRateLimit('/history', clientIp);
+  if (!rateLimit.allowed) {
+    return jsonError(429, 'RATE_LIMITED', 'Too many requests');
   }
 
   const token = getBearerToken(req);
@@ -39,6 +52,9 @@ Deno.serve(async (req) => {
       if (!conversationId && !deleteAll) {
         return jsonError(400, 'MISSING_TARGET', 'Provide conversation_id or all=true');
       }
+      if (conversationId && !isUuid(conversationId)) {
+        return jsonError(400, 'INVALID_CONVERSATION_ID', 'conversation_id must be a UUID.');
+      }
 
       let query = supabase.from('history_entries').delete().eq('user_id', user.id);
       if (conversationId) {
@@ -61,6 +77,12 @@ Deno.serve(async (req) => {
       if (!conversationId || !title) {
         return jsonError(400, 'INVALID_BODY', 'conversation_id and title are required');
       }
+      if (!isUuid(conversationId)) {
+        return jsonError(400, 'INVALID_CONVERSATION_ID', 'conversation_id must be a UUID.');
+      }
+      if (title.length > 160) {
+        return jsonError(413, 'TITLE_TOO_LONG', 'Title is too long.');
+      }
 
       const { error } = await supabase
         .from('history_entries')
@@ -78,6 +100,9 @@ Deno.serve(async (req) => {
     const limit = parseLimit(url.searchParams.get('limit'));
     const before = url.searchParams.get('before')?.trim();
     const conversationId = url.searchParams.get('conversation_id')?.trim();
+    if (conversationId && !isUuid(conversationId)) {
+      return jsonError(400, 'INVALID_CONVERSATION_ID', 'conversation_id must be a UUID.');
+    }
 
     let query = supabase
       .from('history_entries')

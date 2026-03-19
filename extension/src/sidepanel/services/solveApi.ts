@@ -14,13 +14,23 @@ export async function postSolveRequest(
   const form = new FormData();
   form.append('question', request.question);
   form.append('style_mode', request.styleMode);
-  request.images.forEach((image) => {
+
+  for (const image of request.images) {
     if (image instanceof File) {
+      console.log('[ORYX-API] Sending file:', image.name, image.size, image.type);
       form.append('images', image);
     } else if (typeof image === 'object' && 'url' in image) {
-      form.append('image_urls', image.url);
+      const imageUrl = String(image.url ?? '').trim();
+      if (!imageUrl) continue;
+      if (/^https?:\/\//i.test(imageUrl)) {
+        const error = new Error('Remote image URLs are not supported. Capture or upload the image directly instead.') as Error & { code?: string };
+        error.code = 'REMOTE_IMAGE_URLS_NOT_ALLOWED';
+        throw error;
+      }
+      console.log('[ORYX-API] Sending image_url:', imageUrl.substring(0, 50));
+      form.append('image_urls', imageUrl);
     }
-  });
+  }
   if (request.history && request.history.length > 0) {
     form.append('history', JSON.stringify(request.history));
   }

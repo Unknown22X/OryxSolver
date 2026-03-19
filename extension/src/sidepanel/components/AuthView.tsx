@@ -17,10 +17,18 @@ type AuthViewProps = {
   onSetPassword: (val: string) => void;
   onSetOtpCode: (val: string) => void;
   onSetMethod: (method: AuthMethod) => void;
+  acceptedTerms: boolean;
+  acceptedPrivacy: boolean;
+  termsVersion: string;
+  privacyVersion: string;
+  onSetAcceptedTerms: (value: boolean) => void;
+  onSetAcceptedPrivacy: (value: boolean) => void;
+  onSetView: (view: AuthViewType) => void;
   onSignIn: () => void;
   onSignUp: () => void;
   onVerifyOtp: () => void;
   onResendOtp: () => void;
+  webAppBaseUrl?: string;
 };
 
 export default function AuthView({
@@ -38,16 +46,24 @@ export default function AuthView({
   onSetPassword,
   onSetOtpCode,
   onSetMethod,
+  acceptedTerms,
+  acceptedPrivacy,
+  termsVersion,
+  privacyVersion,
+  onSetAcceptedTerms,
+  onSetAcceptedPrivacy,
+  onSetView,
   onSignIn,
   onSignUp,
   onVerifyOtp,
   onResendOtp,
+  webAppBaseUrl = 'https://oryxsolver.com',
 }: AuthViewProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <main className="relative flex flex-1 items-center justify-center overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-500">
-      <div className="relative w-full max-w-sm overflow-hidden rounded-[40px] border border-white/60 bg-white/80 shadow-2xl backdrop-blur-2xl transition-all duration-500 dark:bg-slate-900/80 dark:border-slate-800">
+      <div className="oryx-shell-panel-strong relative w-full max-w-sm overflow-hidden rounded-[40px] border transition-all duration-500">
         {/* Top Branding */}
         <div className="px-8 pt-10 pb-6 text-center">
           <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-[32px] bg-white shadow-xl shadow-indigo-100 ring-1 ring-slate-100 transition-transform hover:scale-105 duration-300 dark:bg-slate-800 dark:shadow-none dark:ring-slate-700">
@@ -156,6 +172,7 @@ export default function AuthView({
                   type="button"
                   disabled={isBusy}
                   onClick={view === 'sign-in' ? onSignIn : onSignUp}
+                  title={view === 'sign-in' ? 'Click to Sign In' : 'Click to Create Account'}
                   className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100 dark:shadow-none"
                 >
                   <span>{isBusy ? 'Processing...' : (view === 'sign-in' ? 'Sign In' : 'Create Account')}</span>
@@ -167,6 +184,7 @@ export default function AuthView({
                     type="button"
                     disabled={isBusy}
                     onClick={onVerifyOtp}
+                    title="Verify identity with code"
                     className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-3.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                   >
                     {isBusy ? 'Verifying...' : 'Verify & Continue'}
@@ -182,13 +200,69 @@ export default function AuthView({
                 </>
               )}
 
-              <div className="mt-6 text-center">
+              {view === 'sign-up' && !isOtpRequested && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={acceptedTerms}
+                      onChange={(e) => onSetAcceptedTerms(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300"
+                    />
+                    <span>I agree to the Terms ({termsVersion}).</span>
+                  </label>
+                  <label className="mt-2 flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={acceptedPrivacy}
+                      onChange={(e) => onSetAcceptedPrivacy(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300"
+                    />
+                    <span>I agree to the Privacy Policy ({privacyVersion}).</span>
+                  </label>
+                  <div className="mt-2 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => window.open(`${webAppBaseUrl}/terms`, '_blank')}
+                      className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                    >
+                      Terms
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.open(`${webAppBaseUrl}/privacy`, '_blank')}
+                      className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                    >
+                      Privacy
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 text-center space-y-2">
                 <button
                   type="button"
-                  onClick={() => window.open('https://oryxsolver.com/auth', '_blank')}
-                  className="text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors dark:text-slate-400 dark:hover:text-indigo-300"
+                  onClick={() => onSetView(view === 'sign-in' ? 'sign-up' : 'sign-in')}
+                  className="block w-full text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors dark:text-indigo-400"
                 >
-                  {view === 'sign-in' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+                  {view === 'sign-in' ? "Need an account? Create one" : "Already have an account? Sign In"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.open(`${webAppBaseUrl}/${view === 'sign-up' ? 'signup' : 'login'}`, '_blank')}
+                  className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 transition-colors dark:text-indigo-400"
+                >
+                  Continue with Google on the web app
+                </button>
+                <p className="text-[10px] font-medium text-slate-400">
+                  Google auth is handled on the web app for now. After that, use the same account here.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => window.open(webAppBaseUrl, '_blank')}
+                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Open web portal
                 </button>
               </div>
             </div>

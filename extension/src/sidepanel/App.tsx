@@ -9,20 +9,28 @@ import ProfileModal from './components/modals/ProfileModal';
 import UpgradeModal from './components/modals/UpgradeModal';
 
 import { useAuth } from './hooks/useAuth';
+import { useInlineQuestionBridge } from './hooks/useInlineQuestionBridge';
 import { useUsage } from './hooks/useUsage';
 import { useSolve } from './hooks/useSolve';
 
 import { getAccessToken } from './auth/supabaseAuthClient';
 import { deleteHistory, fetchConversation, renameConversation } from './services/historyApi';
 import { analytics } from './services/analyticsService';
+import { fetchExtensionPublicConfig } from './services/appConfig';
+import { captureCroppedAreaToFile } from './services/cameraCapture';
+import { sanitizeExternalUrl } from './services/safeExternalUrl';
 import type { StyleMode } from './types';
-import {
-  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT,
-  MSG_INLINE_SOLVE_RESULT, MSG_CROP_CAPTURE_READY, MSG_CROP_CAPTURE_ERROR,
-  MSG_START_CROP_CAPTURE
-} from '../shared/messageTypes';
+
+function isStyleMode(value: string | null | undefined): value is StyleMode {
+  return value === 'standard' || value === 'exam' || value === 'eli5' || value === 'step_by_step' || value === 'gen_alpha';
+}
 
 export default function App() {
+  const [legalVersions, setLegalVersions] = useState({
+    termsVersion: '2026-03-18',
+    privacyVersion: '2026-03-18',
+  });
+  const [supportEmail, setSupportEmail] = useState('support@oryxsolver.com');
   // --- Global State & Hooks ---
   const { usage, setUsage, syncProfile, resetUsage, upgradeMoment } = useUsage();
   
@@ -32,10 +40,14 @@ export default function App() {
   const { 
     authUser, isAuthLoading, isAuthBusy, authMessage, authEmail, authPassword, 
     authOtpCode, isOtpRequested, authView, authMethod, resendCooldown,
-    setAuthEmail, setAuthPassword, setAuthOtpCode, setAuthMethod,
-    handleSignIn, handleSignUp, handleVerifyOtpCode, signOut, updateProfile,
-    updatePassword, resetAuthState 
-  } = useAuth(syncProfile);
+    setAuthEmail, setAuthPassword, setAuthOtpCode, setAuthMethod, setAuthView,
+    handleSignIn, handleSignUp, handleVerifyOtpCode, handleResendOtp, signOut, updateProfile,
+    updatePassword, resetAuthState,
+    acceptedTerms,
+    acceptedPrivacy,
+    setAcceptedTerms,
+    setAcceptedPrivacy,
+  } = useAuth(syncProfile, legalVersions);
 
   const {
     isSending, sendError, chatSession, setChatSession,
@@ -59,6 +71,15 @@ export default function App() {
   });
   const [settingsPanel, setSettingsPanel] = useState<'menu' | 'profile' | 'appearance' | 'history' | 'usage' | 'password' | 'support'>('menu');
   const [styleMode, setStyleMode] = useState<StyleMode>('standard');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatSession.length > 0) {
+      setTimeout(() => {
+        scrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 100);
+    }
+  }, [chatSession]);
   const [profileName, setProfileName] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -67,51 +88,64 @@ export default function App() {
   const [saveHistory, setSaveHistory] = useState(() => localStorage.getItem('oryx_save_history') !== 'false');
   const [useAnalytics, setUseAnalytics] = useState(() => localStorage.getItem('oryx_analytics') !== 'false');
   const [autoCopy, setAutoCopy] = useState(() => localStorage.getItem('oryx_auto_copy') === 'true');
-  const lastHandledRef = useRef<string | null>(null);
   const [inlineContextSnippet, setInlineContextSnippet] = useState<string | null>(null);
+  const isThreadLocked = Boolean(activeConversationId || chatSession.length > 0);
 
   const isDarkMode = themeMode === 'dark' || (themeMode === 'system' && systemPrefersDark);
   const latestResponse = chatSession.length > 0 ? chatSession[chatSession.length - 1].response : null;
   const logoUrl = chrome.runtime.getURL('icons/128.png?v=3');
-  const rawUpgradeUrl = import.meta.env.VITE_UPGRADE_URL;
-  const upgradeUrl = (() => {
-    if (!rawUpgradeUrl || !authUser) return rawUpgradeUrl;
-    try {
-      const url = new URL(rawUpgradeUrl);
-      // For Lemon Squeezy, we use checkout[custom][user_id] or similar
-      // To keep it generic, we'll add user_id
-      url.searchParams.set('user_id', authUser.id);
-      // If it's a Lemon Squeezy checkout link, they often use 'passthrough' or 'custom'
-      url.searchParams.set('checkout[custom][user_id]', authUser.id);
-      return url.toString();
-    } catch {
-      return rawUpgradeUrl;
-    }
-  })();
   const webAppBaseUrl = (() => {
-    const explicit = String(import.meta.env.VITE_WEBAPP_URL ?? '').trim();
-    if (explicit) return explicit;
-    if (upgradeUrl) {
+    const explicit = sanitizeExternalUrl(String(import.meta.env.VITE_WEBAPP_URL ?? '').trim(), [
+      'oryxsolver.com',
+      'www.oryxsolver.com',
+      'localhost',
+      '127.0.0.1',
+    ]);
+    if (explicit) {
       try {
-        return new URL(upgradeUrl).origin;
+        return new URL(explicit).origin;
       } catch {
         return '';
       }
     }
-    return '';
+    return 'https://oryxsolver.com';
   })();
+  const upgradeUrl = webAppBaseUrl
+    ? `${webAppBaseUrl}/payments-coming-soon${authUser ? `?plan=extension-upgrade&user=${encodeURIComponent(authUser.id)}` : ''}`
+    : '';
 
   // --- Effects & Lifecycle ---
   useEffect(() => {
     analytics.track('app_opened');
     
-    // Check onboarding
+    // First-run help handoff
     const onboardingDone = localStorage.getItem('oryx_onboarding_done');
     if (!onboardingDone && webAppBaseUrl) {
-      chrome.tabs.create({ url: `${webAppBaseUrl}/onboarding.html` });
+      chrome.tabs.create({ url: `${webAppBaseUrl}/how-it-works` });
       localStorage.setItem('oryx_onboarding_done', 'true');
     }
   }, [webAppBaseUrl]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadLegalVersions() {
+      try {
+        const config = await fetchExtensionPublicConfig();
+        if (!active) return;
+        setLegalVersions({
+          termsVersion: config.termsVersion,
+          privacyVersion: config.privacyVersion,
+        });
+        setSupportEmail(config.supportEmail);
+      } catch (error) {
+        console.error('Failed to load extension legal versions:', error);
+      }
+    }
+    void loadLegalVersions();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!saveHistory) {
@@ -190,118 +224,10 @@ export default function App() {
     }
   }, [latestResponse, autoCopy, isSending]);
 
-  useEffect(() => {
-    const dataUrlToFile = (dataUrl: string, filename = 'capture.png'): File | null => {
-      try {
-        const [meta, b64] = dataUrl.split(',');
-        if (!meta || !b64) return null;
-        const mimeMatch = meta.match(/data:(.*?);base64/);
-        const mime = mimeMatch?.[1] || 'image/png';
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-        return new File([bytes], filename, { type: mime });
-      } catch {
-        return null;
-      }
-    };
-
-    const normalizeInlineImages = async (urls: string[] = []) => {
-      return urls.map((url, idx) => {
-        if (typeof url === 'string' && url.startsWith('data:image/')) {
-          return dataUrlToFile(url, `inline-capture-${idx + 1}.png`) || { url };
-        }
-        return { url };
-      });
-    };
-
-    const checkPending = async () => {
-      const result = await chrome.storage.local.get(['pendingInlineQuestion']);
-      if (result.pendingInlineQuestion) {
-        const { text, images, timestamp, type, injectionId, isBulk, tabId } = result.pendingInlineQuestion as { text: string; images?: string[]; timestamp: number; type?: string; injectionId?: string; isBulk?: boolean, tabId?: number };
-        const intentId = injectionId || String(timestamp);
-        if (lastHandledRef.current === intentId) return;
-        lastHandledRef.current = intentId;
-
-        if (Date.now() - timestamp < 4000) {
-          if (isBulk && usage.subscriptionTier !== 'pro') {
-            const bulkData = await chrome.storage.local.get('oryx_bulk_used_count');
-            const count = Number(bulkData.oryx_bulk_used_count || 0);
-            if (count >= 999999) {
-              setSendError("Free limit reached for Bulk Answers. Upgrade to Pro!");
-              setIsUpgradeModalOpen(true);
-              await chrome.storage.local.remove('pendingInlineQuestion');
-              return;
-            }
-            await chrome.storage.local.set({ oryx_bulk_used_count: count + 1 });
-          }
-
-          setInlineContextSnippet(text.slice(0, 160));
-
-          const normalizedImages = await normalizeInlineImages(images || []);
-          handleSend({ text, images: normalizedImages, styleMode: "standard", isBulk }).then((res) => {
-            if (type === MSG_INLINE_SOLVE_AND_INJECT && res?.answer) {
-              const msgPayload = { type: MSG_INLINE_SOLVE_RESULT, payload: { injectionId, answer: res.answer, explanation: res.explanation } };
-              if (tabId) {
-                chrome.tabs.sendMessage(tabId, msgPayload);
-              } else {
-                chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-                  if (tabs[0]?.id) chrome.tabs.sendMessage(tabs[0].id, msgPayload);
-                });
-              }
-            }
-          });
-        }
-        await chrome.storage.local.remove('pendingInlineQuestion');
-      }
-    };
-    checkPending();
-
-    const handleMessage = async (message: any, sender: chrome.runtime.MessageSender) => {
-      if ((message.type === MSG_INLINE_EXTRACT_QUESTION || message.type === MSG_INLINE_SOLVE_AND_INJECT) && message.payload?.text) {
-        const intentId = message.payload.injectionId || String(message.payload.timestamp || Date.now());
-        if (lastHandledRef.current === intentId) return;
-        lastHandledRef.current = intentId;
-
-        if (message.payload.isBulk && usage.subscriptionTier !== 'pro') {
-          const bulkData = await chrome.storage.local.get('oryx_bulk_used_count');
-          const count = Number(bulkData.oryx_bulk_used_count || 0);
-          if (count >= 999999) {
-            setSendError("Free limit reached for Bulk Answers. Upgrade to Pro!");
-            setIsUpgradeModalOpen(true);
-            setTimeout(() => chrome.storage.local.remove('pendingInlineQuestion'), 100);
-            return;
-          }
-          await chrome.storage.local.set({ oryx_bulk_used_count: count + 1 });
-        }
-
-        setInlineContextSnippet(String(message.payload.text).slice(0, 160));
-
-        const normalizedImages = await normalizeInlineImages(message.payload.images || []);
-        handleSend({
-          text: message.payload.text,
-          images: normalizedImages,
-          styleMode: "standard",
-          isBulk: message.payload.isBulk
-        }).then((res) => {
-          if (message.type === MSG_INLINE_SOLVE_AND_INJECT && res?.answer && message.payload?.injectionId) {
-            const msgPayload = { type: MSG_INLINE_SOLVE_RESULT, payload: { injectionId: message.payload.injectionId, answer: res.answer, explanation: res.explanation } };
-            const reqTabId = sender.tab?.id;
-            if (reqTabId) {
-              chrome.tabs.sendMessage(reqTabId, msgPayload);
-            } else {
-              chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-                if (tabs[0]?.id) chrome.tabs.sendMessage(tabs[0].id, msgPayload);
-              });
-            }
-          }
-        });
-        setTimeout(() => chrome.storage.local.remove('pendingInlineQuestion'), 100);
-      }
-    };
-    chrome.runtime.onMessage.addListener(handleMessage);
-    return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, [handleSend, usage.subscriptionTier]);
+  useInlineQuestionBridge({
+    handleSend,
+    setInlineContextSnippet,
+  });
 
   useEffect(() => {
     if (!isSending) {
@@ -356,83 +282,56 @@ export default function App() {
 
   // --- Screen Capture Handler ---
   const handleCaptureScreen = async (): Promise<File | null> => {
-    return new Promise((resolve) => {
-      const listener = (message: any) => {
-        if (message?.type === MSG_CROP_CAPTURE_READY) {
-          chrome.runtime.onMessage.removeListener(listener);
-          try {
-            const dataUrl = message.imageDataUrl;
-            const [meta, b64] = dataUrl.split(',');
-            const mimeMatch = meta?.match(/data:(.*?);base64/);
-            const mime = mimeMatch?.[1] || 'image/png';
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            const file = new File([bytes], 'capture.png', { type: mime });
-            resolve(file);
-          } catch {
-            resolve(null);
-          }
-        }
-        if (message?.type === MSG_CROP_CAPTURE_ERROR) {
-          chrome.runtime.onMessage.removeListener(listener);
-          resolve(null);
-        }
-      };
-      chrome.runtime.onMessage.addListener(listener);
-      chrome.runtime.sendMessage({ type: MSG_START_CROP_CAPTURE }, (res) => {
-        if (!res?.ok) {
-          chrome.runtime.onMessage.removeListener(listener);
-          resolve(null);
-        }
-      });
-      // Safety timeout
-      setTimeout(() => {
-        chrome.runtime.onMessage.removeListener(listener);
-        resolve(null);
-      }, 30000);
-    });
+    try {
+      return await captureCroppedAreaToFile();
+    } catch {
+      return null;
+    }
   };
 
   // --- Render ---
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900 transition-colors duration-300 dark:bg-[#0a0c1b] dark:text-slate-100">
+    <div className="oryx-shell-bg relative flex h-screen flex-col overflow-hidden font-sans text-slate-900 transition-colors duration-300 dark:text-slate-100">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden dark:hidden">
+        <div className="absolute -top-[12%] left-1/2 h-[36%] w-[86%] -translate-x-1/2 rounded-[100%] bg-indigo-200/28 blur-[90px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-15%,rgba(99,102,241,0.08)_0%,transparent_56%)]" />
+      </div>
       {/* Background Glows for Dark Mode */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-0 dark:opacity-100">
-        <div className="absolute -top-[15%] left-1/2 h-[50%] w-[90%] -translate-x-1/2 rounded-[100%] bg-indigo-500/10 blur-[100px]" />
-        <div className="absolute top-0 left-0 h-full w-full bg-[radial-gradient(circle_at_50%_-10%,rgba(79,70,229,0.15)_0%,transparent_60%)]" />
+        <div className="absolute -top-[15%] left-1/2 h-[50%] w-[90%] -translate-x-1/2 rounded-[100%] bg-indigo-500/14 blur-[100px]" />
+        <div className="absolute top-0 left-0 h-full w-full bg-[radial-gradient(circle_at_50%_-10%,rgba(79,70,229,0.2)_0%,transparent_58%)]" />
       </div>
 
-      {authUser && (
-        <SidePanelHeader
-          logoUrl={logoUrl}
-          appName="Oryx Solver"
-          usedCredits={usage.usedCredits}
-          totalCredits={usage.totalCredits}
-          isSignedIn={!!authUser}
-          userEmail={authUser?.email}
-          userPhotoUrl={authUser?.photoURL}
-          isPro={usage.subscriptionTier === 'pro'}
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={() => {
-            setThemeMode((prev) => (prev === 'system' ? 'dark' : prev === 'dark' ? 'light' : 'system'));
-          }}
-          onToggleHistory={() => {
-            const next = !isHistoryOpen;
-            setIsHistoryOpen(next);
-            if (next) analytics.track('history_opened');
-          }}
-          onOpenSettings={() => {
-            setIsProfileOpen(true);
-            analytics.track('settings_opened');
-          }}
-          showCredits={!!authUser}
-          onOpenUpgrade={() => {
-            setIsUpgradeModalOpen(true);
-            analytics.track('upgrade_modal_opened', { source: 'header' });
-          }}
-        />
-      )}
+      <SidePanelHeader
+        logoUrl={logoUrl}
+        appName="Oryx Solver"
+        monthlyUsed={usage.monthlyQuestionsUsed}
+        monthlyLimit={usage.monthlyQuestionsLimit}
+        isSignedIn={!!authUser}
+        userEmail={authUser?.email}
+        userPhotoUrl={authUser?.photoURL}
+        isPro={usage.subscriptionTier !== 'free'}
+        planLabel={usage.subscriptionTier === 'premium' ? 'Premium Account' : usage.subscriptionTier === 'pro' ? 'Pro Account' : undefined}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={() => {
+          setThemeMode((prev) => (prev === 'system' ? 'dark' : prev === 'dark' ? 'light' : 'system'));
+        }}
+        onToggleHistory={() => {
+          const next = !isHistoryOpen;
+          setIsHistoryOpen(next);
+          if (next) analytics.track('history_opened');
+        }}
+        onOpenSettings={() => {
+          setIsProfileOpen(true);
+          analytics.track('settings_opened');
+        }}
+        showCredits={!!authUser}
+        onOpenUpgrade={() => {
+          setIsUpgradeModalOpen(true);
+          analytics.track('upgrade_modal_opened', { source: 'header' });
+        }}
+        webAppBaseUrl={webAppBaseUrl}
+      />
 
       {isSending && inlineContextSnippet && (
         <div className="z-10 mx-3 mt-2 rounded-2xl border border-indigo-100/60 bg-indigo-50/80 px-3 py-2 text-[11px] font-medium text-indigo-700 shadow-sm backdrop-blur-sm animate-in fade-in slide-in-from-top-1 dark:border-indigo-500/30 dark:bg-indigo-900/40 dark:text-indigo-200">
@@ -459,13 +358,30 @@ export default function App() {
             onSetPassword={setAuthPassword}
             onSetOtpCode={setAuthOtpCode}
             onSetMethod={setAuthMethod}
+            acceptedTerms={acceptedTerms}
+            acceptedPrivacy={acceptedPrivacy}
+            termsVersion={legalVersions.termsVersion}
+            privacyVersion={legalVersions.privacyVersion}
+            onSetAcceptedTerms={setAcceptedTerms}
+            onSetAcceptedPrivacy={setAcceptedPrivacy}
             onSignIn={handleSignIn}
             onSignUp={handleSignUp}
             onVerifyOtp={handleVerifyOtpCode}
-            onResendOtp={() => {}}
+            onResendOtp={handleResendOtp}
+            onSetView={setAuthView}
+            webAppBaseUrl={webAppBaseUrl}
           />
+        ) : isAuthLoading ? (
+          <main className="flex flex-1 items-center justify-center p-6">
+            <div className="oryx-shell-panel-strong flex flex-col items-center gap-3 rounded-3xl border px-8 py-10 text-center">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Loading account
+              </p>
+            </div>
+          </main>
         ) : (
-          <main className={`flex min-h-0 flex-1 flex-col bg-transparent custom-scrollbar ${!latestResponse ? 'overflow-hidden' : 'overflow-y-auto space-y-4 p-4 pb-40'}`}>
+          <main className={`flex min-h-0 flex-1 flex-col bg-transparent custom-scrollbar ${(!latestResponse && !isSending) ? 'overflow-hidden' : 'overflow-y-auto space-y-4 p-4 pb-40'}`}>
             {sendError && (
               <div className="w-full max-w-2xl mx-auto mb-4 mt-4 px-4 rounded-xl border border-red-500/20 bg-gradient-to-r from-red-500/10 to-red-400/5 p-4 text-[13px] text-red-700 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-400/20 dark:from-red-500/20 dark:to-red-400/10 dark:text-red-300 flex items-start gap-3">
                 <div className="mt-0.5 rounded-full bg-red-100 p-1 flex-shrink-0 dark:bg-red-900/50">
@@ -527,12 +443,13 @@ export default function App() {
                     <ResponsePanel
                       response={turn.response}
                       onQuoteStep={(text, index) => setQuotedStep({ text, index })}
-                      onSuggestionClick={(s: any) => handleSend({ text: s.prompt, images: [], styleMode: s.styleMode || 'standard' })}
+                      onSuggestionClick={(s: any) => handleSend({ text: s.prompt, images: [], styleMode })}
                     />
                   </div>
                 ))}
               </div>
             )}
+            <div ref={scrollRef} />
           </main>
         )}
       </div>
@@ -542,13 +459,15 @@ export default function App() {
            <div className="w-full">
               <MessageComposer
                 onSend={handleSend}
-                onCaptureScreen={handleCaptureScreen}
+                onCaptureScreen={handleCaptureScreen} 
                 styleMode={styleMode}
                 onStyleModeChange={setStyleMode}
                 isHero={false}
                 isSending={isSending}
                 quotedStep={quotedStep}
                 onClearQuote={() => setQuotedStep(null)}
+                disabledModes={usage.subscriptionTier === 'free' ? ['gen_alpha', 'step_by_step'] : []}
+                modeLocked={isThreadLocked}
               />
            </div>
         </div>
@@ -563,6 +482,7 @@ export default function App() {
               const token = await getAccessToken();
               const data = await fetchConversation(token, conversationId);
               if (data && data.length > 0) {
+                const threadStyleMode = data.map((entry) => entry.style_mode).find(isStyleMode);
                 const turns = data
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .map(entry => ({
@@ -579,6 +499,9 @@ export default function App() {
                   }));
                 setChatSession(turns);
                 setActiveConversationId(conversationId);
+                if (threadStyleMode) {
+                  setStyleMode(threadStyleMode);
+                }
               }
             } catch (e) {
               console.error('Failed to load conversation', e);
@@ -587,9 +510,15 @@ export default function App() {
           onNewSolve={() => { clearSession(); setIsHistoryOpen(false); }}
           onOpenSettings={() => { setIsHistoryOpen(false); setIsProfileOpen(true); }}
           onDeleteConversation={handleDeleteConversation}
+          onOpenUpgrade={() => {
+            setIsHistoryOpen(false);
+            setIsUpgradeModalOpen(true);
+            analytics.track('upgrade_modal_opened', { source: 'history_panel' });
+          }}
           onRenameConversation={handleRenameConversation}
           historyEnabled={saveHistory}
           onEnableHistory={() => setSaveHistory(true)}
+          tier={usage.subscriptionTier || 'free'}
         />
       )}
 
@@ -647,10 +576,11 @@ export default function App() {
             setProfileMessage(e?.message || 'Password update failed.');
           }
         }}
-        totalCredits={usage.totalCredits}
-        usedCredits={usage.usedCredits}
+        monthlyQuestionsLimit={usage.monthlyQuestionsLimit}
+        monthlyQuestionsUsed={usage.monthlyQuestionsUsed}
         monthlyImagesUsed={usage.monthlyImagesUsed}
         monthlyImagesLimit={usage.monthlyImagesLimit}
+        supportEmail={supportEmail}
         webAppBaseUrl={webAppBaseUrl}
       />
 

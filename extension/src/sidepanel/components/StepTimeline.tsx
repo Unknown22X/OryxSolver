@@ -1,4 +1,5 @@
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Copy, Check } from 'lucide-react';
+import { useState } from 'react';
 import RichText from './RichText';
 
 type StepTimelineProps = {
@@ -19,6 +20,14 @@ function parseStepContent(step: string) {
 }
 
 export default function StepTimeline({ steps, isBulk, onQuoteStep }: StepTimelineProps) {
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  const handleCopyStep = (text: string, index: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
   return (
     <div className="relative space-y-8 pl-4 pr-1 pb-2">
       {/* Vertical Timeline Line */}
@@ -49,15 +58,25 @@ export default function StepTimeline({ steps, isBulk, onQuoteStep }: StepTimelin
                    <h3 className={`text-xs font-bold tracking-tight ${isCurrent ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'}`}>{parsed.title}</h3>
                 )}
                 <div className="flex-1" />
-                <button
-                  type="button"
-                  onClick={() => onQuoteStep?.(parsed.body, index)}
-                  className={`flex h-7 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold transition-all hover:scale-105 active:scale-95 ${isCurrent ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 dark:bg-slate-800/50'}`}
-                  title="Ask about this step"
-                >
-                  <MessageSquare size={12} />
-                  <span>Ask</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyStep(parsed.body, index)}
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all hover:scale-105 active:scale-95 ${copiedIndex === index ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 dark:bg-slate-800/50'}`}
+                    title={copiedIndex === index ? "Copied!" : "Copy this step to clipboard"}
+                  >
+                    {copiedIndex === index ? <Check size={12} /> : <Copy size={12} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onQuoteStep?.(parsed.body, index)}
+                    className={`flex h-7 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold transition-all hover:scale-105 active:scale-95 ${isCurrent ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 dark:bg-slate-800/50'}`}
+                    title={`Click to ask Oryx more about this ${isBulk ? 'question' : 'step'}`}
+                  >
+                    <MessageSquare size={12} />
+                    <span>Ask</span>
+                  </button>
+                </div>
               </div>
 
               <div className={`text-sm font-medium leading-relaxed transition-colors duration-500 ${isCurrent ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400'}`}>

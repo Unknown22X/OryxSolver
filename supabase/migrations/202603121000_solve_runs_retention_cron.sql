@@ -3,7 +3,6 @@
 
 -- Enable pg_cron if not already enabled
 create extension if not exists pg_cron;
-
 -- Schedule daily cleanup at 03:00 UTC
 select cron.schedule(
   'cleanup-old-solve-runs',

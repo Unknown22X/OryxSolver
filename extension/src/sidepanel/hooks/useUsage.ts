@@ -7,10 +7,14 @@ import type { UsageSnapshot, UpgradeMoment } from '../types';
 const INITIAL_USAGE: UsageSnapshot = {
   subscriptionTier: 'free',
   subscriptionStatus: 'inactive',
-  totalCredits: 50,
-  usedCredits: 0,
+  monthlyQuestionsUsed: 0,
+  monthlyQuestionsLimit: 15,
+  monthlyQuestionsRemaining: 15,
   monthlyImagesUsed: 0,
-  monthlyImagesLimit: 10,
+  monthlyImagesLimit: 5,
+  monthlyBulkUsed: 0,
+  monthlyBulkLimit: 3,
+  paygoCreditsRemaining: 0,
   stepQuestionsUsed: 0,
 };
 
@@ -33,8 +37,8 @@ export function useUsage() {
       });
       if (res.ok) {
         const dataJson = await res.json();
-        if (dataJson?.profile) {
-          const nextUsage = buildUsageSnapshot(dataJson.profile);
+        if (dataJson?.usage) {
+          const nextUsage = buildUsageSnapshot(dataJson.usage);
           setUsage((prev) => mergeUsageSnapshot(prev, nextUsage));
         }
       }
@@ -45,14 +49,16 @@ export function useUsage() {
 
   const resetUsage = useCallback(() => setUsage(INITIAL_USAGE), []);
 
-  const creditUsagePercent = usage.totalCredits > 0 ? (usage.usedCredits / usage.totalCredits) * 100 : 0;
+  const creditUsagePercent = usage.monthlyQuestionsLimit > 0
+    ? (usage.monthlyQuestionsUsed / usage.monthlyQuestionsLimit) * 100
+    : 0;
   const imageUsagePercent = usage.monthlyImagesLimit > 0
     ? (usage.monthlyImagesUsed / usage.monthlyImagesLimit) * 100
     : 0;
   const effectiveUsagePercent = Math.max(creditUsagePercent, imageUsagePercent);
 
   const upgradeMoment = useMemo<UpgradeMoment>(() => {
-    if (usage.subscriptionTier === 'pro') {
+    if (usage.subscriptionTier === 'pro' || usage.subscriptionTier === 'premium') {
       return { level: null, percent: effectiveUsagePercent, title: '', message: '' };
     }
 
@@ -61,7 +67,7 @@ export function useUsage() {
         level: 'paywall',
         percent: effectiveUsagePercent,
         title: 'Free limit reached',
-        message: `You've used your free questions this month. Upgrade to Pro for unlimited support and premium tools.`,
+        message: `You've used your free questions this month. Upgrade to Pro or Premium for more usage.`,
       };
     }
 

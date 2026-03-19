@@ -1,19 +1,53 @@
-/*  ──────────────────────────────────────────────
-    OryxSolver – Component Classes
-    Reusable, semantic class names built with
-    @apply. Use these in JSX instead of repeating
-    long inline utility strings.
-
-    Naming convention:
-      .oryx-<element>           →  base
-      .oryx-<element>--<variant>→  variant
-    ────────────────────────────────────────────── */
+/* OryxSolver Styles */
 
 @layer components {
 
-  /* ═══════════════════════════════════════════
+  .oryx-page-backdrop {
+    background-color: #f4f7fb;
+    background-image: var(--oryx-page-shell);
+    color: var(--oryx-text-primary);
+  }
+
+  .oryx-surface-panel {
+    background-color: var(--oryx-surface-panel);
+    border: 1px solid var(--oryx-border);
+    box-shadow: var(--oryx-shadow-panel);
+    backdrop-filter: blur(22px);
+  }
+
+  .oryx-surface-panel-strong {
+    background-color: var(--oryx-surface-panel-strong);
+    border: 1px solid var(--oryx-border);
+    box-shadow: var(--oryx-shadow-panel);
+    backdrop-filter: blur(22px);
+  }
+
+  .oryx-surface-soft {
+    background-color: var(--oryx-surface-soft);
+    border: 1px solid var(--oryx-border);
+    backdrop-filter: blur(16px);
+  }
+
+  .oryx-surface-header {
+    background-color: var(--oryx-header-surface);
+    border-color: var(--oryx-border);
+    backdrop-filter: blur(20px);
+  }
+
+  .oryx-input-surface {
+    background-color: var(--oryx-input-surface);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
+
+  .dark .oryx-input-surface {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  /* -------------------------------------------
      BUTTONS
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   /** Primary CTA gradient (sign-in, upgrade, save) */
   .oryx-btn-primary {
@@ -62,9 +96,9 @@
            transition-all;
   }
 
-  /* ═══════════════════════════════════════════
+  /* -------------------------------------------
      FORM INPUTS
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   /** Standard text / password input */
   .oryx-input {
@@ -94,9 +128,9 @@
            text-slate-400 block mb-2;
   }
 
-  /* ═══════════════════════════════════════════
+  /* -------------------------------------------
      TOGGLE SWITCH
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   .oryx-toggle {
     @apply relative inline-flex h-6 w-11 items-center
@@ -119,9 +153,9 @@
     @apply translate-x-1;
   }
 
-  /* ═══════════════════════════════════════════
+  /* -------------------------------------------
      MODALS & OVERLAYS
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   .oryx-modal-overlay {
     @apply fixed inset-0 z-[100] flex items-center justify-center p-6;
@@ -142,9 +176,9 @@
     animation: oryx-zoom-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  /* ═══════════════════════════════════════════
+  /* -------------------------------------------
      CARDS
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   /** Glass card (backdrop blur + border) */
   .oryx-card-glass {
@@ -165,7 +199,7 @@
            dark:bg-slate-900/40 dark:hover:bg-slate-800;
   }
 
-  /** Settings menu row (profile → edit profile, etc.) */
+  /** Settings menu row (profile - edit profile, etc.) */
   .oryx-menu-item {
     @apply flex w-full items-center justify-between
            rounded-2xl border border-slate-100
@@ -173,9 +207,9 @@
            dark:border-slate-800 dark:bg-slate-800/40;
   }
 
-  /* ═══════════════════════════════════════════
+  /* -------------------------------------------
      TYPOGRAPHY HELPERS
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   /** Section divider with centered label */
   .oryx-divider {
@@ -206,9 +240,9 @@
            text-slate-400 dark:text-slate-500;
   }
 
-  /* ═══════════════════════════════════════════
+  /* -------------------------------------------
      ICON CONTAINERS
-     ═══════════════════════════════════════════ */
+     ------------------------------------------- */
 
   /** Colored icon circle (toolkit grid) */
   .oryx-icon-box {

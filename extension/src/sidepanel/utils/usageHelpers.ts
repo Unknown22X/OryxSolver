@@ -5,20 +5,31 @@ import type { UsageSnapshot } from '../types';
  */
 export function buildUsageSnapshot(source: unknown): UsageSnapshot {
   const usage = (source ?? {}) as Record<string, unknown>;
-  
-  const used = (usage.usedCredits ?? usage.used_credits ?? usage.creditsUsed ?? usage.credits_used ?? 0) as number;
-  const stepUsed = (usage.stepQuestionsUsed ?? usage.step_questions_used ?? 0) as number;
-  const total = (usage.totalCredits ?? usage.total_credits ?? usage.creditsLimit ?? usage.limit ?? 50) as number;
-  const tier = (usage.subscriptionTier ?? usage.subscription_tier ?? 'free') as string;
-  const status = (usage.subscriptionStatus ?? usage.subscription_status ?? 'inactive') as string;
+
+  const questionsUsed = (usage.monthlyQuestionsUsed ?? 0) as number;
+  const stepUsed = (usage.stepQuestionsUsed ?? 0) as number;
+  const questionsLimit = (usage.monthlyQuestionsLimit ?? 15) as number;
+  const tier = (usage.subscriptionTier ?? 'free') as string;
+  const status = (usage.subscriptionStatus ?? 'inactive') as string;
+  const remainingOverride = usage.monthlyQuestionsRemaining as number | undefined;
+  const remaining =
+    typeof remainingOverride === 'number'
+      ? remainingOverride
+      : questionsLimit === -1
+        ? -1
+        : Math.max(questionsLimit - questionsUsed, 0);
 
   return {
-    subscriptionTier: tier === 'pro' ? 'pro' : 'free',
-    subscriptionStatus: status === 'active' ? 'active' : 'inactive',
-    totalCredits: typeof total === 'number' && total > 0 ? total : 50,
-    usedCredits: typeof used === 'number' && used >= 0 ? used : 0,
-    monthlyImagesUsed: (usage.monthlyImagesUsed ?? usage.monthly__images_used ?? 0) as number,
-    monthlyImagesLimit: 10,
+    subscriptionTier: tier === 'premium' ? 'premium' : tier === 'pro' ? 'pro' : 'free',
+    subscriptionStatus: status === 'active' || status === 'trialing' ? 'active' : status === 'canceled' ? 'canceled' : status === 'past_due' ? 'past_due' : 'inactive',
+    monthlyQuestionsUsed: typeof questionsUsed === 'number' && questionsUsed >= 0 ? questionsUsed : 0,
+    monthlyQuestionsLimit: typeof questionsLimit === 'number' ? questionsLimit : 15,
+    monthlyQuestionsRemaining: remaining,
+    monthlyImagesUsed: (usage.monthlyImagesUsed ?? 0) as number,
+    monthlyImagesLimit: (usage.monthlyImagesLimit ?? 5) as number,
+    monthlyBulkUsed: (usage.monthlyBulkUsed ?? 0) as number,
+    monthlyBulkLimit: (usage.monthlyBulkLimit ?? 3) as number,
+    paygoCreditsRemaining: (usage.paygoCreditsRemaining ?? 0) as number,
     stepQuestionsUsed: stepUsed,
   };
 }
@@ -30,11 +41,15 @@ export function buildUsageSnapshot(source: unknown): UsageSnapshot {
 export function mergeUsageSnapshot(previous: UsageSnapshot, incoming: UsageSnapshot): UsageSnapshot {
   if (
     incoming.subscriptionTier === previous.subscriptionTier &&
-    incoming.totalCredits === previous.totalCredits
+    incoming.monthlyQuestionsLimit === previous.monthlyQuestionsLimit
   ) {
     return {
       ...incoming,
-      usedCredits: Math.max(previous.usedCredits, incoming.usedCredits),
+      monthlyQuestionsUsed: Math.max(previous.monthlyQuestionsUsed, incoming.monthlyQuestionsUsed),
+      monthlyQuestionsRemaining:
+        incoming.monthlyQuestionsLimit === -1
+          ? -1
+          : Math.max(incoming.monthlyQuestionsLimit - Math.max(previous.monthlyQuestionsUsed, incoming.monthlyQuestionsUsed), 0),
       monthlyImagesUsed: Math.max(previous.monthlyImagesUsed, incoming.monthlyImagesUsed),
       stepQuestionsUsed: Math.max(previous.stepQuestionsUsed, incoming.stepQuestionsUsed),
     };
