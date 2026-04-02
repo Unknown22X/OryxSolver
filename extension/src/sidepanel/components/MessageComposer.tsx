@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Camera, Paperclip, Send, X, Sparkles, HelpCircle, ScanText } from 'lucide-react';
 import type { AiSuggestion, StyleMode } from '../types';
 import { MSG_EXTRACT_PAGE_CONTEXT } from '../../shared/messageTypes';
+import { performQA } from '../../shared/mathCleanup';
 import { analytics } from '../services/analyticsService';
 
 type MessageComposerProps = {
@@ -19,30 +21,22 @@ type MessageComposerProps = {
   modeLocked?: boolean;
 };
 
-const STYLE_MODE_OPTIONS: Array<{ value: StyleMode; label: string }> = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'exam', label: 'Exam' },
-  { value: 'eli5', label: 'ELI5' },
-  { value: 'step_by_step', label: 'Step-by-step' },
-  { value: 'gen_alpha', label: 'Gen Alpha' },
-];
-
-const DEFAULT_IMAGE_PROMPT_BY_MODE: Record<StyleMode, string> = {
-  standard: 'Solve this question from the attached image.',
-  exam: 'Solve this exam question from the attached image.',
-  eli5: 'Solve this question from the attached image and explain simply.',
-  step_by_step: 'Solve this question from the attached image step by step.',
-  gen_alpha: 'Solve this question from the attached image in light Gen Alpha style.',
-};
-
 const DRAFT_STORAGE_KEY = 'oryx_sidepanel_draft_text';
 
-const FALLBACK_SUGGESTIONS: AiSuggestion[] = [
-  { label: 'Explain simpler', prompt: 'Explain this much simpler, like I\'m 5', styleMode: 'eli5' },
-  { label: 'Gen Alpha terms', prompt: 'Explain this using Gen Alpha slang', styleMode: 'gen_alpha' },
-  { label: 'Give an example', prompt: 'Give me a real-world example of this', styleMode: 'standard' },
-  { label: 'Step-by-step', prompt: 'Break this down step-by-step', styleMode: 'step_by_step' },
-  { label: 'Quiz me', prompt: 'Give me a quick practice question about this', styleMode: 'exam' },
+const STYLE_MODE_OPTIONS: Array<{ value: StyleMode; labelKey: string }> = [
+  { value: 'standard', labelKey: 'composer.modes.standard' },
+  { value: 'exam', labelKey: 'composer.modes.exam' },
+  { value: 'eli5', labelKey: 'composer.modes.eli5' },
+  { value: 'step_by_step', labelKey: 'composer.modes.step_by_step' },
+  { value: 'gen_alpha', labelKey: 'composer.modes.gen_alpha' },
+];
+
+const FALLBACK_SUGGESTIONS_KEYS = [
+  { labelKey: 'composer.suggestions.simpler_label', promptKey: 'composer.suggestions.simpler_prompt', styleMode: 'eli5' as StyleMode },
+  { labelKey: 'composer.suggestions.alpha_label', promptKey: 'composer.suggestions.alpha_prompt', styleMode: 'gen_alpha' as StyleMode },
+  { labelKey: 'composer.suggestions.example_label', promptKey: 'composer.suggestions.example_prompt', styleMode: 'standard' as StyleMode },
+  { labelKey: 'composer.suggestions.steps_label', promptKey: 'composer.suggestions.steps_prompt', styleMode: 'step_by_step' as StyleMode },
+  { labelKey: 'composer.suggestions.quiz_label', promptKey: 'composer.suggestions.quiz_prompt', styleMode: 'exam' as StyleMode },
 ];
 
 export default function MessageComposer({
@@ -59,6 +53,7 @@ export default function MessageComposer({
   disabledModes = [],
   modeLocked = false,
 }: MessageComposerProps) {
+  const { t } = useTranslation();
   const rawModeGuideUrl = String(import.meta.env.VITE_MODE_GUIDE ?? '').trim();
   const modeGuideUrl = rawModeGuideUrl
     ? (rawModeGuideUrl.startsWith('http') ? rawModeGuideUrl : `https://${rawModeGuideUrl}`)
@@ -71,6 +66,17 @@ export default function MessageComposer({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const cooldownTimerRef = useRef<number | null>(null);
+  const captureHintTimerRef = useRef<number | null>(null);
+
+  const getTranslatedImagePrompt = (mode: StyleMode) => t(`composer.image_prompts.${mode}`);
+  
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+      if (captureHintTimerRef.current) clearTimeout(captureHintTimerRef.current);
+    };
+  }, []);
+
   const MAX_TEXTAREA_HEIGHT = 160;
 
   const autosizeTextarea = () => {
@@ -143,11 +149,11 @@ export default function MessageComposer({
       rawText.length > 0
         ? rawText
         : effectiveAttachments.length > 0
-          ? DEFAULT_IMAGE_PROMPT_BY_MODE[effectiveStyle]
+          ? getTranslatedImagePrompt(effectiveStyle)
           : '';
 
     // Fix: Block sends that lack any real context (no image and no custom text)
-    const isGenericPrompt = Object.values(DEFAULT_IMAGE_PROMPT_BY_MODE).includes(effectiveText);
+    const isGenericPrompt = STYLE_MODE_OPTIONS.some(opt => getTranslatedImagePrompt(opt.value) === effectiveText);
     if (!effectiveText || (isGenericPrompt && effectiveAttachments.length === 0)) {
       setCaptureHint('Missing Context: Please provide a specific question or upload a screenshot first.');
       return;
@@ -182,8 +188,9 @@ export default function MessageComposer({
       } else {
         setCaptureHint('No capture returned. Refresh page and try again.');
       }
-    } catch {
-      setCaptureHint('Capture failed. Refresh page and try again.');
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'Capture failed. Refresh page and try again.';
+      setCaptureHint(message);
     } finally {
       setIsCapturing(false);
     }
@@ -191,14 +198,31 @@ export default function MessageComposer({
 
   const handleExtractPageContext = async () => {
     if (isSending) return;
+
+    if (captureHintTimerRef.current) {
+      clearTimeout(captureHintTimerRef.current);
+      captureHintTimerRef.current = null;
+    }
+
     setIsCapturing(true);
     setCaptureHint('Scanning page for questions...');
     try {
       const response = await chrome.runtime.sendMessage({ type: MSG_EXTRACT_PAGE_CONTEXT });
       if (response && response.ok && response.text) {
         setText((prev) => prev ? `${prev}\n\n${response.text}` : response.text);
-        setCaptureHint('Question text added from page.');
-        analytics.track('screen_capture_completed', { type: 'text_extraction' });
+        
+        const qaResult = performQA(response.text);
+        if (!qaResult.isValid && qaResult.warnings.length > 0) {
+          setCaptureHint(qaResult.suggestion || `Extracted, but seems messy: ${qaResult.warnings[0]}`);
+        } else {
+          setCaptureHint('Question text added from page.');
+        }
+        
+        analytics.track('screen_capture_completed', { 
+          type: 'text_extraction', 
+          warnings: qaResult.warnings.length,
+          isValid: qaResult.isValid
+        });
       } else {
         setCaptureHint('No text found. Try highlighting the question manually.');
       }
@@ -206,11 +230,20 @@ export default function MessageComposer({
       setCaptureHint('Failed to scan page. Refresh and try again.');
     } finally {
       setIsCapturing(false);
-      setTimeout(() => setCaptureHint(null), 4000);
+      captureHintTimerRef.current = window.setTimeout(() => {
+        setCaptureHint(null);
+        captureHintTimerRef.current = null;
+      }, 5000);
     }
   };
 
-  const displaySuggestions = suggestions.length > 0 ? suggestions : FALLBACK_SUGGESTIONS;
+  const dynamicFallbackSuggestions: AiSuggestion[] = FALLBACK_SUGGESTIONS_KEYS.map(s => ({
+    label: t(s.labelKey),
+    prompt: t(s.promptKey),
+    styleMode: s.styleMode
+  }));
+
+  const displaySuggestions = suggestions.length > 0 ? suggestions : dynamicFallbackSuggestions;
   const showSuggestions = displaySuggestions.length > 0 && (attachments.length > 0 || hasContext || text.trim().length > 0);
 
   return (
@@ -221,7 +254,7 @@ export default function MessageComposer({
         <div className={`mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500 ${isHero ? 'flex flex-col items-center' : ''}`}>
           <div className="mb-2 flex items-center gap-1.5 px-1">
             <Sparkles size={11} className="text-indigo-500" />
-            <p className={`font-black tracking-wider text-indigo-500 ${isHero ? 'text-[10px]' : 'text-[9px] uppercase'}`}>Try asking:</p>
+            <p className={`font-black tracking-wider text-indigo-500 ${isHero ? 'text-[10px]' : 'text-[9px] uppercase'}`}>{t('response.suggestions')}</p>
           </div>
           <div className={`flex flex-wrap gap-2 ${isHero ? 'justify-center' : ''} ${isSending || cooldownRemaining > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
             {displaySuggestions.slice(0, 4).map((suggestion, index) => (
@@ -287,7 +320,7 @@ export default function MessageComposer({
             <div className={`flex items-center justify-between rounded-[12px] px-3 py-2 ${isHero ? 'bg-slate-100 dark:bg-[#020617]/70' : 'bg-slate-100/50 dark:bg-slate-900/40'}`} style={!isHero ? { backgroundColor: 'var(--oryx-panel-soft)' } : undefined}>
               <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Thread mode</span>
               <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-300">
-                {STYLE_MODE_OPTIONS.find((option) => option.value === styleMode)?.label ?? styleMode}
+                {STYLE_MODE_OPTIONS.find((option) => option.value === styleMode)?.labelKey ? t(STYLE_MODE_OPTIONS.find((option) => option.value === styleMode)!.labelKey) : styleMode}
               </span>
             </div>
           ) : (
@@ -310,7 +343,7 @@ export default function MessageComposer({
                         : isHero ? 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                     } ${isDisabled ? 'opacity-40 cursor-not-allowed hover:text-slate-500' : ''}`}
                   >
-                    {option.label}
+                    {t(option.labelKey)}
                   </button>
                 );
               })}
@@ -324,7 +357,7 @@ export default function MessageComposer({
                 className="flex items-center gap-1 text-[9px] font-bold hover:text-indigo-600 dark:hover:text-indigo-400"
               >
                 <HelpCircle size={11} />
-                <span>Modes guide</span>
+                <span>{t('composer.modes_guide')}</span>
               </button>
             </div>
           )}
@@ -405,7 +438,7 @@ export default function MessageComposer({
                   handleSend();
                 }
               }}
-              placeholder={isSending ? "Oryx is thinking..." : "Ask any homework question or upload a screenshot..."}
+              placeholder={isSending ? t('common.processing') : t('hero.type_question')}
               rows={1}
               className={`flex-1 max-h-32 min-h-[40px] resize-none bg-transparent py-2 text-[15px] font-bold leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-400 outline-none disabled:opacity-50 ${isHero ? 'text-slate-900 dark:text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}
             />
@@ -430,13 +463,12 @@ export default function MessageComposer({
         </div>
       </div>
 
-      {captureHint && (
+      {captureHint ? (
         <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-center animate-in slide-in-from-top-1 dark:bg-amber-900/20" style={{ backgroundColor: 'rgba(251, 191, 36, 0.14)' }}>
           <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
           <p className="text-[11px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">{captureHint}</p>
         </div>
-      )}
-
-    </footer>
+      ) : null}
+      </footer>
   );
 }
