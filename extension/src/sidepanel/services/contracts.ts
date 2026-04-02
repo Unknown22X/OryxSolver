@@ -4,6 +4,7 @@ export type SolveRequest = {
   question: string;
   styleMode: StyleMode;
   images: (File | { url: string })[];
+  language?: string;
   history?: Array<{ role: 'user' | 'model', text: string }>;
   conversationId?: string;
   quotedStep?: { text: string; index: number } | null;
@@ -45,6 +46,43 @@ export type SolveResponse = {
   isBulk?: boolean;
   suggestions: SolveSuggestion[];
 };
+
+export type SolveStreamPhase =
+  | 'auth'
+  | 'preparing'
+  | 'cache'
+  | 'calling_ai'
+  | 'refining'
+  | 'finalizing';
+
+export type SolveStatusEvent = {
+  type: 'status';
+  phase: SolveStreamPhase;
+};
+
+export type SolvePreviewEvent = {
+  type: 'preview';
+  answer: string;
+  explanation?: string;
+  steps?: string[];
+};
+
+export type SolveFinalEvent = {
+  type: 'final';
+  data: SolveResponse;
+};
+
+export type SolveErrorEvent = {
+  type: 'error';
+  code?: string;
+  message: string;
+};
+
+export type SolveStreamEvent =
+  | SolveStatusEvent
+  | SolvePreviewEvent
+  | SolveFinalEvent
+  | SolveErrorEvent;
 
 export type ApiError = {
   error?: string;

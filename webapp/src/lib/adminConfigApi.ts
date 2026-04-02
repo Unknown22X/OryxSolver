@@ -7,15 +7,12 @@ export const ADMIN_CONFIG_KEYS = [
   'privacy_content',
   'product_features',
   'support_contact',
+  'enabled_models',
+  'system_limits',
+  'ai_system_prompt',
 ] as const;
 
 type AdminConfigKey = (typeof ADMIN_CONFIG_KEYS)[number];
-
-type AdminConfigResponse = {
-  api_version: 'v1';
-  ok: true;
-  rows: ConfigRow[];
-};
 
 type AdminConfigUpdate = {
   key: AdminConfigKey;
@@ -24,14 +21,14 @@ type AdminConfigUpdate = {
 };
 
 export async function fetchAdminConfig(): Promise<ConfigRow[]> {
-  const response = await fetchEdge<AdminConfigResponse>('/admin-config', { method: 'GET' });
-  return response.rows;
+  const response = await fetchEdge<{ config: ConfigRow[] }>('/admin-actions/config', { method: 'GET' });
+  return response.config;
 }
 
 export async function saveAdminConfig(updates: AdminConfigUpdate[]): Promise<void> {
-  await fetchEdge('/admin-config', {
+  await fetchEdge('/admin-actions/update-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ updates }),
+    body: JSON.stringify({ configUpdates: updates }),
   });
 }

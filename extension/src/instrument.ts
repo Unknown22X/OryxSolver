@@ -10,7 +10,10 @@ if (dsn) {
     tracesSampleRate: isProd ? 0.1 : 1.0,
     sendDefaultPii: false,
     environment: import.meta.env.MODE,
+    release: import.meta.env.VITE_APP_VERSION || 'unknown',
   });
+
+  Sentry.setTag('surface', 'chrome_extension');
 } else if (isProd) {
   console.warn("Sentry DSN not found. Error monitoring disabled.");
 }

@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { Sparkles, Lightbulb, ListOrdered } from 'lucide-react';
 import AnswerHeroCard from './AnswerHeroCard';
 import StepTimeline from './StepTimeline';
 import RichText from './RichText';
+import FeedbackButtons from './FeedbackButtons';
 import { parseExplanationSteps } from '../utils/parseExplanationSteps';
 import type { AiResponse } from '../types';
 
@@ -13,6 +15,16 @@ type ResponsePanelProps = {
   isPro?: boolean;
   isLatest?: boolean;
   onSuggestionClick?: (s: any) => void;
+  conversationId?: string;
+};
+
+const PHASE_LABELS: Record<NonNullable<AiResponse['statusPhase']>, string> = {
+  auth: 'Checking access',
+  preparing: 'Preparing request',
+  cache: 'Checking cache',
+  calling_ai: 'Solving now',
+  refining: 'Refining answer',
+  finalizing: 'Finalizing response',
 };
 
 function normalizeComparableText(value: string) {
@@ -34,12 +46,24 @@ function isConversationalPrompt(question: string, answer: string, explanation: s
     /\bgive me (an )?example\b/,
     /\bmake me a practice question\b/,
     /\bquiz me\b/,
+    /\b(prompt|system prompt|instructions|internal instructions|rules)\b/,
+    /\bwhat did i ask\b/,
+    /\bwhat did i say\b/,
+    /\bremember\b.*\b(before|earlier|previously)\b/,
+    /\bwhat model\b/,
+    /\bwhich model\b/,
+    /\bgemini\b/,
+    /\bapi key\b/,
   ];
 
   if (conversationalPatterns.some((pattern) => pattern.test(combined))) return true;
   if (/[=+\-*/^]/.test(prompt)) return false;
   if (/\bsolve\b|\bcalculate\b|\bderive\b|\bequation\b|\bformula\b/i.test(prompt)) return false;
-  return prompt.length <= 80 && /^(what|why|how|can|could|would|do|are|is)\b/.test(prompt);
+  return (
+    prompt.length <= 80 &&
+    /^(what|why|how|can|could|would|do|are|is)\b/.test(prompt) &&
+    /\b(you|your|this thread|before|earlier|previous|remember)\b/.test(prompt)
+  );
 }
 
 function getResponsePresentation(question: string, answer: string, steps: string[], explanation: string) {
@@ -100,24 +124,42 @@ function getResponsePresentation(question: string, answer: string, steps: string
   };
 }
 
-export default function ResponsePanel({ response, question = '', onQuoteStep }: ResponsePanelProps) {
-  const isBulk = response?.answer === 'Answer Key';
-  const parsedSteps =
+export default function ResponsePanel({ response, question = '', onQuoteStep, conversationId }: ResponsePanelProps) {
+  const isBulk = useMemo(() => response?.answer === 'Answer Key', [response?.answer]);
+  
+  const parsedSteps = useMemo(() => 
     response && (response.steps?.length ?? 0) === 0
       ? parseExplanationSteps(response.explanation, isBulk)
-      : [];
-  const steps: string[] = response
-    ? ((response.steps?.length ?? 0) > 0 ? response.steps! : parsedSteps)
-    : [];
+      : []
+  , [response, isBulk]);
+
+  const steps: string[] = useMemo(() => 
+    response
+      ? ((response.steps?.length ?? 0) > 0 ? response.steps! : parsedSteps)
+      : []
+  , [response, parsedSteps]);
+
   const answerText = response?.answer?.trim() ?? '';
   const explanationText = response?.explanation?.trim() ?? '';
-  const presentation = getResponsePresentation(question, answerText, steps, explanationText);
-  const visibleSteps = presentation.hideSteps ? [] : steps;
-  const normalizedSteps = normalizeComparableText(visibleSteps.map((step) => step.trim()).filter(Boolean).join('\n'));
-  const showExplanation =
+  
+  const presentation = useMemo(() => 
+    getResponsePresentation(question, answerText, steps, explanationText)
+  , [question, answerText, steps, explanationText]);
+
+  const visibleSteps = useMemo(() => 
+    presentation.hideSteps ? [] : steps
+  , [presentation.hideSteps, steps]);
+
+  const normalizedSteps = useMemo(() => 
+    normalizeComparableText(visibleSteps.map((step) => step.trim()).filter(Boolean).join('\n'))
+  , [visibleSteps]);
+
+  const showExplanation = useMemo(() => 
     explanationText.length > 0 &&
     normalizeComparableText(explanationText) !== normalizeComparableText(answerText) &&
-    normalizeComparableText(explanationText) !== normalizedSteps;
+    normalizeComparableText(explanationText) !== normalizedSteps
+  , [explanationText, answerText, normalizedSteps]);
+  const statusLabel = response?.statusPhase ? PHASE_LABELS[response.statusPhase] : null;
 
   if (!response) {
     return (
@@ -144,40 +186,56 @@ export default function ResponsePanel({ response, question = '', onQuoteStep }: 
         </section>
       ) : (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <AnswerHeroCard answer={response.answer} title={presentation.title} subtitle={presentation.subtitle} />
+          <AnswerHeroCard
+            answer={response.answer}
+            title={presentation.title}
+            subtitle={presentation.subtitle}
+            statusLabel={statusLabel}
+            isPreview={response.isPreview}
+            interrupted={response.interrupted}
+          />
         </div>
       )}
-      <div className="animate-in fade-in slide-in-from-bottom-2 space-y-4 rounded-[32px] border border-white/70 bg-white/50 p-6 shadow-sm backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-800/40" style={{ animationDelay: '100ms' }}>
-        {visibleSteps.length > 0 ? (
-          <section className="rounded-[28px] border border-slate-200/70 bg-white/70 p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/30">
-            <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-              <ListOrdered size={16} className="text-indigo-500 dark:text-indigo-300" />
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                {isBulk ? 'Answer key' : 'Steps'}
-              </p>
-            </div>
-            <StepTimeline steps={visibleSteps} isBulk={isBulk} onQuoteStep={onQuoteStep} />
-          </section>
-        ) : explanationText ? (
-          <section className="rounded-[28px] border border-slate-200/70 bg-white/70 p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/30">
-            <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-              <Lightbulb size={16} className="text-indigo-500 dark:text-indigo-300" />
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Explanation</p>
-            </div>
-            <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
-          </section>
-        ) : null}
+      {statusLabel && !response.interrupted && (
+        <div className="rounded-[24px] border border-indigo-100/80 bg-indigo-50/60 px-4 py-3 text-xs font-semibold text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-950/20 dark:text-indigo-200">
+          {statusLabel}
+        </div>
+      )}
+      {(visibleSteps.length > 0 || explanationText || showExplanation || conversationId) && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 space-y-4 rounded-[32px] border border-white/70 bg-white/50 p-6 shadow-sm backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-800/40" style={{ animationDelay: '100ms' }}>
+          {visibleSteps.length > 0 ? (
+            <section className="rounded-[28px] border border-slate-200/70 bg-white/70 p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/30">
+              <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+                <ListOrdered size={16} className="text-indigo-500 dark:text-indigo-300" />
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  {isBulk ? 'Answer key' : 'Steps'}
+                </p>
+              </div>
+              <StepTimeline steps={visibleSteps} isBulk={isBulk} onQuoteStep={onQuoteStep} />
+            </section>
+          ) : explanationText && presentation.layout !== 'chat' ? (
+            <section className="rounded-[28px] border border-slate-200/70 bg-white/70 p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/30">
+              <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+                <Lightbulb size={16} className="text-indigo-500 dark:text-indigo-300" />
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Explanation</p>
+              </div>
+              <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
+            </section>
+          ) : null}
 
-        {showExplanation && (
-          <section className="rounded-[28px] border border-indigo-100/80 bg-indigo-50/60 p-5 dark:border-indigo-500/20 dark:bg-indigo-950/20">
-            <div className="mb-3 flex items-center gap-2">
-              <Lightbulb size={16} className="text-indigo-500 dark:text-indigo-300" />
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">{presentation.explanationLabel}</p>
-            </div>
-            <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
-          </section>
-        )}
-      </div>
+          {showExplanation && (
+            <section className="rounded-[28px] border border-indigo-100/80 bg-indigo-50/60 p-5 dark:border-indigo-500/20 dark:bg-indigo-950/20">
+              <div className="mb-3 flex items-center gap-2">
+                <Lightbulb size={16} className="text-indigo-500 dark:text-indigo-300" />
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">{presentation.explanationLabel}</p>
+              </div>
+              <RichText content={response.explanation} className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200" />
+            </section>
+          )}
+
+          {conversationId && <FeedbackButtons conversationId={conversationId} />}
+        </div>
+      )}
     </article>
   );
 }

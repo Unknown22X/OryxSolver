@@ -30,7 +30,7 @@ export default function AdminRoute({
     return <AdminRouteLoader />;
   }
 
-  if (profile?.role !== 'admin') {
+  if (!['admin', 'support', 'read-only'].includes(profile?.role || '')) {
     return <Navigate to="/dashboard" replace />;
   }
 

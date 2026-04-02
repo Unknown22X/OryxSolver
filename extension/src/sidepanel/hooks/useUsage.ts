@@ -49,11 +49,14 @@ export function useUsage() {
 
   const resetUsage = useCallback(() => setUsage(INITIAL_USAGE), []);
 
+  const totalQuestionsCapacity = usage.monthlyQuestionsLimit === -1 ? -1 : (usage.monthlyQuestionsLimit + (usage.paygoCreditsRemaining || 0));
   const creditUsagePercent = usage.monthlyQuestionsLimit > 0
-    ? (usage.monthlyQuestionsUsed / usage.monthlyQuestionsLimit) * 100
+    ? Math.min((usage.monthlyQuestionsUsed / (totalQuestionsCapacity > 0 ? totalQuestionsCapacity : usage.monthlyQuestionsLimit)) * 100, 100)
     : 0;
+    
+  const totalImagesCapacity = usage.monthlyImagesLimit === -1 ? -1 : (usage.monthlyImagesLimit + (usage.paygoCreditsRemaining || 0)); // Assuming paygo applies to images too if needed, or stick to questions logic
   const imageUsagePercent = usage.monthlyImagesLimit > 0
-    ? (usage.monthlyImagesUsed / usage.monthlyImagesLimit) * 100
+    ? Math.min((usage.monthlyImagesUsed / (totalImagesCapacity > 0 ? totalImagesCapacity : usage.monthlyImagesLimit)) * 100, 100)
     : 0;
   const effectiveUsagePercent = Math.max(creditUsagePercent, imageUsagePercent);
 
@@ -62,7 +65,9 @@ export function useUsage() {
       return { level: null, percent: effectiveUsagePercent, title: '', message: '' };
     }
 
-    if (effectiveUsagePercent >= 100) {
+    const hasNoCredits = (usage.paygoCreditsRemaining || 0) <= 0;
+
+    if (effectiveUsagePercent >= 100 && hasNoCredits) {
       return {
         level: 'paywall',
         percent: effectiveUsagePercent,
@@ -71,7 +76,7 @@ export function useUsage() {
       };
     }
 
-    if (effectiveUsagePercent >= 90) {
+    if (effectiveUsagePercent >= 90 && hasNoCredits) {
       return {
         level: 'strong',
         percent: effectiveUsagePercent,
@@ -80,7 +85,7 @@ export function useUsage() {
       };
     }
 
-    if (effectiveUsagePercent >= 70) {
+    if (effectiveUsagePercent >= 70 && hasNoCredits) {
       return {
         level: 'soft',
         percent: effectiveUsagePercent,

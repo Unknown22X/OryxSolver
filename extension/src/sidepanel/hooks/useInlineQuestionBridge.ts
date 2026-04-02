@@ -12,7 +12,7 @@ import {
 } from '../../shared/messageTypes';
 import type { StyleMode } from '../types';
 
-type SendResult = { answer: string; explanation: string } | null;
+type SendResult = { answer: string; explanation: string; steps?: string[] } | null;
 
 type UseInlineQuestionBridgeOptions = {
   handleSend: (payload: {
@@ -65,6 +65,7 @@ async function relayInlineSolveResult(
       injectionId,
       answer: result.answer,
       explanation: result.explanation,
+      steps: result.steps
     },
   });
 }

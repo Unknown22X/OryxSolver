@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import MessageComposer from './MessageComposer';
 import type { StyleMode, UsageSnapshot } from '../types';
 
@@ -13,19 +14,20 @@ type HeroViewProps = {
 };
 
 const EXAMPLE_PROMPTS = [
-  { icon: '\u{1F9EE}', label: 'Solve 3x^2 - 12x + 9 = 0', prompt: 'Solve for x: 3x^2 - 12x + 9 = 0', mode: 'standard' as StyleMode },
-  { icon: '\u{1F33F}', label: 'Explain photosynthesis', prompt: 'Explain the process of photosynthesis step by step', mode: 'step_by_step' as StyleMode },
-  { icon: '\u{1F30D}', label: 'ELI5: Gravity', prompt: "Explain gravity like I'm 5 years old", mode: 'eli5' as StyleMode },
-  { icon: '\u{1F570}\u{FE0F}', label: 'Gen Alpha: French Revolution', prompt: 'Explain the French Revolution in Gen Alpha terms', mode: 'gen_alpha' as StyleMode },
-  { icon: '\u{1F9EC}', label: 'Quiz me on Biology', prompt: 'Give me 5 practice quiz questions on cell biology', mode: 'exam' as StyleMode },
-  { icon: '\u{1F4DA}', label: 'Summarize Pride and Prejudice', prompt: 'Summarize the main themes of Pride and Prejudice', mode: 'standard' as StyleMode },
+  { icon: '\u{1F9EE}', labelKey: 'composer.examples.math_label', promptKey: 'composer.examples.math_prompt', mode: 'standard' as StyleMode },
+  { icon: '\u{1F33F}', labelKey: 'composer.examples.science_label', promptKey: 'composer.examples.science_prompt', mode: 'step_by_step' as StyleMode },
+  { icon: '\u{1F30D}', labelKey: 'composer.examples.eli5_label', promptKey: 'composer.examples.eli5_prompt', mode: 'eli5' as StyleMode },
+  { icon: '\u{1F570}\u{FE0F}', labelKey: 'composer.examples.history_label', promptKey: 'composer.examples.history_prompt', mode: 'gen_alpha' as StyleMode },
+  { icon: '\u{1F9EC}', labelKey: 'composer.examples.quiz_label', promptKey: 'composer.examples.quiz_prompt', mode: 'exam' as StyleMode },
+  { icon: '\u{1F4DA}', labelKey: 'composer.examples.english_label', promptKey: 'composer.examples.english_prompt', mode: 'standard' as StyleMode },
 ];
 
 export default function HeroView({
   logoUrl, onSend, onCaptureScreen, styleMode, onStyleModeChange, isSending, usage, onOpenUpgrade
 }: HeroViewProps) {
+  const { t } = useTranslation();
   const isPro = usage?.subscriptionTier !== 'free';
-  const remainingQuestions = usage?.monthlyQuestionsLimit === -1 ? -1 : Math.max((usage?.monthlyQuestionsLimit || 0) - (usage?.monthlyQuestionsUsed || 0), 0);
+  const remainingQuestions = usage?.monthlyQuestionsLimit === -1 ? -1 : Math.max((usage?.monthlyQuestionsLimit || 0) - (usage?.monthlyQuestionsUsed || 0), 0) + (usage?.paygoCreditsRemaining || 0);
   const questionUsagePercent = usage?.monthlyQuestionsLimit > 0 ? (usage.monthlyQuestionsUsed / usage.monthlyQuestionsLimit) * 100 : 0;
   const disabledModes: StyleMode[] = usage?.subscriptionTier === 'free' ? ['gen_alpha', 'step_by_step'] : [];
 
@@ -37,11 +39,11 @@ export default function HeroView({
         </div>
 
         <h2 className="mb-2 text-[32px] font-black leading-[1] tracking-tighter text-slate-900 drop-shadow-sm dark:text-white">
-          Snap<span className="text-[#818cf8]">.</span> Solve<span className="text-[#818cf8]">.</span> Learn<span className="text-[#818cf8]">.</span>
+          {t('hero.snap_solve_learn')}
         </h2>
 
         <p className="max-w-[280px] text-[13px] font-bold leading-snug text-slate-500 dark:text-slate-200">
-          Screenshot any problem on your screen and get instant solutions with AI.
+          {t('hero.subtitle')}
         </p>
       </div>
 
@@ -50,17 +52,17 @@ export default function HeroView({
           <div className="oryx-shell-panel rounded-[24px] border p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Plan allowance</p>
+                <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{t('hero.plan_allowance')}</p>
                 <p className="text-xl font-black leading-none text-slate-900 dark:text-white">
-                  {remainingQuestions === -1 ? 'High limit' : remainingQuestions}{' '}
-                  <span className="text-sm font-bold text-slate-700 dark:text-white">left</span>
+                  {remainingQuestions === -1 ? t('header.high_limit') : remainingQuestions}{' '}
+                  <span className="text-sm font-bold text-slate-700 dark:text-white">{t('response.steps')}</span>
                 </p>
               </div>
               <button
                 onClick={onOpenUpgrade}
                 className="rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95"
               >
-                Upgrade
+                {t('header.upgrade')}
               </button>
             </div>
 
@@ -72,7 +74,7 @@ export default function HeroView({
             </div>
 
             <p className="text-center text-[10px] font-bold text-slate-500 dark:text-slate-400">
-              Monthly questions and extra credits are tracked separately.
+              {t('hero.questions_used', { used: usage?.monthlyQuestionsUsed ?? 0, limit: usage?.monthlyQuestionsLimit ?? 0 })}
             </p>
           </div>
         </div>
@@ -80,54 +82,54 @@ export default function HeroView({
 
       <div className="mb-6 flex w-full flex-col items-center gap-4 px-6">
         <p className="text-[12px] font-black uppercase tracking-[0.3em] text-slate-400">
-          Try something like
+          {t('response.suggestions')}
         </p>
 
         <div className="flex w-full flex-col items-center gap-3">
           <button
-            onClick={() => onSend({ text: EXAMPLE_PROMPTS[0].prompt, images: [], styleMode: EXAMPLE_PROMPTS[0].mode })}
+            onClick={() => onSend({ text: t(EXAMPLE_PROMPTS[0].promptKey), images: [], styleMode: EXAMPLE_PROMPTS[0].mode })}
             className="group flex w-full max-w-[320px] items-center gap-3 rounded-2xl border px-5 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 active:scale-95 dark:shadow-none dark:hover:border-blue-500/50"
             style={{ backgroundColor: 'var(--oryx-panel-strong)', borderColor: 'var(--oryx-border-soft)' }}
           >
             <span className="text-xl">{EXAMPLE_PROMPTS[0].icon}</span>
             <span className="text-[15px] font-bold text-slate-900 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
-              {EXAMPLE_PROMPTS[0].label}
+              {t(EXAMPLE_PROMPTS[0].labelKey)}
             </span>
           </button>
 
           <div className="flex w-full max-w-[320px] gap-3">
             <button
-              onClick={() => onSend({ text: EXAMPLE_PROMPTS[1].prompt, images: [], styleMode: EXAMPLE_PROMPTS[1].mode })}
+              onClick={() => onSend({ text: t(EXAMPLE_PROMPTS[1].promptKey), images: [], styleMode: EXAMPLE_PROMPTS[1].mode })}
               className="group flex flex-1 items-center gap-2 rounded-2xl border px-4 py-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 active:scale-95 dark:shadow-none dark:hover:border-blue-500/50"
               style={{ backgroundColor: 'var(--oryx-panel-strong)', borderColor: 'var(--oryx-border-soft)' }}
             >
               <span className="text-lg">{EXAMPLE_PROMPTS[1].icon}</span>
               <span className="truncate text-[13px] font-bold text-slate-900 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
-                {EXAMPLE_PROMPTS[1].label}
+                {t(EXAMPLE_PROMPTS[1].labelKey)}
               </span>
             </button>
             <button
-              onClick={() => onSend({ text: EXAMPLE_PROMPTS[2].prompt, images: [], styleMode: EXAMPLE_PROMPTS[2].mode })}
+              onClick={() => onSend({ text: t(EXAMPLE_PROMPTS[2].promptKey), images: [], styleMode: EXAMPLE_PROMPTS[2].mode })}
               className="group flex flex-1 items-center gap-2 rounded-2xl border px-4 py-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 active:scale-95 dark:shadow-none dark:hover:border-blue-500/50"
               style={{ backgroundColor: 'var(--oryx-panel-strong)', borderColor: 'var(--oryx-border-soft)' }}
             >
               <span className="text-lg">{EXAMPLE_PROMPTS[2].icon}</span>
               <span className="truncate text-[13px] font-bold text-slate-900 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
-                {EXAMPLE_PROMPTS[2].label}
+                {t(EXAMPLE_PROMPTS[2].labelKey)}
               </span>
             </button>
           </div>
 
           {[EXAMPLE_PROMPTS[3], EXAMPLE_PROMPTS[4], EXAMPLE_PROMPTS[5]].map((item) => (
             <button
-              key={item.label}
-              onClick={() => onSend({ text: item.prompt, images: [], styleMode: item.mode })}
+              key={item.labelKey}
+              onClick={() => onSend({ text: t(item.promptKey), images: [], styleMode: item.mode })}
               className="group flex w-full max-w-[280px] items-center gap-3 rounded-2xl border px-5 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 active:scale-95 dark:shadow-none dark:hover:border-blue-500/50"
               style={{ backgroundColor: 'var(--oryx-panel-strong)', borderColor: 'var(--oryx-border-soft)' }}
             >
               <span className="text-lg">{item.icon}</span>
               <span className="text-[14px] font-bold text-slate-900 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
-                {item.label}
+                {t(item.labelKey)}
               </span>
             </button>
           ))}

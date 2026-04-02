@@ -1,4 +1,5 @@
 import { fetchEdge } from './edge';
+import { applyServiceHealthError, markSuccess } from './serviceHealth';
 
 export type HistoryEntry = {
   id: string;
@@ -20,6 +21,25 @@ export type HistoryListResponse = {
   nextCursor: string | null;
 };
 
+const HISTORY_CACHE_KEY = 'oryx_history_cache';
+
+export function readCachedHistoryList(): HistoryListResponse | null {
+  try {
+    const raw = localStorage.getItem(HISTORY_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as HistoryListResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedHistoryList(data: HistoryListResponse) {
+  try {
+    localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore cache write failures.
+  }
+}
+
 export async function fetchHistoryList(params?: {
   limit?: number;
   before?: string;
@@ -31,7 +51,15 @@ export async function fetchHistoryList(params?: {
   if (params?.conversationId) search.set('conversation_id', params.conversationId);
   const query = search.toString();
   const path = query ? `/history?${query}` : '/history';
-  return fetchEdge<HistoryListResponse>(path, { method: 'GET' });
+  try {
+    const data = await fetchEdge<HistoryListResponse>(path, { method: 'GET' });
+    if (!params?.conversationId) writeCachedHistoryList(data);
+    markSuccess('db', 'History loaded.');
+    return data;
+  } catch (error) {
+    applyServiceHealthError(error, 'db');
+    throw error;
+  }
 }
 
 export async function deleteHistory(params: { conversationId?: string; all?: boolean }): Promise<void> {

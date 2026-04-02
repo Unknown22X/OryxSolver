@@ -1,9 +1,10 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
-import { createSupabaseUserClient } from '../_shared/db.ts';
+import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/db.ts';
 import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
 import { handleOptions, jsonError, jsonOk } from '../_shared/http.ts';
 import type { HistoryEntry, HistoryListResponse } from '../_shared/contracts.ts';
+import { recordDependencyState } from '../_shared/serviceHealth.ts';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -140,6 +141,18 @@ Deno.serve(async (req) => {
     return jsonOk(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'history fetch failed';
-    return jsonError(500, 'HISTORY_FETCH_FAILED', message);
+    try {
+      const supabaseAdmin = createSupabaseAdminClient();
+      await recordDependencyState(supabaseAdmin, {
+        dependency: 'db',
+        status: 'outage',
+        message,
+        code: 'SUPABASE_UNAVAILABLE',
+        source: 'history',
+      });
+    } catch (_healthError) {
+      // Ignore health telemetry failures.
+    }
+    return jsonError(503, 'SUPABASE_UNAVAILABLE', message);
   }
 });

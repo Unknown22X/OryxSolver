@@ -18,14 +18,23 @@ export async function callAiProxy(
   imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
   mode: 'normal' | 'fast_fallback' = 'normal',
   styleMode: StyleMode = 'standard',
-  history: Array<{ role: 'user' | 'model', text: string }> = []
+  history: Array<{ role: 'user' | 'model', text: string }> = [],
+  isBulk = false,
+  userId?: string,
+  options?: {
+    streamPreview?: boolean;
+    previewOnly?: boolean;
+    preferredLanguage?: string;
+  },
 ): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
   const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
   if (!internalToken) {
     throw new AiError(500, 'INTERNAL_TOKEN_MISSING', 'Missing INTERNAL_EDGE_TOKEN secret');
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseUrl =
+    Deno.env.get('SUPABASE_URL') ??
+    Deno.env.get('PROJECT_URL');
   if (!supabaseUrl) {
     throw new AiError(500, 'SUPABASE_URL_MISSING', 'Missing SUPABASE_URL');
   }
@@ -43,6 +52,7 @@ export async function callAiProxy(
       headers: {
         'Content-Type': 'application/json',
         'x-internal-token': internalToken,
+        ...(userId ? { 'x-user-id': userId } : {}),
       },
       body: JSON.stringify({
         question,
@@ -50,6 +60,10 @@ export async function callAiProxy(
         mode,
         styleMode,
         history,
+        isBulk,
+        streamPreview: options?.streamPreview === true,
+        previewOnly: options?.previewOnly === true,
+        preferredLanguage: options?.preferredLanguage,
       }),
       signal: controller.signal,
     });
@@ -75,7 +89,7 @@ export async function callAiProxy(
 
     const data = await res.json();
     return {
-      answer: typeof data?.answer === 'string' ? data.answer : 'Answer available in explanation',
+      answer: typeof data?.answer === 'string' ? data.answer : (typeof data?.text === 'string' ? data.text : 'Answer available in explanation'),
       explanation: typeof data?.explanation === 'string' ? data.explanation : '',
       steps: Array.isArray(data?.steps) ? data.steps.map((s: unknown) => String(s)) : [],
       model: typeof data?.model === 'string' && data.model.trim() ? data.model.trim() : 'unknown',

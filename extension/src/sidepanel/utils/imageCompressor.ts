@@ -2,15 +2,15 @@
  * Client-side image compression to reduce AI vision costs and upload time.
  *
  * Strategy:
- * - Resize long edge to MAX_DIMENSION (1280px)
+ * - Resize long edge to MAX_DIMENSION (1600px)
  * - Convert to JPEG at QUALITY (0.80) for photos/screenshots
- * - Skip if already below SIZE_THRESHOLD (300KB)
+ * - Skip if already below SIZE_THRESHOLD (900KB)
  * - Preserve PNG for small text-heavy images where JPEG artifacts hurt
  */
 
-const MAX_DIMENSION = 1280;
+const MAX_DIMENSION = 1600;
 const QUALITY = 0.80;
-const SIZE_THRESHOLD = 300 * 1024; // 300KB
+const SIZE_THRESHOLD = 900 * 1024; // 900KB
 
 /**
  * Compress an image File if it exceeds the size threshold.
@@ -26,6 +26,9 @@ export async function compressImage(file: File): Promise<File> {
   try {
     const bitmap = await createImageBitmap(file);
     const { width, height } = bitmap;
+
+    // Skip mid-sized crops and screenshots that don't need recompression
+    if (Math.max(width, height) <= MAX_DIMENSION) return file;
 
     // Calculate scaled dimensions
     const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));

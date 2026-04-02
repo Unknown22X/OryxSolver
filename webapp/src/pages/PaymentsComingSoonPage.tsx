@@ -1,8 +1,10 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { Clock3, ArrowRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import MarketingLayout from '../components/MarketingLayout';
 
 export default function PaymentsComingSoonPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const plan = searchParams.get('plan');
 
@@ -14,29 +16,29 @@ export default function PaymentsComingSoonPage() {
             <Clock3 className="h-8 w-8" />
           </div>
           <p className="mt-6 text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-            Upgrade preview
+            {t('payments_coming_soon.upgrade_preview')}
           </p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 dark:text-white">
-            Paid checkout opens soon
+            {t('payments_coming_soon.title')}
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base text-slate-600 dark:text-slate-300">
-            You're early. We are finishing the upgrade flow now, so you can compare plans today and come back as soon as paid checkout is open.
-            {plan ? ` Requested plan: ${plan}.` : ''}
+            {t('payments_coming_soon.desc')}
+            {plan ? ` ${t('payments_coming_soon.requested_plan', { plan })}` : ''}
           </p>
           <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
             <Link
               to="/pricing"
               className="rounded-2xl bg-slate-950 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
             >
-              Back to pricing
+              {t('payments_coming_soon.back_to_pricing')}
             </Link>
             <Link
               to="/dashboard"
               className="inline-flex items-center justify-center gap-2 rounded-2xl border px-6 py-3 text-sm font-bold transition hover:bg-slate-50 dark:hover:bg-white/5"
               style={{ borderColor: 'var(--border-color)' }}
             >
-              Return to dashboard
-              <ArrowRight className="h-4 w-4" />
+              {t('payments_coming_soon.return_to_dashboard')}
+              <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </div>
         </section>

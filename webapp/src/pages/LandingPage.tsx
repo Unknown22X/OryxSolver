@@ -1,12 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import MarketingLayout from '../components/MarketingLayout';
 import { trackEvent } from '../lib/analyticsClient';
 import {
   LANDING_FEATURES,
-  LANDING_FEATURES_INTRO,
   type LandingFeatureItem,
   LANDING_REVIEWS,
-  LANDING_REVIEWS_INTRO,
 } from '../content/landingFeatures';
 import {
   ArrowRight,
@@ -80,6 +79,8 @@ const PRICING_PREVIEW = [
 ];
 
 export default function LandingPage() {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language === 'ar';
   const navigate = useNavigate();
   const extensionUrl = String(import.meta.env.VITE_CHROME_EXTENSION_URL ?? '').trim();
 
@@ -145,12 +146,12 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-4xl text-center">
             <h1 className="marketing-heading mt-6 text-[3.25rem] font-extrabold text-slate-950 dark:text-white sm:text-[4rem] md:text-[4.2rem] md:leading-[0.98]">
-              Solve faster.
-              <span className="block gradient-text-animated">Understand better.</span>
+              {t('landing.hero_heading_1')}
+              <span className="block gradient-text-animated">{t('landing.hero_heading_2')}</span>
             </h1>
 
             <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-slate-600 dark:text-slate-300 sm:text-xl">
-              Screenshot a question, choose how you want it explained, and keep the whole solve inside one cleaner study flow.
+              {t('landing.hero_sub')}
             </p>
 
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -158,28 +159,27 @@ export default function LandingPage() {
                 onClick={() => handleInstallClick('hero_install')}
                 className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-slate-200 bg-white px-8 py-4 text-base font-black text-slate-950 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.38)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white sm:w-auto dark:border-white/12 dark:bg-white dark:text-slate-950 dark:hover:border-white/20 dark:hover:bg-slate-100"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-[0_6px_16px_-12px_rgba(15,23,42,0.4)]">
-                  <img
-                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                    width="18"
-                    height="18"
-                    alt="Google"
-                  />
+                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50/90 shadow-[0_6px_16px_-12px_rgba(15,23,42,0.28)] dark:border-white/15 dark:bg-white/8">
+                  <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+                    <path fill="#EA4335" d="M24 4c7.4 0 13.8 4 17.3 9.9H24c-3.7 0-7.1 2-8.9 5.2L9.4 9.3A20.1 20.1 0 0 1 24 4Z" />
+                    <path fill="#FBBC04" d="M9.4 9.3 18 24c1.9 3.2 5.3 5.2 9 5.2h11.4A20 20 0 0 1 24 44 20 20 0 0 1 6.7 14.1Z" />
+                    <path fill="#34A853" d="M41.3 13.9A19.9 19.9 0 0 1 24 44c7.4 0 13.8-4 17.3-9.9L32.7 19A10.3 10.3 0 0 1 34 24c0 1.8-.4 3.6-1.2 5.2h8.6A20 20 0 0 0 41.3 13.9Z" />
+                    <circle cx="24" cy="24" r="7.6" fill="#4285F4" />
+                    <circle cx="24" cy="24" r="3.2" fill="#B3D4FF" opacity="0.85" />
+                  </svg>
                 </span>
                 <span className="flex flex-col items-start leading-none">
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                    Google
-                  </span>
-                  <span className="mt-1">Install extension</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Chrome</span>
+                  <span className="mt-1">{t('landing.install_extension')}</span>
                 </span>
-                {extensionUrl ? <ExternalLink size={16} /> : <ArrowRight size={18} />}
+                {extensionUrl ? <ExternalLink size={16} /> : <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />}
               </button>
               <button
                 onClick={() => handleCreateAccountClick('hero_signup')}
                 className="gradient-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01] sm:w-auto"
               >
-                Create free account
-                <ArrowRight size={18} />
+                {t('landing.create_free_account')}
+                <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />
               </button>
             </div>
 
@@ -203,15 +203,15 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-wrap items-center justify-center gap-5 text-sm font-medium text-slate-600 dark:text-slate-400">
               <span className="inline-flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-300" />
-                15 free monthly questions
+                {t('landing.questions_free')}
               </span>
               <span className="inline-flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-300" />
-                Start in Chrome, continue on web
+                {t('landing.start_in_chrome')}
               </span>
               <span className="inline-flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-300" />
-                Billing pages staged, not live yet
+                {t('landing.billing_staged')}
               </span>
             </div>
           </div>
@@ -222,24 +222,24 @@ export default function LandingPage() {
                 {HERO_DEMO_STATS.map((stat) => (
                   <div key={stat.label} className="px-5 py-5 text-center sm:px-6 sm:py-6">
                     <div className="text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white sm:text-3xl">
-                      {stat.value}
+                      {stat.value === 'Web + Chrome' ? t('landing.web_plus_chrome') : stat.value}
                     </div>
                     <div className="mt-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                      {stat.label}
+                      {t(`landing.stats.${stat.label.replace(/\s+/g, '_').toLowerCase()}`)}
                     </div>
                   </div>
                 ))}
-              </div>
+            </div>
             </div>
 
             <div className="lg:col-span-2 py-2">
               <div className="text-center">
-                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">How it works</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{t('landing.how_it_works')}</p>
                 <h2 className="marketing-heading mt-3 text-3xl font-extrabold text-slate-950 dark:text-white sm:text-4xl">
-                  Three steps to clarity
+                  {t('landing.three_steps')}
                 </h2>
                 <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300 sm:text-base">
-                  Keep this section simple: title first, media second, description last.
+                  {t('landing.steps_desc')}
                 </p>
               </div>
 
@@ -250,7 +250,7 @@ export default function LandingPage() {
                       {item.step}
                     </div>
                     <h3 className="text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
-                      {item.title}
+                      {t(`landing.steps.${item.title.toLowerCase()}.title`)}
                     </h3>
 
                     <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-200/70 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.12),transparent_45%),linear-gradient(180deg,#0b1220,#090f1b)] p-3 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.48)] dark:border-white/10">
@@ -261,14 +261,14 @@ export default function LandingPage() {
                             <CirclePlay className="h-7 w-7 fill-white/90 stroke-[1.8]" />
                           </div>
                           <p className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-slate-300">
-                            {item.mediaLabel}
+                            {t(`landing.steps.${item.title.toLowerCase()}.mediaLabel`)}
                           </p>
                         </div>
                       </div>
                     </div>
 
                     <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                      {item.description}
+                      {t(`landing.steps.${item.title.toLowerCase()}.description`)}
                     </p>
                   </div>
                 ))}
@@ -283,9 +283,9 @@ export default function LandingPage() {
           <div className="oryx-marketing-panel rounded-[30px] px-6 py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Social proof</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{t('landing.social_proof')}</p>
                 <h2 className="marketing-heading mt-2 text-2xl font-bold text-slate-950 dark:text-white">
-                  Placeholder wordmarks for the workflow we're building.
+                  {t('landing.placeholder_wordmarks')}
                 </h2>
               </div>
               <div className="flex flex-wrap items-center gap-3 md:justify-end">
@@ -307,12 +307,12 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.06),transparent_42%)] dark:bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.05),transparent_42%)]" />
         <div className="mx-auto max-w-6xl">
           <div className="mb-12 max-w-2xl">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{LANDING_FEATURES_INTRO.eyebrow}</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t(`landing.features_eyebrow`)}</p>
             <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-              {LANDING_FEATURES_INTRO.title}
+              {t(`landing.features_title`)}
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-600 dark:text-slate-300">
-              {LANDING_FEATURES_INTRO.description}
+              {t(`landing.features_desc`)}
             </p>
           </div>
 
@@ -329,10 +329,10 @@ export default function LandingPage() {
                     <Icon className="h-6 w-6" />
                   </div>
                   <h3 className="mt-6 text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
-                    {feature.title}
+                    {t(`landing.features.${feature.id}.title`)}
                   </h3>
                   <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                    {feature.description}
+                    {t(`landing.features.${feature.id}.description`)}
                   </p>
                   <div className={`mt-6 flex items-center gap-2 text-sm font-bold ${presentation.arrow}`}>
                     <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -349,11 +349,11 @@ export default function LandingPage() {
           <div className="text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-amber-700 dark:border-amber-300/15 dark:bg-amber-400/8 dark:text-amber-200">
               <Star className="h-3.5 w-3.5 fill-current" />
-              {LANDING_REVIEWS_INTRO.eyebrow}
+              {t(`landing.reviews_eyebrow`)}
             </div>
             <h2 className="marketing-heading mt-6 text-4xl font-extrabold text-slate-950 dark:text-white sm:text-5xl">
-              {LANDING_REVIEWS_INTRO.titlePrefix}{' '}
-              <span className="gradient-text-animated">{LANDING_REVIEWS_INTRO.titleHighlight}</span>
+              {t(`landing.reviews_titlePrefix`)}{' '}
+              <span className="gradient-text-animated">{t(`landing.reviews_titleHighlight`)}</span>
             </h2>
           </div>
 
@@ -378,8 +378,8 @@ export default function LandingPage() {
                     {review.name.charAt(0)}
                   </div>
                   <div>
-                    <p className="text-base font-black text-slate-950 dark:text-white">{review.name}</p>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{review.role}</p>
+                    <p className="text-base font-black text-slate-950 dark:text-white">{t(`landing.reviews.${review.id}.name`)}</p>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{t(`landing.reviews.${review.id}.role`)}</p>
                   </div>
                 </div>
               </div>
@@ -392,13 +392,13 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-10 flex items-end justify-between gap-6">
             <div className="max-w-2xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Pricing preview</p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('landing.pricing_preview_eyebrow')}</p>
               <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-                Start free. See the paid plans before billing opens.
+                {t('landing.pricing_preview_title')}
               </h2>
             </div>
             <Link to="/pricing" className="hidden text-sm font-bold text-sky-700 hover:text-teal-700 md:inline-flex dark:text-teal-300 dark:hover:text-teal-200">
-              Full pricing
+              {t('landing.full_pricing')}
             </Link>
           </div>
 
@@ -414,20 +414,24 @@ export default function LandingPage() {
               >
                 {plan.featured && (
                   <div className="absolute -top-4 left-6 rounded-full bg-slate-950 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white dark:bg-white dark:text-slate-950">
-                    Most popular
+                    {t('landing.most_popular', { defaultValue: 'Most popular' })}
                   </div>
                 )}
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">{plan.name}</p>
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">
+                  {t(`landing.pricing_preview.${plan.name.replace(/\s+/g, '_').toLowerCase()}.name`)}
+                </p>
                 <div className="mt-4 flex items-end gap-2">
                   <span className="align-super text-lg font-bold text-slate-500">$</span>
                   <span className="text-5xl font-black tabular-nums text-slate-950 dark:text-white">
                     {plan.price.replace('$', '')}
                   </span>
-                  <span className="pb-2 text-sm font-bold text-slate-500 dark:text-slate-400">/ month</span>
+                  <span className="pb-2 text-sm font-bold text-slate-500 dark:text-slate-400">{t('landing.per_month', { defaultValue: '/ month' })}</span>
                 </div>
-                <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">{plan.detail}</p>
+                <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  {t(`landing.pricing_preview.${plan.name.replace(/\s+/g, '_').toLowerCase()}.detail`)}
+                </p>
                 <p className="mt-6 rounded-2xl border border-slate-200/80 bg-white/82 px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
-                  Billing is coming soon. For now, this routes to the staged payment page.
+                  {t('landing.pricing_preview_billing_soon')}
                 </p>
                 <Link
                   to={plan.href}
@@ -437,8 +441,8 @@ export default function LandingPage() {
                       : 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10'
                   }`}
                 >
-                  {plan.cta}
-                  <ArrowRight size={16} />
+                  {t(`landing.pricing_preview.${plan.name.replace(/\s+/g, '_').toLowerCase()}.cta`)}
+                  <ArrowRight size={16} className={isRtl ? 'rotate-180' : ''} />
                 </Link>
               </div>
             ))}
@@ -448,12 +452,12 @@ export default function LandingPage() {
 
       <section className="px-4 pb-20 sm:px-6 sm:pb-28">
         <div className="mx-auto max-w-4xl rounded-[36px] border border-slate-200/80 bg-white/85 p-10 text-center shadow-[0_30px_90px_-44px_rgba(15,23,42,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#08111d]/82 sm:p-14">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Ready to start</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('landing.ready_to_start')}</p>
           <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-            Run one real question through the workflow.
+            {t('landing.run_one_question')}
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-            Start with the free account, install the extension if you want the fastest capture flow, and keep the explanation clean enough to review later.
+            {t('landing.run_desc')}
           </p>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -461,8 +465,8 @@ export default function LandingPage() {
               onClick={() => handleCreateAccountClick('final_signup')}
               className="gradient-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01] sm:w-auto"
             >
-              Create free account
-              <ArrowRight size={18} />
+              {t('landing.create_free_account')}
+              <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />
             </button>
           </div>
         </div>

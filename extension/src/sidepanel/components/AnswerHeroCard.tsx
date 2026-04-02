@@ -6,9 +6,12 @@ type AnswerHeroCardProps = {
   answer: string;
   title: string;
   subtitle: string;
+  statusLabel?: string | null;
+  isPreview?: boolean;
+  interrupted?: boolean;
 };
 
-export default function AnswerHeroCard({ answer, title, subtitle }: AnswerHeroCardProps) {
+export default function AnswerHeroCard({ answer, title, subtitle, statusLabel, isPreview = false, interrupted = false }: AnswerHeroCardProps) {
   const [copied, setCopied] = useState(false);
   const isLongAnswer = answer.trim().length > 80;
 
@@ -34,6 +37,11 @@ export default function AnswerHeroCard({ answer, title, subtitle }: AnswerHeroCa
             </p>
             <span className="text-[9px] font-black uppercase tracking-widest text-white/70">{subtitle}</span>
           </div>
+          {(statusLabel || isPreview || interrupted) && (
+            <div className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-white/85 backdrop-blur-md">
+              {interrupted ? 'Interrupted' : isPreview ? 'Preview' : statusLabel}
+            </div>
+          )}
           <div className="ml-auto flex items-center gap-2">
              <button
                onClick={handleCopy}

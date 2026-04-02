@@ -107,3 +107,18 @@
   --oryx-zoom-scale: 0.95;
   animation-name: oryx-zoom-in;
 }
+
+/* ====== RTL / Arabic Support ====== */
+[dir="rtl"] {
+  --oryx-font-override: "Cairo", "Segoe UI", Tahoma, Arial, sans-serif;
+  font-family: var(--oryx-font-override);
+  text-align: right;
+}
+
+[dir="rtl"] body,
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] button {
+  font-family: "Cairo", "Segoe UI", Tahoma, Arial, sans-serif;
+}
+

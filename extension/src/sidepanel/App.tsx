@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import * as Sentry from "@sentry/react";
 import MessageComposer from './components/MessageComposer';
 import SidePanelHeader from './components/SidePanelHeader';
 import ResponsePanel from './components/ResponsePanel';
@@ -7,32 +8,44 @@ import AuthView from './components/AuthView';
 import HeroView from './components/HeroView';
 import ProfileModal from './components/modals/ProfileModal';
 import UpgradeModal from './components/modals/UpgradeModal';
+import Banner from './components/Banner';
+import MaintenanceOverlay from './components/MaintenanceOverlay';
+import ServiceStatusBanner from './components/ServiceStatusBanner';
 
 import { useAuth } from './hooks/useAuth';
 import { useInlineQuestionBridge } from './hooks/useInlineQuestionBridge';
 import { useUsage } from './hooks/useUsage';
 import { useSolve } from './hooks/useSolve';
+import { useTranslation } from 'react-i18next';
 
 import { getAccessToken } from './auth/supabaseAuthClient';
+import { supabase } from './services/supabaseClient';
 import { deleteHistory, fetchConversation, renameConversation } from './services/historyApi';
 import { analytics } from './services/analyticsService';
 import { fetchExtensionPublicConfig } from './services/appConfig';
 import { captureCroppedAreaToFile } from './services/cameraCapture';
 import { sanitizeExternalUrl } from './services/safeExternalUrl';
+import { identifyUser as identifyAnalyticsUser, initPosthog, resetUser as resetAnalyticsUser } from './services/posthog';
 import type { StyleMode } from './types';
+import { useServiceHealth } from './hooks/useServiceHealth';
 
 function isStyleMode(value: string | null | undefined): value is StyleMode {
   return value === 'standard' || value === 'exam' || value === 'eli5' || value === 'step_by_step' || value === 'gen_alpha';
 }
 
 export default function App() {
+  const EXTENSION_TUTORIAL_KEY = 'oryx_extension_tutorial_opened_v1';
+  const { i18n } = useTranslation();
   const [legalVersions, setLegalVersions] = useState({
     termsVersion: '2026-03-18',
     privacyVersion: '2026-03-18',
   });
   const [supportEmail, setSupportEmail] = useState('support@oryxsolver.com');
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [bannerConfig, setBannerConfig] = useState<any>(null);
   // --- Global State & Hooks ---
   const { usage, setUsage, syncProfile, resetUsage, upgradeMoment } = useUsage();
+  const { health, retryCountdowns, refresh: refreshHealth } = useServiceHealth();
   
   const [quotedStep, setQuotedStep] = useState<{ text: string; index: number } | null>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
@@ -41,18 +54,21 @@ export default function App() {
     authUser, isAuthLoading, isAuthBusy, authMessage, authEmail, authPassword, 
     authOtpCode, isOtpRequested, authView, authMethod, resendCooldown,
     setAuthEmail, setAuthPassword, setAuthOtpCode, setAuthMethod, setAuthView,
-    handleSignIn, handleSignUp, handleVerifyOtpCode, handleResendOtp, signOut, updateProfile,
-    updatePassword, resetAuthState,
-    acceptedTerms,
-    acceptedPrivacy,
-    setAcceptedTerms,
-    setAcceptedPrivacy,
+    handleSignIn, handleGoogleSignIn, handleSignUp, handleVerifyOtpCode, handleResendOtp, handleResetPassword, signOut, updateProfile,
+    updatePassword, resetAuthState, refreshAuth,
   } = useAuth(syncProfile, legalVersions);
 
   const {
     isSending, sendError, chatSession, setChatSession,
     activeConversationId, setActiveConversationId, handleSend, clearSession, setSendError
-  } = useSolve(usage, setUsage, quotedStep, setQuotedStep, () => setIsUpgradeModalOpen(true));
+  } = useSolve(usage, setUsage, quotedStep, setQuotedStep, () => setIsUpgradeModalOpen(true), i18n.language);
+  const solveBlocked =
+    health.readOnly &&
+    (health.dependencies.network.status === 'outage' ||
+      health.dependencies.backend.status !== 'healthy' ||
+      health.dependencies.ai.status !== 'healthy' ||
+      health.dependencies.db.status !== 'healthy');
+  const cloudHistoryReadOnly = health.readOnly && (health.dependencies.db.status !== 'healthy' || health.dependencies.network.status === 'outage');
 
   // --- UI State ---
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -72,6 +88,29 @@ export default function App() {
   const [settingsPanel, setSettingsPanel] = useState<'menu' | 'profile' | 'appearance' | 'history' | 'usage' | 'password' | 'support'>('menu');
   const [styleMode, setStyleMode] = useState<StyleMode>('standard');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [authCallbackState, setAuthCallbackState] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    initPosthog();
+  }, []);
+
+  useEffect(() => {
+    if (authUser) {
+      identifyAnalyticsUser(authUser.id, {
+        email: authUser.email,
+        displayName: authUser.displayName,
+      });
+      Sentry.setUser({
+        id: authUser.id,
+        email: authUser.email ?? undefined,
+        username: authUser.displayName ?? undefined,
+      });
+      return;
+    }
+
+    resetAnalyticsUser();
+    Sentry.setUser(null);
+  }, [authUser]);
 
   useEffect(() => {
     if (chatSession.length > 0) {
@@ -111,20 +150,57 @@ export default function App() {
     return 'https://oryxsolver.com';
   })();
   const upgradeUrl = webAppBaseUrl
-    ? `${webAppBaseUrl}/payments-coming-soon${authUser ? `?plan=extension-upgrade&user=${encodeURIComponent(authUser.id)}` : ''}`
+    ? `${webAppBaseUrl}/subscription${authUser ? `?source=extension&user=${encodeURIComponent(authUser.id)}` : ''}`
     : '';
+  const onboardingUrl = webAppBaseUrl
+    ? `${webAppBaseUrl}/onboarding${authUser ? '?source=extension' : ''}`
+    : '';
+  const needsOnboarding = Boolean(authUser && !authUser.onboardingCompleted);
 
   // --- Effects & Lifecycle ---
   useEffect(() => {
     analytics.track('app_opened');
     
-    // First-run help handoff
-    const onboardingDone = localStorage.getItem('oryx_onboarding_done');
-    if (!onboardingDone && webAppBaseUrl) {
+    const tutorialOpened = localStorage.getItem(EXTENSION_TUTORIAL_KEY);
+    if (!tutorialOpened && webAppBaseUrl) {
       chrome.tabs.create({ url: `${webAppBaseUrl}/how-it-works` });
-      localStorage.setItem('oryx_onboarding_done', 'true');
+      localStorage.setItem(EXTENSION_TUTORIAL_KEY, 'true');
     }
   }, [webAppBaseUrl]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    if (!window.location.hash.includes('access_token')) return;
+    setAuthCallbackState('processing');
+
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+
+    if (!accessToken || !refreshToken) {
+      setAuthCallbackState('error');
+      if (window.history?.replaceState) {
+        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+      }
+      return;
+    }
+
+    supabase.auth
+      .setSession({ access_token: accessToken, refresh_token: refreshToken })
+      .then(({ error }) => {
+        if (error) {
+          console.error('Failed to complete OAuth callback in extension:', error);
+          setAuthCallbackState('error');
+          return;
+        }
+        setAuthCallbackState('success');
+      })
+      .finally(() => {
+        if (window.history?.replaceState) {
+          window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+        }
+      });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -137,6 +213,8 @@ export default function App() {
           privacyVersion: config.privacyVersion,
         });
         setSupportEmail(config.supportEmail);
+        setMaintenanceMode(config.maintenanceMode);
+        setBannerConfig(config.banner);
       } catch (error) {
         console.error('Failed to load extension legal versions:', error);
       }
@@ -282,16 +360,20 @@ export default function App() {
 
   // --- Screen Capture Handler ---
   const handleCaptureScreen = async (): Promise<File | null> => {
-    try {
-      return await captureCroppedAreaToFile();
-    } catch {
-      return null;
-    }
+    return await captureCroppedAreaToFile();
   };
 
   // --- Render ---
   return (
     <div className="oryx-shell-bg relative flex h-screen flex-col overflow-hidden font-sans text-slate-900 transition-colors duration-300 dark:text-slate-100">
+      {maintenanceMode && <MaintenanceOverlay />}
+      {!maintenanceMode && (
+        <ServiceStatusBanner
+          health={health}
+          retryCountdowns={retryCountdowns}
+          onRetry={() => void refreshHealth()}
+        />
+      )}
       <div className="pointer-events-none absolute inset-0 overflow-hidden dark:hidden">
         <div className="absolute -top-[12%] left-1/2 h-[36%] w-[86%] -translate-x-1/2 rounded-[100%] bg-indigo-200/28 blur-[90px]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-15%,rgba(99,102,241,0.08)_0%,transparent_56%)]" />
@@ -326,6 +408,7 @@ export default function App() {
           analytics.track('settings_opened');
         }}
         showCredits={!!authUser}
+        paygoRemaining={usage.paygoCreditsRemaining}
         onOpenUpgrade={() => {
           setIsUpgradeModalOpen(true);
           analytics.track('upgrade_modal_opened', { source: 'header' });
@@ -333,11 +416,27 @@ export default function App() {
         webAppBaseUrl={webAppBaseUrl}
       />
 
+      {bannerConfig?.active && (
+        <Banner 
+          message={bannerConfig.message} 
+          type={bannerConfig.type} 
+          id="announcement"
+        />
+      )}
+
       {isSending && inlineContextSnippet && (
         <div className="z-10 mx-3 mt-2 rounded-2xl border border-indigo-100/60 bg-indigo-50/80 px-3 py-2 text-[11px] font-medium text-indigo-700 shadow-sm backdrop-blur-sm animate-in fade-in slide-in-from-top-1 dark:border-indigo-500/30 dark:bg-indigo-900/40 dark:text-indigo-200">
           <span className="mr-1 font-black uppercase tracking-widest text-[9px] text-indigo-500">Solving from page</span>
           <span className="sr-only">Current inline question context</span>
           <span className="block truncate" aria-hidden="true">"{inlineContextSnippet}"</span>
+        </div>
+      )}
+
+      {authCallbackState !== 'idle' && !authUser && (
+        <div className="z-20 mx-3 mt-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-[12px] font-semibold text-emerald-200 shadow-sm backdrop-blur-sm animate-in fade-in slide-in-from-top-1">
+          {authCallbackState === 'processing' && 'Finishing sign-in...'}
+          {authCallbackState === 'success' && 'Signed in. You can close this tab and open the extension.'}
+          {authCallbackState === 'error' && 'Sign-in failed. Please try again from the extension.'}
         </div>
       )}
 
@@ -358,18 +457,13 @@ export default function App() {
             onSetPassword={setAuthPassword}
             onSetOtpCode={setAuthOtpCode}
             onSetMethod={setAuthMethod}
-            acceptedTerms={acceptedTerms}
-            acceptedPrivacy={acceptedPrivacy}
-            termsVersion={legalVersions.termsVersion}
-            privacyVersion={legalVersions.privacyVersion}
-            onSetAcceptedTerms={setAcceptedTerms}
-            onSetAcceptedPrivacy={setAcceptedPrivacy}
+            onSetView={setAuthView}
             onSignIn={handleSignIn}
+            onSignInWithGoogle={handleGoogleSignIn}
             onSignUp={handleSignUp}
             onVerifyOtp={handleVerifyOtpCode}
             onResendOtp={handleResendOtp}
-            onSetView={setAuthView}
-            webAppBaseUrl={webAppBaseUrl}
+            onResetPassword={handleResetPassword}
           />
         ) : isAuthLoading ? (
           <main className="flex flex-1 items-center justify-center p-6">
@@ -379,6 +473,47 @@ export default function App() {
                 Loading account
               </p>
             </div>
+          </main>
+        ) : needsOnboarding ? (
+          <main className="flex flex-1 items-center justify-center p-6">
+            <section className="oryx-shell-panel-strong flex max-w-md flex-col items-start gap-4 rounded-[32px] border px-6 py-7 text-left shadow-xl">
+              <div className="rounded-2xl bg-indigo-500/10 p-3 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-200">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-indigo-500">Setup required</p>
+                <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Complete onboarding first
+                </h2>
+                <p className="text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                  The extension is signed in, but your account setup is not finished yet. Complete onboarding once in the web app, then come back here.
+                </p>
+              </div>
+              <div className="flex w-full gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!onboardingUrl) return;
+                    chrome.tabs.create({ url: onboardingUrl });
+                  }}
+                  className="flex-1 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500"
+                >
+                  Open onboarding
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void refreshAuth().then(() => syncProfile());
+                  }}
+                  className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/70"
+                >
+                  Refresh
+                </button>
+              </div>
+            </section>
           </main>
         ) : (
           <main className={`flex min-h-0 flex-1 flex-col bg-transparent custom-scrollbar ${(!latestResponse && !isSending) ? 'overflow-hidden' : 'overflow-y-auto space-y-4 p-4 pb-40'}`}>
@@ -402,7 +537,7 @@ export default function App() {
             {!latestResponse ? (
               <HeroView
                 logoUrl={logoUrl}
-                onSend={handleSend}
+                onSend={(p) => handleSend({ ...p, language: i18n.language })}
                 onCaptureScreen={handleCaptureScreen} 
                 styleMode={styleMode}
                 onStyleModeChange={setStyleMode}
@@ -444,7 +579,8 @@ export default function App() {
                       question={turn.question}
                       response={turn.response}
                       onQuoteStep={(text, index) => setQuotedStep({ text, index })}
-                      onSuggestionClick={(s: any) => handleSend({ text: s.prompt, images: [], styleMode })}
+                      onSuggestionClick={(s: any) => handleSend({ text: s.prompt, images: [], styleMode, language: i18n.language })}
+                      conversationId={turn.id}
                     />
                   </div>
                 ))}
@@ -455,11 +591,11 @@ export default function App() {
         )}
       </div>
 
-      {latestResponse && (
+      {authUser && latestResponse && !needsOnboarding && (
         <div className="fixed bottom-0 left-0 right-0 w-full z-20">
            <div className="w-full">
               <MessageComposer
-                onSend={handleSend}
+                onSend={(p) => handleSend({ ...p, language: i18n.language })}
                 onCaptureScreen={handleCaptureScreen} 
                 styleMode={styleMode}
                 onStyleModeChange={setStyleMode}
@@ -469,6 +605,8 @@ export default function App() {
                 onClearQuote={() => setQuotedStep(null)}
                 disabledModes={usage.subscriptionTier === 'free' ? ['gen_alpha', 'step_by_step'] : []}
                 modeLocked={isThreadLocked}
+                serviceUnavailable={solveBlocked}
+                serviceUnavailableMessage={solveBlocked ? 'Solving is paused while services recover. Your draft stays here.' : null}
               />
            </div>
         </div>
@@ -520,6 +658,7 @@ export default function App() {
           historyEnabled={saveHistory}
           onEnableHistory={() => setSaveHistory(true)}
           tier={usage.subscriptionTier || 'free'}
+          readOnly={cloudHistoryReadOnly}
         />
       )}
 

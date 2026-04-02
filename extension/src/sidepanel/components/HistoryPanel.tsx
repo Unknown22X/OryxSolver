@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getAccessToken } from '../auth/supabaseAuthClient';
-import { fetchHistoryList } from '../services/historyApi';
+import { fetchHistoryList, readCachedHistoryList } from '../services/historyApi';
 import type { HistoryEntry } from '../services/contracts';
 import { Loader2, MessageSquare, ChevronRight, Settings, Plus, MoreVertical, Trash2, Edit2, Check, X as CloseIcon } from 'lucide-react';
 
@@ -15,6 +15,7 @@ type HistoryPanelProps = {
   onEnableHistory: () => void;
   onOpenUpgrade?: () => void;
   tier?: string;
+  readOnly?: boolean;
 };
 
 export default function HistoryPanel({ 
@@ -28,6 +29,7 @@ export default function HistoryPanel({
   onEnableHistory,
   onOpenUpgrade,
   tier,
+  readOnly = false,
 }: HistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +97,10 @@ export default function HistoryPanel({
         }
       } catch (e) {
         console.error('Failed to load history', e);
+        const cached = readCachedHistoryList();
+        if (cached?.entries) {
+          setEntries(cached.entries);
+        }
       } finally {
         setLoading(false);
       }
@@ -108,9 +114,9 @@ export default function HistoryPanel({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       
       {/* Sidebar */}
-      <div className="relative flex h-full w-full max-w-[320px] flex-col bg-white shadow-2xl animate-in slide-in-from-bottom-2 duration-300 dark:bg-slate-900 dark:shadow-none">
+      <div className="relative flex h-full w-full max-w-[300px] flex-col bg-white shadow-2xl animate-in slide-in-from-bottom-2 duration-300 dark:bg-slate-900 dark:shadow-none">
       {/* Sidebar Top: Branding & New Solve */}
-      <div className="p-5 space-y-4">
+      <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-lg shadow-indigo-200/50">
@@ -137,7 +143,7 @@ export default function HistoryPanel({
 
         <button
           onClick={() => { onNewSolve(); onClose(); }}
-          className="flex w-full items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3.5 text-sm font-black text-white shadow-xl shadow-slate-200/50 transition-all hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] dark:bg-indigo-600 dark:shadow-none dark:hover:bg-indigo-500"
+          className="flex w-full items-center gap-3 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white shadow-xl shadow-slate-200/50 transition-all hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] dark:bg-indigo-600 dark:shadow-none dark:hover:bg-indigo-500"
           title="Start a fresh solving session"
         >
           <Plus size={18} />
@@ -145,11 +151,11 @@ export default function HistoryPanel({
         </button>
       </div>
 
-      <div className="px-5 mb-2 mt-2 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400">
+      <div className="mb-2 mt-1 px-4 font-black uppercase tracking-[0.18em] text-[9px] text-slate-400">
         Past Solves
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 space-y-1.5 custom-scrollbar">
+      <div className="custom-scrollbar flex-1 space-y-1 overflow-y-auto px-2.5">
         {!historyEnabled ? (
           <div className="flex h-40 flex-col items-center justify-center text-center gap-3 px-4">
             <MessageSquare size={32} className="text-slate-300 dark:text-slate-700" />
@@ -182,7 +188,7 @@ export default function HistoryPanel({
             return (
               <div key={entry.id} className="group relative flex w-full items-center gap-1 rounded-xl transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 {isEditing ? (
-                  <div className="flex w-full items-center gap-2 p-2 px-3">
+                  <div className="flex w-full items-center gap-2 p-2 px-2.5">
                     <input
                       autoFocus
                       className="flex-1 bg-transparent text-[13.5px] font-bold text-slate-700 outline-none dark:text-slate-200"
@@ -230,10 +236,10 @@ export default function HistoryPanel({
                         if (!conversationId) return;
                         onSelect(conversationId);
                       }}
-                      className="flex-1 flex flex-col gap-1 p-3 text-left"
+                      className="flex flex-1 flex-col gap-1 px-2.5 py-2.5 text-left"
                       title="Click to view this conversation"
                     >
-                      <p className="line-clamp-1 text-[13.5px] font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <p className="line-clamp-1 text-[13px] font-bold text-slate-700 transition-colors group-hover:text-indigo-600 dark:text-slate-200 dark:group-hover:text-indigo-400">
                         {entry.question || 'Image capture'}
                       </p>
                       <p className="text-[10px] font-semibold text-slate-400">
@@ -241,10 +247,11 @@ export default function HistoryPanel({
                       </p>
                     </button>
 
-                    <div className="relative pr-2 flex items-center gap-1">
+                    <div className="relative flex items-center gap-1 pr-2">
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
+                          if (readOnly) return;
                           if (confirm('Delete this conversation?')) {
                             if (conversationId) {
                               await onDeleteConversation(conversationId);
@@ -252,8 +259,9 @@ export default function HistoryPanel({
                             }
                           }
                         }}
-                        className="rounded-lg p-1.5 text-rose-400 opacity-0 group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 transition-all dark:hover:bg-rose-900/30"
+                        className="rounded-lg p-1.5 text-rose-400 opacity-0 group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 transition-all dark:hover:bg-rose-900/30 disabled:opacity-30"
                         title="Permanently remove"
+                        disabled={readOnly}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -270,24 +278,28 @@ export default function HistoryPanel({
                           <button
                             onClick={() => {
                               if (!conversationId) return;
+                              if (readOnly) return;
                               setEditingId(conversationId);
                               setEditValue(entry.question);
                               setMenuOpenId(null);
                             }}
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700 disabled:opacity-40"
+                            disabled={readOnly}
                           >
                             <Edit2 size={12} />
                             Rename
                           </button>
                           <button
                             onClick={async () => {
+                              if (readOnly) return;
                               if (conversationId) {
                                 await onDeleteConversation(conversationId);
                                 setEntries(prev => prev.filter(ev => String(ev.conversation_id || '') !== conversationId));
                               }
                               setMenuOpenId(null);
                             }}
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10 disabled:opacity-40"
+                            disabled={readOnly}
                           >
                             <Trash2 size={12} />
                             Delete
@@ -303,33 +315,21 @@ export default function HistoryPanel({
         )}
       </div>
 
-      <div className="border-t border-slate-100 p-4 pb-3 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-        <div className="space-y-2 rounded-2xl border border-slate-200/80 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/70">
-          <p className="px-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+      <div className="border-t border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-2.5 dark:border-slate-800 dark:bg-slate-900/70">
+          <p className="px-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
             Coming soon
           </p>
-          <div className="rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 dark:border-amber-500/10 dark:from-amber-500/10 dark:to-orange-500/10">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-amber-900 dark:text-amber-100">Quiz me</p>
-                <p className="mt-1 text-[11px] font-medium leading-relaxed text-amber-700/90 dark:text-amber-200/80">
-                  Turn a topic into a quick practice round.
-                </p>
-              </div>
-              <span className="rounded-full bg-amber-900/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-amber-800 dark:bg-amber-100/10 dark:text-amber-100">
+          <div className="mt-2 flex flex-wrap gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 px-3 py-1.5 dark:border-amber-500/10 dark:from-amber-500/10 dark:to-orange-500/10">
+              <span className="text-[11px] font-black text-amber-900 dark:text-amber-100">Quiz me</span>
+              <span className="rounded-full bg-amber-900/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-amber-800 dark:bg-amber-100/10 dark:text-amber-100">
                 Soon
               </span>
             </div>
-          </div>
-          <div className="rounded-2xl border border-sky-200/70 bg-gradient-to-r from-sky-50 to-cyan-50 px-4 py-3 dark:border-sky-500/10 dark:from-sky-500/10 dark:to-cyan-500/10">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-sky-900 dark:text-sky-100">Flash cards</p>
-                <p className="mt-1 text-[11px] font-medium leading-relaxed text-sky-700/90 dark:text-sky-200/80">
-                  Save concepts into lightweight review cards.
-                </p>
-              </div>
-              <span className="rounded-full bg-sky-900/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-sky-800 dark:bg-sky-100/10 dark:text-sky-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-200/70 bg-gradient-to-r from-sky-50 to-cyan-50 px-3 py-1.5 dark:border-sky-500/10 dark:from-sky-500/10 dark:to-cyan-500/10">
+              <span className="text-[11px] font-black text-sky-900 dark:text-sky-100">Flash cards</span>
+              <span className="rounded-full bg-sky-900/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-sky-800 dark:bg-sky-100/10 dark:text-sky-100">
                 Soon
               </span>
             </div>
@@ -338,10 +338,10 @@ export default function HistoryPanel({
       </div>
 
       {/* Sidebar Footer: Settings */}
-      <div className="border-t border-slate-100 p-4 pt-3 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="border-t border-slate-100 bg-slate-50/50 p-3 pt-2.5 dark:border-slate-800 dark:bg-slate-900/50">
         <button
           onClick={() => { onOpenSettings(); onClose(); }}
-          className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           title="Manage account and settings"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 shadow-sm group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 transition-colors">

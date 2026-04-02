@@ -7,7 +7,7 @@ import { performQA } from '../../shared/mathCleanup';
 import { analytics } from '../services/analyticsService';
 
 type MessageComposerProps = {
-  onSend?: (payload: { text: string; images: File[]; styleMode: StyleMode }) => void;
+  onSend?: (payload: { text: string; images: File[]; styleMode: StyleMode }) => Promise<unknown> | unknown;
   onCaptureScreen?: () => Promise<File | null>;
   styleMode?: StyleMode;
   onStyleModeChange?: (mode: StyleMode) => void;
@@ -19,6 +19,8 @@ type MessageComposerProps = {
   onClearQuote?: () => void;
   disabledModes?: StyleMode[];
   modeLocked?: boolean;
+  serviceUnavailable?: boolean;
+  serviceUnavailableMessage?: string | null;
 };
 
 const DRAFT_STORAGE_KEY = 'oryx_sidepanel_draft_text';
@@ -52,6 +54,8 @@ export default function MessageComposer({
   onClearQuote,
   disabledModes = [],
   modeLocked = false,
+  serviceUnavailable = false,
+  serviceUnavailableMessage = null,
 }: MessageComposerProps) {
   const { t } = useTranslation();
   const rawModeGuideUrl = String(import.meta.env.VITE_MODE_GUIDE ?? '').trim();
@@ -121,7 +125,7 @@ export default function MessageComposer({
   }, [cooldownRemaining]);
 
   const handleImagePick = () => {
-    if (isSending) return;
+    if (isSending || serviceUnavailable) return;
     fileInputRef.current?.click();
   };
 
@@ -133,13 +137,13 @@ export default function MessageComposer({
   };
 
   const removeAttachment = (index: number) => {
-    if (isSending) return;
+    if (isSending || serviceUnavailable) return;
     setAttachments((prev) => prev.filter((_, i) => i !== index));
     setCaptureHint(null);
   };
 
-  const handleSend = (overridePayload?: { text: string, images?: File[], styleMode?: StyleMode }) => {
-    if (isSending || cooldownRemaining > 0) return;
+  const handleSend = async (overridePayload?: { text: string, images?: File[], styleMode?: StyleMode }) => {
+    if (isSending || cooldownRemaining > 0 || serviceUnavailable) return;
     
     const rawText = overridePayload?.text ?? text.trim();
     const effectiveAttachments = overridePayload?.images ?? attachments;
@@ -159,10 +163,10 @@ export default function MessageComposer({
       return;
     }
 
-    onSend?.({ text: effectiveText, images: effectiveAttachments, styleMode: effectiveStyle });
+    const result = await onSend?.({ text: effectiveText, images: effectiveAttachments, styleMode: effectiveStyle });
     
     // Clear inputs if not an override (suggestion) or if it's a follow-up
-    if (!overridePayload) {
+    if (!overridePayload && result) {
       setText('');
       setAttachments([]);
     }
@@ -175,7 +179,7 @@ export default function MessageComposer({
   }
 
   const handleCameraCapture = async () => {
-    if (!onCaptureScreen || isSending) return;
+    if (!onCaptureScreen || isSending || serviceUnavailable) return;
     setIsCapturing(true);
     setCaptureHint('Draw a box on the page to capture. Press Esc to cancel.');
     analytics.track('screen_capture_started');
@@ -197,7 +201,7 @@ export default function MessageComposer({
   };
 
   const handleExtractPageContext = async () => {
-    if (isSending) return;
+    if (isSending || serviceUnavailable) return;
 
     if (captureHintTimerRef.current) {
       clearTimeout(captureHintTimerRef.current);
@@ -311,8 +315,13 @@ export default function MessageComposer({
         isHero 
           ? 'oryx-shell-panel-strong rounded-[32px] border p-2 ring-1 ring-slate-200/80 backdrop-blur-3xl focus-within:ring-2 focus-within:ring-indigo-500/30 dark:ring-white/8' 
           : 'border-t p-1.5 backdrop-blur-3xl'
-      } duration-300 ${(isSending || cooldownRemaining > 0) ? 'opacity-70 pointer-events-none cursor-not-allowed' : ''}`}
+      } duration-300 ${(isSending || cooldownRemaining > 0 || serviceUnavailable) ? 'opacity-70 pointer-events-none cursor-not-allowed' : ''}`}
       style={!isHero ? { backgroundColor: 'var(--oryx-panel-strong)', borderColor: 'var(--oryx-border-soft)' } : undefined}>
+        {serviceUnavailableMessage ? (
+          <div className="mx-2 mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+            {serviceUnavailableMessage}
+          </div>
+        ) : null}
         
         {/* Top Row: Integrated Modes Segmented Control */}
         <div className="flex flex-col gap-1.5 px-1.5 pt-1.5 pb-1">

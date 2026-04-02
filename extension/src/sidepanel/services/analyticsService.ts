@@ -1,4 +1,5 @@
 import { getAccessToken, getCurrentUserId } from '../auth/supabaseAuthClient';
+import { captureEvent } from './posthog';
 
 export type AnalyticsEvent = 
   | 'app_opened'
@@ -19,6 +20,11 @@ class AnalyticsService {
 
   async track(eventName: AnalyticsEvent, properties: Record<string, any> = {}) {
     if (!this.isEnabled()) return;
+
+    captureEvent(eventName, {
+      ...properties,
+      platform: 'chrome_extension',
+    });
 
     // Fire and forget to not block UI or critical flows
     void (async () => {

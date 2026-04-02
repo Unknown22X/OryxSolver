@@ -11,6 +11,9 @@ export type AiResponse = {
   explanation: string;
   steps?: string[];
   suggestions?: AiSuggestion[];
+  isPreview?: boolean;
+  statusPhase?: 'auth' | 'preparing' | 'cache' | 'calling_ai' | 'refining' | 'finalizing';
+  interrupted?: boolean;
 };
 
 export type SendPayload = {
@@ -19,7 +22,7 @@ export type SendPayload = {
   styleMode: StyleMode;
 };
 
-export type AuthView = 'sign-in' | 'sign-up';
+export type AuthView = 'sign-in' | 'sign-up' | 'forgot-password';
 export type AuthMethod = 'password' | 'code';
 
 export type UsageSnapshot = {

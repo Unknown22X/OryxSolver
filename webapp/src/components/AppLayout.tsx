@@ -3,10 +3,14 @@ import { supabase } from '../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Sparkles, Zap, History, Settings, LogOut, Menu, ChevronRight, BookOpen, Layers2,
-  Loader2, Wallet
+  Loader2, CreditCard, Plus, Bug
 } from 'lucide-react';
+import NotificationCenter from './NotificationCenter';
+import AnnouncementBanner from './AnnouncementBanner';
 import { useUsage } from '../hooks/useUsage';
 import { useProfile } from '../hooks/useProfile';
+import LanguageSwitcher from '../i18n/LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
 import type { User } from '@supabase/supabase-js';
 
 type SubscriptionTier = 'free' | 'pro' | 'premium';
@@ -26,7 +30,7 @@ interface UserProfile {
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  currentPage: 'dashboard' | 'chat' | 'history' | 'settings' | 'profile' | 'admin';
+  currentPage: 'dashboard' | 'chat' | 'history' | 'subscription' | 'settings' | 'profile' | 'admin';
   user?: User | null;
 }
 
@@ -71,6 +75,9 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const [authUser, setAuthUser] = useState<User | null>(user ?? null);
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language === 'ar';
+  
   const { usage, loading: usageLoading } = useUsage(authUser);
   const { profile: loadedProfile, loading: profileLoading } = useProfile(authUser);
 
@@ -117,17 +124,18 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   };
 
   const navItems: NavItem[] = [
-    { id: 'chat', label: 'Solve', icon: Sparkles, href: '/chat' },
-    { id: 'history', label: 'History', icon: History, href: '/history' },
-    { id: 'dashboard', label: 'Dashboard', icon: Zap, href: '/dashboard' },
-    { id: 'quiz_me', label: 'Quiz Me', icon: BookOpen, soon: true, soonTone: 'quiz' },
-    { id: 'flash_cards', label: 'Flash Cards', icon: Layers2, soon: true, soonTone: 'flash' },
-    { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
+    { id: 'chat', label: t('nav.chat'), icon: Sparkles, href: '/chat' },
+    { id: 'history', label: t('nav.history'), icon: History, href: '/history' },
+    { id: 'dashboard', label: t('nav.dashboard'), icon: Zap, href: '/dashboard' },
+    { id: 'subscription', label: t('nav.subscription'), icon: CreditCard, href: '/subscription' },
+    { id: 'quiz_me', label: t('nav.quiz_me'), icon: BookOpen, soon: true, soonTone: 'quiz' },
+    { id: 'flash_cards', label: t('nav.flash_cards'), icon: Layers2, soon: true, soonTone: 'flash' },
+    { id: 'settings', label: t('nav.settings'), icon: Settings, href: '/settings' },
   ];
 
   const isAdmin = loadedProfile?.role === 'admin';
   if (isAdmin) {
-    navItems.push({ id: 'admin', label: 'Admin', icon: Zap, href: '/admin' });
+    navItems.push({ id: 'admin', label: t('nav.admin'), icon: Zap, href: '/admin' });
   }
 
   if (loading) {
@@ -141,8 +149,9 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   const planQuestionsRemaining = usage?.monthlyQuestionsRemaining ?? 0;
   const planQuestionsLimit = usage?.monthlyQuestionsLimit ?? 0;
   const extraCreditsRemaining = usage?.paygoCreditsRemaining ?? 0;
-  const planReached = planQuestionsLimit !== -1 && planQuestionsRemaining <= 0;
-  const usesExtraCredits = usage?.subscriptionTier === 'free' && extraCreditsRemaining > 0;
+  const planReached = !usageLoading && usage && planQuestionsLimit !== -1 && planQuestionsRemaining <= 0;
+  const isChatLayout = currentPage === 'chat';
+  const useCompactDesktopSidebar = currentPage !== 'admin';
 
   const getSoonToneClasses = (tone: NavItem['soonTone']) => {
     switch (tone) {
@@ -168,7 +177,9 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   };
 
   return (
-    <div className="oryx-shell-bg h-screen flex overflow-hidden">
+    <div className="oryx-shell-bg h-screen flex flex-col overflow-hidden" dir={isRtl ? 'rtl' : 'ltr'}>
+      <AnnouncementBanner />
+      <div className="flex min-w-0 flex-1 overflow-hidden">
       {sidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -177,34 +188,50 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
       )}
 
       <aside 
-        className={`fixed lg:relative inset-y-0 left-0 z-50 w-72 transform border-r transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+        className={`fixed inset-y-0 ${isRtl ? 'right-0' : 'left-0'} z-50 w-[min(18rem,calc(100vw-0.75rem))] transform border-r transition-transform duration-300 sm:w-72 lg:relative ${useCompactDesktopSidebar ? 'lg:w-60 xl:w-64' : 'lg:w-64 xl:w-72'} ${sidebarOpen ? 'translate-x-0' : isRtl ? 'translate-x-[105%]' : '-translate-x-full'} lg:translate-x-0`}
         style={{ backgroundColor: 'var(--surface-sidebar)', borderColor: 'var(--border-color)', boxShadow: 'var(--shadow-soft)' }}
       >
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b" style={{ borderColor: 'var(--border-color)' }}>
-            <Link to="/dashboard" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center">
-                <Sparkles size={22} className="text-white" />
-              </div>
-              <span className="text-xl font-black">Oryx<span className="text-indigo-500">.</span></span>
-            </Link>
+          <div className={`${isChatLayout ? 'p-4' : 'p-4 xl:p-5'} border-b`} style={{ borderColor: 'var(--border-color)' }}>
+            <div className="flex items-center justify-between">
+              <Link to="/dashboard" className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 sm:h-10 sm:w-10">
+                  <Sparkles size={20} className="text-white" />
+                </div>
+                <span className="text-lg font-black sm:text-xl">Oryx<span className="text-indigo-500">.</span></span>
+              </Link>
+              <NotificationCenter align={isRtl ? 'right' : 'left'} />
+            </div>
           </div>
 
-          <div className="p-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+          <div className={`border-b ${isChatLayout ? 'p-3' : 'p-3'}`} style={{ borderColor: 'var(--border-color)' }}>
             <button 
-              onClick={() => navigate('/settings')}
-              className="w-full flex items-center gap-3 rounded-xl p-3 text-left transition-colors hover:bg-white/70 dark:hover:bg-white/5"
+              onClick={() => {
+                navigate('/chat');
+                setSidebarOpen(false);
+              }}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 ${isChatLayout ? 'py-2.5 text-sm' : 'py-2 text-sm'} font-black text-white shadow-xl shadow-indigo-500/20 transition-all hover:bg-indigo-500 hover:scale-[1.02] active:scale-[0.98]`}
             >
-              <UserAvatar photoUrl={profile?.avatar_url} email={profile?.email} />
-              <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm truncate">{profile?.display_name || (profileLoading ? 'Loading...' : 'User')}</p>
-              <p className="text-xs text-slate-500 truncate">{profile?.email || (profileLoading ? 'Fetching profile' : '')}</p>
-            </div>
-            <ChevronRight size={16} className="text-slate-500" />
+              <Plus size={18} />
+              {t('nav.new_solve')}
             </button>
           </div>
 
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <div className={`border-b ${isChatLayout ? 'p-3' : 'p-2.5'}`} style={{ borderColor: 'var(--border-color)' }}>
+            <button 
+              onClick={() => navigate('/settings')}
+              className={`flex w-full items-center gap-3 rounded-xl ${isChatLayout ? 'p-2.5' : 'p-2'} text-left transition-colors hover:bg-white/70 dark:hover:bg-white/5 font-arabic-support`}
+            >
+              <UserAvatar photoUrl={profile?.avatar_url} email={profile?.email} />
+              <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm truncate">{profile?.display_name || (profileLoading ? t('common.loading') : t('nav.user'))}</p>
+              <p className="text-[11px] text-slate-500 truncate">{profile?.email || (profileLoading ? t('nav.fetching_profile') : '')}</p>
+            </div>
+            <ChevronRight size={16} className={`text-slate-500 ${isRtl ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          <nav className={`min-h-0 flex-1 space-y-0.5 overflow-y-auto ${isChatLayout ? 'p-3' : 'p-2.5'}`}>
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
@@ -213,14 +240,14 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
                 return (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-2xl border transition-colors ${toneClasses.row}`}
+                    className={`flex items-center gap-3 rounded-2xl border ${isChatLayout ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm'} transition-colors ${toneClasses.row}`}
                   >
                     <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${toneClasses.iconWrap}`}>
                       <Icon size={16} />
                     </div>
                     <span className="font-bold">{item.label}</span>
-                    <span className={`ml-auto rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${toneClasses.badge}`}>
-                      Soon
+                    <span className={`mr-auto rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${toneClasses.badge}`}>
+                      {t('nav.soon')}
                     </span>
                   </div>
                 );
@@ -230,92 +257,102 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
                   key={item.id}
                   to={item.href!}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${
+                    className={`flex items-center gap-3 rounded-xl ${isChatLayout ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm'} font-bold transition-colors ${
                     isActive 
                       ? 'bg-indigo-500/10 text-indigo-500' 
                       : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Icon size={18} />
+                  <Icon size={17} />
                   {item.label}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="p-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
-            <div className="space-y-3 mb-3">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--surface-soft)' }}>
-                <p className="text-xs text-slate-500 mb-1">Monthly Plan</p>
-                <p className="font-black text-lg">
-                  {usageLoading ? (
-                    <span className="text-slate-500">...</span>
-                  ) : planQuestionsLimit === -1 ? (
-                    <span>High limit</span>
-                  ) : (
-                    <>
-                      {planQuestionsRemaining}{' '}
-                      <span className="text-slate-500 font-normal text-sm">
-                        / {planQuestionsLimit} left
-                      </span>
-                    </>
-                  )}
-                </p>
-                <p className="mt-1 text-[11px] font-medium text-slate-500">
-                  New questions use this monthly plan first.
-                </p>
+          {isChatLayout ? (
+            <div className="border-t p-3" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="mb-3 rounded-[22px] border border-slate-200/80 bg-white/60 p-3 shadow-sm dark:border-white/5 dark:bg-white/[0.02]">
+                <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <span>{t('nav.plan')}</span>
+                  <span>{usageLoading ? '...' : planQuestionsLimit === -1 ? t('nav.unlimited') : `${planQuestionsRemaining}/${planQuestionsLimit}`}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <span>{t('nav.credits')}</span>
+                  <span>{usageLoading ? '...' : extraCreditsRemaining}</span>
+                </div>
               </div>
 
-              <div className="p-3 rounded-xl border" style={{ backgroundColor: 'var(--surface-soft)', borderColor: 'var(--border-color)' }}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Extra Credits</p>
-                    <p className="font-black text-lg">{usageLoading ? '...' : extraCreditsRemaining}</p>
-                  </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
-                    <Wallet size={18} />
-                  </div>
+              {usage?.subscriptionTier === 'free' && !usageLoading && (
+                <Link 
+                  to="/subscription"
+                  className="mb-3 flex w-full items-center justify-center rounded-xl bg-slate-900 px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                >
+                  {t('nav.upgrade')}
+                </Link>
+              )}
+
+              <button 
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-red-500 transition-colors hover:bg-red-500/10 text-sm font-bold"
+              >
+                <LogOut size={18} className={isRtl ? 'rotate-180' : ''} />
+                {t('nav.sign_out')}
+              </button>
+            </div>
+          ) : (
+            <div className="border-t p-2.5 sm:p-3" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <div className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-slate-200/70 bg-white/55 px-3 py-2 shadow-sm dark:border-white/5 dark:bg-white/[0.03]">
+                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{t('nav.plan')}</span>
+                  <span className={`text-[10px] font-black ${planReached ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
+                    {usageLoading ? '...' : planQuestionsLimit === -1 ? '∞' : `${planQuestionsRemaining}/${planQuestionsLimit}`}
+                  </span>
                 </div>
-                <p className="mt-1 text-[11px] font-medium text-slate-500">
-                  {usesExtraCredits
-                    ? 'Used only after your monthly plan runs out.'
-                    : 'No extra credits are being used right now.'}
-                </p>
+
+                <div className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-slate-200/70 bg-white/55 px-3 py-2 shadow-sm dark:border-white/5 dark:bg-white/[0.03]">
+                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{t('nav.credits')}</span>
+                  <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                    {usageLoading ? '...' : extraCreditsRemaining}
+                  </span>
+                </div>
+              </div>
+
+              {usage?.subscriptionTier === 'free' && !usageLoading && (
+                <Link 
+                  to="/subscription"
+                  className="group relative mb-2 block w-full overflow-hidden rounded-2xl bg-indigo-600 p-[1px] shadow-xl shadow-indigo-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 via-blue-500 to-indigo-600 animate-gradient-x" />
+                  <div className="relative flex items-center justify-center gap-2 rounded-[15px] bg-slate-900 px-3 py-2 text-white transition-colors group-hover:bg-transparent">
+                    <Sparkles size={15} className="text-indigo-400 group-hover:text-white" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em]">{t('nav.upgrade_pro')}</span>
+                  </div>
+                </Link>
+              )}
+
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => navigate('/settings#bug-report')}
+                  className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold text-slate-400 transition-all hover:bg-amber-500/10 hover:text-amber-500"
+                >
+                  <Bug size={14} />
+                  {t('nav.support')}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-500/10"
+                >
+                  <LogOut size={14} className={isRtl ? 'rotate-180' : ''} />
+                  {t('nav.sign_out')}
+                </button>
               </div>
             </div>
-            {!usageLoading && planReached && usesExtraCredits && (
-              <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                Your monthly plan is finished. New questions now use extra credits.
-              </div>
-            )}
-            {!usageLoading && planReached && extraCreditsRemaining <= 0 && (
-              <div className="mb-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] font-medium text-rose-700 dark:text-rose-300">
-                You are out of monthly questions and extra credits.
-              </div>
-            )}
-            {usage?.subscriptionTier === 'free' && !usageLoading && (
-              <Link 
-                to="/payments-coming-soon"
-                className="block w-full py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-center text-sm font-bold"
-              >
-                Upgrade
-              </Link>
-            )}
-          </div>
-
-          <div className="p-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
-            <button 
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl w-full hover:bg-red-500/10 text-red-400 transition-colors"
-            >
-              <LogOut size={18} />
-              Sign Out
-            </button>
-          </div>
+          )}
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         <header className="lg:hidden h-16 border-b flex items-center justify-between px-4 flex-shrink-0" style={{ backgroundColor: 'var(--surface-header)', borderColor: 'var(--border-color)', backdropFilter: 'blur(20px)' }}>
           <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 hover:bg-white/70 dark:hover:bg-white/5">
             <Menu size={24} />
@@ -326,15 +363,20 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
             </div>
             <span className="font-black">Oryx</span>
           </div>
-          <button onClick={() => navigate('/settings')}>
-            <UserAvatar photoUrl={profile?.avatar_url} email={profile?.email} size="sm" />
-          </button>
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <NotificationCenter />
+            <button onClick={() => navigate('/settings')}>
+              <UserAvatar photoUrl={profile?.avatar_url} email={profile?.email} size="sm" />
+            </button>
+          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           {children}
         </div>
       </main>
+    </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import MarketingLayout from '../components/MarketingLayout';
 import {
   ArrowRight,
@@ -18,93 +19,111 @@ import {
   Zap,
 } from 'lucide-react';
 
-const STEPS = [
-  {
-    num: '01',
-    title: 'Install the Extension',
-    description: 'Add OryxSolver to Chrome and pin it so capture is one click away when a question is already on the page.',
-    icon: <Monitor className="h-7 w-7" />,
-    notes: ['Open the Chrome Web Store', 'Click Add to Chrome', 'Pin it for instant access'],
-    mediaLabel: 'Extension setup demo',
-    accent: 'from-indigo-500 to-blue-500',
-    glow: 'rgba(99,102,241,0.38)',
-    wash: 'linear-gradient(135deg, rgba(99,102,241,0.18), transparent 60%)',
-  },
-  {
-    num: '02',
-    title: 'Capture the Question',
-    description: 'Grab the visible problem, upload a screenshot, or paste the text without rebuilding the task in another app.',
-    icon: <Camera className="h-7 w-7" />,
-    notes: ['Screenshot or upload', 'Paste raw question text', 'Start from where the work already is'],
-    mediaLabel: 'Capture flow GIF',
-    accent: 'from-orange-500 to-amber-400',
-    glow: 'rgba(249,115,22,0.34)',
-    wash: 'linear-gradient(135deg, rgba(249,115,22,0.16), transparent 60%)',
-  },
-  {
-    num: '03',
-    title: 'Choose the Mode',
-    description: 'Pick the explanation style once at the start so the thread stays consistent as you keep asking follow-ups.',
-    icon: <Lightbulb className="h-7 w-7" />,
-    notes: ['Standard for balance', 'Exam for formal structure', 'ELI5 for simpler language'],
-    mediaLabel: 'Mode selection demo',
-    accent: 'from-violet-500 to-fuchsia-400',
-    glow: 'rgba(168,85,247,0.34)',
-    wash: 'linear-gradient(135deg, rgba(168,85,247,0.16), transparent 60%)',
-  },
-  {
-    num: '04',
-    title: 'Keep Learning in One Thread',
-    description: 'Get the answer, review the steps, then keep follow-ups attached to the same solve instead of starting over.',
-    icon: <Zap className="h-7 w-7" />,
-    notes: ['Clear final answer first', 'Steps after that', 'Follow-ups keep context'],
-    mediaLabel: 'Threaded follow-up demo',
-    accent: 'from-emerald-500 to-teal-400',
-    glow: 'rgba(16,185,129,0.34)',
-    wash: 'linear-gradient(135deg, rgba(16,185,129,0.16), transparent 60%)',
-  },
-];
-
-const FUTURE_FEATURES = [
-  {
-    title: 'LMS Integration',
-    description: 'Placeholder: future support for launching Oryx closer to school platforms and assignment flows.',
-    icon: <Scan className="h-5 w-5" />,
-    accent: 'from-indigo-500 to-blue-500',
-  },
-  {
-    title: 'Mobile Sync',
-    description: 'Placeholder: review history, saved solves, and progress across devices from the same account.',
-    icon: <Smartphone className="h-5 w-5" />,
-    accent: 'from-sky-500 to-cyan-400',
-  },
-  {
-    title: 'Smart Extraction',
-    description: 'Placeholder: stronger OCR and cleaner math/text extraction from rough screenshots and handwriting.',
-    icon: <Wand2 className="h-5 w-5" />,
-    accent: 'from-violet-500 to-fuchsia-400',
-  },
-  {
-    title: 'STEM Optimized',
-    description: 'Placeholder: deeper flows for subjects like calculus, chemistry, and physics.',
-    icon: <Calculator className="h-5 w-5" />,
-    accent: 'from-orange-500 to-amber-400',
-  },
-  {
-    title: 'Contextual Chat',
-    description: 'Placeholder: richer clarification threads that stay tied to the exact problem and explanation.',
-    icon: <MessageSquare className="h-5 w-5" />,
-    accent: 'from-emerald-500 to-teal-400',
-  },
-  {
-    title: 'Study Library',
-    description: 'Placeholder: organize solves into reusable collections for review and later practice.',
-    icon: <FolderKanban className="h-5 w-5" />,
-    accent: 'from-blue-500 to-indigo-400',
-  },
-];
-
 export default function HowItWorksPage() {
+  const { t } = useTranslation();
+
+  const STEPS = [
+    {
+      num: '01',
+      title: t('how_it_works.stepper_1_title', { defaultValue: 'Install the Extension' }),
+      description: t('how_it_works.stepper_1_desc', { defaultValue: 'Add OryxSolver to Chrome and pin it so capture is one click away when a question is already on the page.' }),
+      icon: <Monitor className="h-7 w-7" />,
+      notes: [
+        t('how_it_works.stepper_1_n1', { defaultValue: 'Open the Chrome Web Store' }),
+        t('how_it_works.stepper_1_n2', { defaultValue: 'Click Add to Chrome' }),
+        t('how_it_works.stepper_1_n3', { defaultValue: 'Pin it for instant access' })
+      ],
+      mediaLabel: t('how_it_works.stepper_1_media', { defaultValue: 'Extension setup demo' }),
+      accent: 'from-indigo-500 to-blue-500',
+      glow: 'rgba(99,102,241,0.38)',
+      wash: 'linear-gradient(135deg, rgba(99,102,241,0.18), transparent 60%)',
+    },
+    {
+      num: '02',
+      title: t('how_it_works.stepper_2_title', { defaultValue: 'Capture the Question' }),
+      description: t('how_it_works.stepper_2_desc', { defaultValue: 'Grab the visible problem, upload a screenshot, or paste the text without rebuilding the task in another app.' }),
+      icon: <Camera className="h-7 w-7" />,
+      notes: [
+        t('how_it_works.stepper_2_n1', { defaultValue: 'Screenshot or upload' }),
+        t('how_it_works.stepper_2_n2', { defaultValue: 'Paste raw question text' }),
+        t('how_it_works.stepper_2_n3', { defaultValue: 'Start from where the work already is' })
+      ],
+      mediaLabel: t('how_it_works.stepper_2_media', { defaultValue: 'Capture flow GIF' }),
+      accent: 'from-orange-500 to-amber-400',
+      glow: 'rgba(249,115,22,0.34)',
+      wash: 'linear-gradient(135deg, rgba(249,115,22,0.16), transparent 60%)',
+    },
+    {
+      num: '03',
+      title: t('how_it_works.stepper_3_title', { defaultValue: 'Choose the Mode' }),
+      description: t('how_it_works.stepper_3_desc', { defaultValue: 'Pick the explanation style once at the start so the thread stays consistent as you keep asking follow-ups.' }),
+      icon: <Lightbulb className="h-7 w-7" />,
+      notes: [
+        t('how_it_works.stepper_3_n1', { defaultValue: 'Standard for balance' }),
+        t('how_it_works.stepper_3_n2', { defaultValue: 'Exam for formal structure' }),
+        t('how_it_works.stepper_3_n3', { defaultValue: 'ELI5 for simpler language' })
+      ],
+      mediaLabel: t('how_it_works.stepper_3_media', { defaultValue: 'Mode selection demo' }),
+      accent: 'from-violet-500 to-fuchsia-400',
+      glow: 'rgba(168,85,247,0.34)',
+      wash: 'linear-gradient(135deg, rgba(168,85,247,0.16), transparent 60%)',
+    },
+    {
+      num: '04',
+      title: t('how_it_works.stepper_4_title', { defaultValue: 'Keep Learning in One Thread' }),
+      description: t('how_it_works.stepper_4_desc', { defaultValue: 'Get the answer, review the steps, then keep follow-ups attached to the same solve instead of starting over.' }),
+      icon: <Zap className="h-7 w-7" />,
+      notes: [
+        t('how_it_works.stepper_4_n1', { defaultValue: 'Clear final answer first' }),
+        t('how_it_works.stepper_4_n2', { defaultValue: 'Steps after that' }),
+        t('how_it_works.stepper_4_n3', { defaultValue: 'Follow-ups keep context' })
+      ],
+      mediaLabel: t('how_it_works.stepper_4_media', { defaultValue: 'Threaded follow-up demo' }),
+      accent: 'from-emerald-500 to-teal-400',
+      glow: 'rgba(16,185,129,0.34)',
+      wash: 'linear-gradient(135deg, rgba(16,185,129,0.16), transparent 60%)',
+    },
+  ];
+
+  const FUTURE_FEATURES = [
+    {
+      title: t('how_it_works.future_1_title', { defaultValue: 'LMS Integration' }),
+      description: t('how_it_works.future_1_desc', { defaultValue: 'Placeholder: future support for launching Oryx closer to school platforms and assignment flows.' }),
+      icon: <Scan className="h-5 w-5" />,
+      accent: 'from-indigo-500 to-blue-500',
+    },
+    {
+      title: t('how_it_works.future_2_title', { defaultValue: 'Mobile Sync' }),
+      description: t('how_it_works.future_2_desc', { defaultValue: 'Placeholder: review history, saved solves, and progress across devices from the same account.' }),
+      icon: <Smartphone className="h-5 w-5" />,
+      accent: 'from-sky-500 to-cyan-400',
+    },
+    {
+      title: t('how_it_works.future_3_title', { defaultValue: 'Smart Extraction' }),
+      description: t('how_it_works.future_3_desc', { defaultValue: 'Placeholder: stronger OCR and cleaner math/text extraction from rough screenshots and handwriting.' }),
+      icon: <Wand2 className="h-5 w-5" />,
+      accent: 'from-violet-500 to-fuchsia-400',
+    },
+    {
+      title: t('how_it_works.future_4_title', { defaultValue: 'STEM Optimized' }),
+      description: t('how_it_works.future_4_desc', { defaultValue: 'Placeholder: deeper flows for subjects like calculus, chemistry, and physics.' }),
+      icon: <Calculator className="h-5 w-5" />,
+      accent: 'from-orange-500 to-amber-400',
+    },
+    {
+      title: t('how_it_works.future_5_title', { defaultValue: 'Contextual Chat' }),
+      description: t('how_it_works.future_5_desc', { defaultValue: 'Placeholder: richer clarification threads that stay tied to the exact problem and explanation.' }),
+      icon: <MessageSquare className="h-5 w-5" />,
+      accent: 'from-emerald-500 to-teal-400',
+    },
+    {
+      title: t('how_it_works.future_6_title', { defaultValue: 'Study Library' }),
+      description: t('how_it_works.future_6_desc', { defaultValue: 'Placeholder: organize solves into reusable collections for review and later practice.' }),
+      icon: <FolderKanban className="h-5 w-5" />,
+      accent: 'from-blue-500 to-indigo-400',
+    },
+  ];
+
   return (
     <MarketingLayout className="oryx-shell-bg text-[color:var(--text-primary)]" headerVariant="glass" footerVariant="solid">
       <main className="relative overflow-hidden pb-20 pt-32">
@@ -114,28 +133,28 @@ export default function HowItWorksPage() {
           <div className="mx-auto max-w-5xl text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
               <Sparkles className="h-4 w-4 text-sky-600 dark:text-teal-300" />
-              How it works
+              {t('how_it_works.title_badge', { defaultValue: 'How it works' })}
             </div>
             <h1 className="marketing-heading mt-8 text-[3.3rem] font-extrabold text-slate-950 dark:text-white sm:text-[4.1rem] md:text-[5.1rem] md:leading-[0.98]">
-              Simple steps from
-              <span className="block gradient-text-animated">question to clarity.</span>
+              {t('how_it_works.title_main', { defaultValue: 'Simple steps from' })}
+              <span className="block gradient-text-animated">{t('how_it_works.title_gradient', { defaultValue: 'question to clarity.' })}</span>
             </h1>
             <p className="mx-auto mt-6 max-w-3xl text-xl font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-              OryxSolver is built to be fast, accurate, and intuitive. The workflow below is the clearest version of how the product should feel.
+              {t('how_it_works.title_desc', { defaultValue: 'OryxSolver is built to be fast, accurate, and intuitive. The workflow below is the clearest version of how the product should feel.' })}
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
                 to="/signup"
                 className="gradient-btn inline-flex items-center gap-2 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01]"
               >
-                Start free
+                {t('how_it_works.start_free', { defaultValue: 'Start free' })}
                 <ArrowRight className="h-5 w-5" />
               </Link>
               <Link
                 to="/pricing"
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/86 px-7 py-4 text-base font-bold text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
               >
-                View pricing
+                {t('how_it_works.view_pricing', { defaultValue: 'View pricing' })}
               </Link>
             </div>
           </div>
@@ -202,27 +221,27 @@ export default function HowItWorksPage() {
         <section className="px-4 py-20 sm:px-6">
           <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Where it fits</p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('how_it_works.where_badge', { defaultValue: 'Where it fits' })}</p>
               <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-                Use the workflow where it helps, not everywhere.
+                {t('how_it_works.where_title', { defaultValue: 'Use the workflow where it helps, not everywhere.' })}
               </h2>
               <p className="mt-4 text-lg leading-relaxed text-slate-600 dark:text-slate-300">
-                The extension is for speed when the problem is already in front of you. The web app is for reviewing, checking usage, managing your account, and continuing threads with more space.
+                {t('how_it_works.where_desc', { defaultValue: 'The extension is for speed when the problem is already in front of you. The web app is for reviewing, checking usage, managing your account, and continuing threads with more space.' })}
               </p>
               <div className="mt-8 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[24px] border border-slate-200/80 bg-white/86 p-5 dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="oryx-marketing-icon h-11 w-11">
                     <Globe className="h-5 w-5" />
                   </div>
-                  <p className="mt-4 text-lg font-black text-slate-950 dark:text-white">Web app</p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">Review history, plan usage, settings, and longer threads.</p>
+                  <p className="mt-4 text-lg font-black text-slate-950 dark:text-white">{t('how_it_works.webapp_title', { defaultValue: 'Web app' })}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t('how_it_works.webapp_desc', { defaultValue: 'Review history, plan usage, settings, and longer threads.' })}</p>
                 </div>
                 <div className="rounded-[24px] border border-slate-200/80 bg-white/86 p-5 dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="oryx-marketing-icon h-11 w-11">
                     <MousePointerClick className="h-5 w-5" />
                   </div>
-                  <p className="mt-4 text-lg font-black text-slate-950 dark:text-white">Extension</p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">Capture quickly when the question is already on the page.</p>
+                  <p className="mt-4 text-lg font-black text-slate-950 dark:text-white">{t('how_it_works.extension_title', { defaultValue: 'Extension' })}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t('how_it_works.extension_desc', { defaultValue: 'Capture quickly when the question is already on the page.' })}</p>
                 </div>
               </div>
             </div>
@@ -234,14 +253,14 @@ export default function HowItWorksPage() {
                     <Scan className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Placeholder preview</p>
-                    <p className="text-lg font-black text-slate-950 dark:text-white">Future visual walkthrough slot</p>
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('how_it_works.placeholder_badge', { defaultValue: 'Placeholder preview' })}</p>
+                    <p className="text-lg font-black text-slate-950 dark:text-white">{t('how_it_works.placeholder_title', { defaultValue: 'Future visual walkthrough slot' })}</p>
                   </div>
                 </div>
                 <div className="mt-5 flex h-56 items-center justify-center rounded-[24px] border border-dashed border-slate-300/80 bg-white/80 dark:border-white/10 dark:bg-white/[0.03]">
                   <div className="text-center">
                     <FolderKanban className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
-                    <p className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400">Image, GIF, or guided demo can live here later.</p>
+                    <p className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400">{t('how_it_works.placeholder_slot', { defaultValue: 'Image, GIF, or guided demo can live here later.' })}</p>
                   </div>
                 </div>
               </div>
@@ -252,13 +271,13 @@ export default function HowItWorksPage() {
         <section className="border-y border-slate-200/70 bg-white/60 px-4 py-20 sm:px-6 dark:border-white/5 dark:bg-black/10">
           <div className="mx-auto max-w-6xl">
             <div className="mx-auto max-w-3xl text-center">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Future placeholders</p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('how_it_works.premium_badge', { defaultValue: 'Future placeholders' })}</p>
               <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white sm:text-5xl">
-                Premium features for
-                <span className="block gradient-text-animated">faster learning.</span>
+                {t('how_it_works.premium_title', { defaultValue: 'Premium features for' })}
+                <span className="block gradient-text-animated">{t('how_it_works.premium_gradient', { defaultValue: 'faster learning.' })}</span>
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                These are intentionally placeholders for future expansion. The layout is ready now, and the product detail can be replaced later when each area becomes real.
+                {t('how_it_works.premium_desc', { defaultValue: 'These are intentionally placeholders for future expansion. The layout is ready now, and the product detail can be replaced later when each area becomes real.' })}
               </p>
             </div>
 
@@ -278,7 +297,7 @@ export default function HowItWorksPage() {
                     {feature.description}
                   </p>
                   <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                    Placeholder
+                    {t('how_it_works.placeholder_label', { defaultValue: 'Placeholder' })}
                   </p>
                 </div>
               ))}
@@ -288,20 +307,20 @@ export default function HowItWorksPage() {
 
         <section className="px-4 pb-20 sm:px-6">
           <div className="mx-auto max-w-4xl rounded-[36px] border border-slate-200/80 bg-white/88 p-10 text-center shadow-[0_30px_90px_-44px_rgba(15,23,42,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#08111d]/82 sm:p-14">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Next step</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('how_it_works.next_badge', { defaultValue: 'Next step' })}</p>
             <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white">
-              Solve your homework faster.
-              <span className="block gradient-text-animated">Learn better.</span>
+              {t('how_it_works.next_title', { defaultValue: 'Solve your homework faster.' })}
+              <span className="block gradient-text-animated">{t('how_it_works.next_gradient', { defaultValue: 'Learn better.' })}</span>
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-              Start with the free plan, try one real assignment question, and decide whether the flow actually saves you time.
+              {t('how_it_works.next_desc', { defaultValue: 'Start with the free plan, try one real assignment question, and decide whether the flow actually saves you time.' })}
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
                 to="/signup"
                 className="gradient-btn inline-flex items-center gap-2 rounded-full px-7 py-4 text-base shadow-xl shadow-sky-500/15 transition hover:scale-[1.01]"
               >
-                Start free
+                {t('how_it_works.start_free', { defaultValue: 'Start free' })}
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </div>

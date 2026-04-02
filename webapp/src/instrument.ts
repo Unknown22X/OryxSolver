@@ -21,4 +21,6 @@ if (sentryDsn) {
     release: import.meta.env.VITE_APP_VERSION || 'unknown',
     sendDefaultPii: false,
   });
+
+  Sentry.setTag('surface', 'webapp');
 }

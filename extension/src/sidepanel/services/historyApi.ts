@@ -1,5 +1,6 @@
 import { getApiUrl } from './apiConfig';
 import type { ApiError, HistoryEntry, HistoryListResponse } from './contracts';
+import { applyServiceHealthError, markSuccess, resilientFetch } from './serviceHealth';
 
 type HistoryListParams = {
   limit?: number;
@@ -15,6 +16,17 @@ function getHistoryApiUrl(): string {
   return url;
 }
 
+const HISTORY_CACHE_KEY = 'oryx_extension_history_cache';
+
+export function readCachedHistoryList(): HistoryListResponse | null {
+  try {
+    const raw = localStorage.getItem(HISTORY_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as HistoryListResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function parseApiError(res: Response): Promise<never> {
   const errText = await res.text();
   let message = `Request failed: ${res.status}`;
@@ -26,8 +38,10 @@ async function parseApiError(res: Response): Promise<never> {
   } catch {
     if (errText.trim()) message = `${message} ${errText}`;
   }
-  const error = new Error(message) as Error & { code?: string };
+  const error = new Error(message) as Error & { code?: string; status?: number };
   error.code = code;
+  error.status = res.status;
+  applyServiceHealthError(error, 'db');
   throw error;
 }
 
@@ -41,16 +55,33 @@ export async function fetchHistoryList(
   if (params.before) url.searchParams.set('before', params.before);
   if (params.conversationId) url.searchParams.set('conversation_id', params.conversationId);
 
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await resilientFetch(
+    url.toString(),
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+    {
+      dependency: 'db',
+      safeToRetry: true,
+      timeoutMs: 12000,
+    },
+  );
 
   if (!res.ok) {
     return parseApiError(res);
   }
 
-  return (await res.json()) as HistoryListResponse;
+  const data = (await res.json()) as HistoryListResponse;
+  if (!params.conversationId) {
+    try {
+      localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(data));
+    } catch {
+      // Ignore cache failures.
+    }
+  }
+  markSuccess('db', 'History loaded.');
+  return data;
 }
 
 export async function fetchConversation(
@@ -74,10 +105,18 @@ export async function deleteHistory(
     url.searchParams.set('all', 'true');
   }
 
-  const res = await fetch(url.toString(), {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await resilientFetch(
+    url.toString(),
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+    {
+      dependency: 'db',
+      safeToRetry: false,
+      timeoutMs: 12000,
+    },
+  );
 
   if (!res.ok) {
     await parseApiError(res);
@@ -89,14 +128,22 @@ export async function renameConversation(
   conversationId: string,
   title: string,
 ): Promise<void> {
-  const res = await fetch(getHistoryApiUrl(), {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+  const res = await resilientFetch(
+    getHistoryApiUrl(),
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ conversation_id: conversationId, title }),
     },
-    body: JSON.stringify({ conversation_id: conversationId, title }),
-  });
+    {
+      dependency: 'db',
+      safeToRetry: false,
+      timeoutMs: 12000,
+    },
+  );
 
   if (!res.ok) {
     await parseApiError(res);

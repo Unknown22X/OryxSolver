@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edge';
 import type { User, Session } from '@supabase/supabase-js';
+import { applyServiceHealthError, canPerformDependencyAction } from '../lib/serviceHealth';
 
 interface AuthState {
   user: User | null;
@@ -61,6 +62,11 @@ export function useAuth(): UseAuthReturn {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    if (!canPerformDependencyAction('auth')) {
+      const error = new Error('Authentication is temporarily unavailable. Please try again shortly.');
+      applyServiceHealthError(error, 'auth');
+      throw error;
+    }
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -76,13 +82,18 @@ export function useAuth(): UseAuthReturn {
     password: string,
     options?: { legalMetadata?: Record<string, unknown> },
   ) => {
+    if (!canPerformDependencyAction('auth')) {
+      const error = new Error('Authentication is temporarily unavailable. Please try again shortly.');
+      applyServiceHealthError(error, 'auth');
+      throw error;
+    }
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/how-it-works`,
+          emailRedirectTo: `${window.location.origin}/onboarding`,
           ...(options?.legalMetadata ? { data: options.legalMetadata } : {}),
         },
       });
@@ -94,6 +105,11 @@ export function useAuth(): UseAuthReturn {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (!canPerformDependencyAction('auth')) {
+      const error = new Error('Authentication is temporarily unavailable. Please try again shortly.');
+      applyServiceHealthError(error, 'auth');
+      throw error;
+    }
     setState(prev => ({ ...prev, loading: true }));
     try {
       const { error } = await supabase.auth.signOut();
@@ -107,6 +123,11 @@ export function useAuth(): UseAuthReturn {
 
   const updateProfile = useCallback(async (data: { displayName?: string; photoURL?: string }) => {
     if (!state.user) throw new Error('No user logged in');
+    if (!canPerformDependencyAction('auth')) {
+      const error = new Error('Profile updates are temporarily unavailable. Please try again shortly.');
+      applyServiceHealthError(error, 'auth');
+      throw error;
+    }
     
     const { error } = await supabase.auth.updateUser({
       data,

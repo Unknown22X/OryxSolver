@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   subscribeAuthState,
+  signInWithGoogle,
   signInWithPassword,
   signUpWithPassword,
   sendEmailOtp,
@@ -10,6 +11,7 @@ import {
   refreshAuthUser,
   updateCurrentUserProfile,
   updateUserPassword,
+  sendPasswordResetEmail,
   type AuthUser,
   isSupabaseAuthConfigured
 } from '../auth/supabaseAuthClient';
@@ -60,23 +62,27 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
     if (!isSupabaseAuthConfigured) return;
 
     const refreshCurrentUser = async () => {
-      const nextUser = await refreshAuthUser();
-      setAuthUser(nextUser);
-      if (nextUser && onAuthChange) {
-        onAuthChange();
+      try {
+        const nextUser = await refreshAuthUser();
+        setAuthUser(nextUser);
+        if (nextUser && onAuthChange) {
+          onAuthChange();
+        }
+      } catch (error) {
+        console.error('Failed to refresh current extension user:', error);
       }
     };
 
-    const handleWindowFocus = () => {
-      void refreshCurrentUser();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshCurrentUser();
+      }
     };
 
-    window.addEventListener('focus', handleWindowFocus);
-    document.addEventListener('visibilitychange', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      window.removeEventListener('focus', handleWindowFocus);
-      document.removeEventListener('visibilitychange', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [onAuthChange]);
 
@@ -88,7 +94,9 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
 
   const handleSignIn = async () => {
     if (!isSupabaseAuthConfigured) {
-      setAuthMessage('Supabase Auth is not configured.');
+      setAuthMessage(
+        'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+      );
       return;
     }
 
@@ -124,9 +132,31 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (!isSupabaseAuthConfigured) {
+      setAuthMessage(
+        'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+      );
+      return;
+    }
+
+    setIsAuthBusy(true);
+    setAuthMessage(null);
+    try {
+      await signInWithGoogle();
+      setAuthMessage('Google sign-in opened in a new tab. Finish the flow there, then return to the extension.');
+    } catch (error) {
+      setAuthMessage(mapSupabaseAuthError(error));
+    } finally {
+      setIsAuthBusy(false);
+    }
+  };
+
   const handleSignUp = async () => {
     if (!isSupabaseAuthConfigured) {
-      setAuthMessage('Supabase Auth is not configured.');
+      setAuthMessage(
+        'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+      );
       return;
     }
 
@@ -228,6 +258,26 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!isSupabaseAuthConfigured) return;
+    const email = authEmail.trim();
+    if (!email) {
+      setAuthMessage('Enter your email to receive a password reset link.');
+      return;
+    }
+
+    setIsAuthBusy(true);
+    setAuthMessage(null);
+    try {
+      await sendPasswordResetEmail(email);
+      setAuthMessage('Password reset link sent! Check your email.');
+    } catch (error) {
+      setAuthMessage(mapSupabaseAuthError(error));
+    } finally {
+      setIsAuthBusy(false);
+    }
+  };
+
   const resetAuthState = useCallback(() => {
     setAuthEmail('');
     setAuthPassword('');
@@ -239,13 +289,18 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
   }, []);
 
   const refreshAuth = useCallback(async () => {
-    const nextUser = await refreshAuthUser();
-    setAuthUser(nextUser);
-    if (nextUser && onAuthChange) {
-      onAuthChange();
+    try {
+      const nextUser = await refreshAuthUser();
+      setAuthUser(nextUser);
+      if (nextUser && onAuthChange) {
+        onAuthChange();
+      }
+      return nextUser;
+    } catch (error) {
+      console.error('Failed to refresh extension auth state:', error);
+      return authUser;
     }
-    return nextUser;
-  }, [onAuthChange]);
+  }, [authUser, onAuthChange]);
 
   return {
     authUser,
@@ -271,9 +326,11 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
     setAcceptedTerms,
     setAcceptedPrivacy,
     handleSignIn,
+    handleGoogleSignIn,
     handleSignUp,
     handleVerifyOtpCode,
     handleResendOtp,
+    handleResetPassword,
     signOut: signOutUser,
     refreshAuth,
     updateProfile: updateCurrentUserProfile,

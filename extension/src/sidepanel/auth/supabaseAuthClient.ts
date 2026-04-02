@@ -1,6 +1,8 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { getApiUrl } from '../services/apiConfig';
+import { sanitizeExternalUrl } from '../services/safeExternalUrl';
 import { supabase } from '../services/supabaseClient';
+import { applyServiceHealthError, canPerformDependencyAction, resilientFetch } from '../services/serviceHealth';
 
 export type AuthUser = {
   id: string;
@@ -8,15 +10,56 @@ export type AuthUser = {
   emailVerified: boolean;
   displayName: string | null;
   photoURL: string | null;
+  onboardingCompleted: boolean;
 };
 
 function getAuthRedirectUrl(): string {
   return chrome.runtime.getURL('src/sidepanel/index.html');
 }
 
+// Auto-close handler for auth tabs and PKCE code exchange
+if (typeof window !== 'undefined') {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const errorMsg = params.get('error');
+
+  if (code) {
+    // PKCE Flow: We received a code. We must exchange it for a session.
+    // The sidepanel / background shares chrome.storage.local, so the code_verifier
+    // that Supabase automatically set before redirecting will be available here.
+    supabase?.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) {
+        console.error('Failed to exchange code for session:', error.message);
+      }
+      // Extremely wide windows are the temporary auth tab. Auto close it.
+      if (window.innerWidth > 600) {
+        window.close();
+      }
+    }).catch((err) => {
+      console.error('Exception during code exchange:', err);
+      if (window.innerWidth > 600) window.close();
+    });
+  } else if (errorMsg) {
+    // If the user cancelled the flow or an error occurred
+    console.error('OAuth Error:', params.get('error_description') || errorMsg);
+    if (window.innerWidth > 600) {
+      setTimeout(() => window.close(), 2000); // Give user time to read, then close
+    }
+  } else if (window.location.hash.includes('access_token=') || window.location.hash.includes('provider_token=')) {
+    // Legacy Implicit Flow fallback
+    if (window.innerWidth > 600) {
+      setTimeout(() => window.close(), 1500);
+    }
+  }
+}
+
 function mapUser(user: SupabaseUser | null): AuthUser | null {
   if (!user) return null;
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const onboardingCompleted =
+    metadata.onboarding_completed === true ||
+    (typeof metadata.onboarding_completed_at === 'string' &&
+      metadata.onboarding_completed_at.trim().length > 0);
   return {
     id: user.id,
     email: user.email ?? null,
@@ -33,6 +76,7 @@ function mapUser(user: SupabaseUser | null): AuthUser | null {
         : typeof metadata.avatar_url === 'string'
           ? metadata.avatar_url
           : null,
+    onboardingCompleted,
   };
 }
 
@@ -40,13 +84,20 @@ export const isSupabaseAuthConfigured = !!supabase;
 
 export async function getAccessToken(): Promise<string> {
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  const token = data.session?.access_token;
-  if (!token) throw new Error('No active auth session. Please sign in again.');
-  return token;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const token = data.session?.access_token;
+    if (!token) throw new Error('No active auth session. Please sign in again.');
+    return token;
+  } catch (error) {
+    applyServiceHealthError(error, 'auth');
+    throw error;
+  }
 }
 
 export async function getCurrentUserId(): Promise<string | null> {
@@ -60,14 +111,45 @@ export async function getCurrentUserId(): Promise<string | null> {
 }
 
 export async function signInWithPassword(email: string, password: string): Promise<AuthUser> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   const user = mapUser(data.user ?? null);
   if (!user) throw new Error('Sign-in succeeded but no user was returned.');
   return user;
+}
+
+export async function signInWithGoogle(): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
+  if (!supabase) {
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
+  }
+
+  // Supabase automatically generates and stores the PKCE code_challenge and code_verifier 
+  // behind the scenes when flowType is 'pkce'.
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: getAuthRedirectUrl(),
+      skipBrowserRedirect: true,
+    },
+  });
+  if (error) throw error;
+  if (!data?.url) {
+    throw new Error('Google sign-in could not be started.');
+  }
+  await chrome.tabs.create({ url: data.url });
 }
 
 type SignUpMetadata = {
@@ -83,8 +165,13 @@ export async function signUpWithPassword(
   password: string,
   metadata?: SignUpMetadata,
 ): Promise<AuthUser | null> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -103,8 +190,13 @@ export async function sendEmailOtp(
   shouldCreateUser: boolean,
   metadata?: SignUpMetadata,
 ): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   const { error } = await supabase.auth.signInWithOtp({
     email,
@@ -118,8 +210,13 @@ export async function sendEmailOtp(
 }
 
 export async function verifyEmailOtp(email: string, token: string): Promise<AuthUser> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   // Try 'signup' first (for password signups), then 'email' (for OTP/MagicLink login),
   // then 'magiclink' (legacy fallback).
@@ -144,8 +241,13 @@ export async function verifyEmailOtp(email: string, token: string): Promise<Auth
 }
 
 export async function resendVerificationEmail(email: string): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   const { error } = await supabase.auth.resend({
     type: 'signup',
@@ -155,24 +257,52 @@ export async function resendVerificationEmail(email: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function sendPasswordResetEmail(email: string): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
+  if (!supabase) {
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
+  }
+
+  // Determine the best base URL to redirect the user to finish password reset on the web app.
+  const webAppBaseUrl = sanitizeExternalUrl(import.meta.env.VITE_WEBAPP_URL, [
+    'oryxsolver.com',
+    'www.oryxsolver.com',
+    'localhost',
+    '127.0.0.1',
+  ]) || 'https://oryxsolver.com';
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${webAppBaseUrl}/reset-password`,
+  });
+  if (error) throw error;
+}
+
 export async function refreshAuthUser(): Promise<AuthUser | null> {
   if (!supabase) return null;
-  try {
-    const { error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw sessionError;
-    
-    // If we have a session but it might be stale, refetch user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
-    
-    return mapUser(user);
-  } catch (error) {
-    console.error('Failed to refresh auth user:', error);
-    return null;
-  }
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!session) return null;
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) throw userError;
+
+  return mapUser(user ?? session.user ?? null);
 }
 
 export async function signOutUser(): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Authentication is temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) return;
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
@@ -181,8 +311,13 @@ export async function signOutUser(): Promise<void> {
 export async function updateCurrentUserProfile(
   profile: { displayName: string | null; photoURL: string | null },
 ): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Profile updates are temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   const { error } = await supabase.auth.updateUser({
     data: {
@@ -198,20 +333,34 @@ export async function updateCurrentUserProfile(
   if (!accessToken || !syncUrl) return;
 
   try {
-    await fetch(syncUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+    await resilientFetch(
+      syncUrl,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
-    });
+      {
+        dependency: 'db',
+        safeToRetry: false,
+        timeoutMs: 12000,
+      },
+    );
   } catch (syncError) {
+    applyServiceHealthError(syncError, 'db');
     console.error('Extension profile sync failed:', syncError);
   }
 }
 
 export async function updateUserPassword(password: string): Promise<void> {
+  if (!canPerformDependencyAction('auth')) {
+    throw new Error('Password updates are temporarily unavailable. Please try again shortly.');
+  }
   if (!supabase) {
-    throw new Error('Supabase Auth is not configured. Check extension/.env values.');
+    throw new Error(
+      'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, and ensure extension/.env.local is not overriding extension/.env with blank values.',
+    );
   }
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw error;

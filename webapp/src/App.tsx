@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState, lazy, Suspense } from 'react';
+import type { ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import { OryxPostHogProvider } from './lib/posthog';
 import { AnalyticsProvider } from './lib/analytics';
@@ -8,6 +9,11 @@ import type { User } from '@supabase/supabase-js';
 import * as Sentry from '@sentry/react';
 import AdminRoute from './components/AdminRoute';
 import { clearPendingLegalConsent, readPendingLegalConsent } from './lib/legalConsent';
+import { fetchPublicAppConfig, type PublicAppConfig } from './lib/appConfig';
+import MaintenanceOverlay from './components/MaintenanceOverlay';
+import ServiceStatusBanner from './components/ServiceStatusBanner';
+import { hasCompletedOnboarding } from './lib/onboarding';
+import { useServiceHealth } from './hooks/useServiceHealth';
 
 // Lazy load pages for better performance
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -25,6 +31,10 @@ const ModesPage = lazy(() => import('./pages/ModesPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const FaqPage = lazy(() => import('./pages/FaqPage'));
+const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'));
+const ExtensionAuthPage = lazy(() => import('./pages/ExtensionAuthPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 
 // A simple loading fallback for Suspense
 const PageLoader = () => (
@@ -40,6 +50,8 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+  const [config, setConfig] = useState<PublicAppConfig | null>(null);
+  const { health, retryCountdowns, refresh: refreshHealth } = useServiceHealth();
 
   useEffect(() => {
     const stored = localStorage.getItem('oryx_theme');
@@ -71,15 +83,25 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
+    const syncTelemetryUser = (nextUser: User | null) => {
+      if (nextUser) {
+        identifyUser(nextUser.id, { email: nextUser.email });
+        Sentry.setUser({
+          id: nextUser.id,
+          email: nextUser.email ?? undefined,
+        });
+        return;
+      }
+
+      resetAnalytics();
+      Sentry.setUser(null);
+    };
+
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         setUser(session?.user ?? null);
-        if (session?.user) {
-          identifyUser(session.user.id, { email: session.user.email });
-        } else {
-          resetAnalytics();
-        }
+        syncTelemetryUser(session?.user ?? null);
       } catch (err) {
         console.error('Auth check error:', err);
       } finally {
@@ -91,15 +113,23 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) {
-        identifyUser(session.user.id, { email: session.user.email });
-      } else {
-        resetAnalytics();
-      }
+      syncTelemetryUser(session?.user ?? null);
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    async function loadConfig() {
+      try {
+        const data = await fetchPublicAppConfig();
+        setConfig(data);
+      } catch (err) {
+        console.error('Failed to load app config:', err);
+      }
+    }
+    loadConfig();
   }, []);
 
   useEffect(() => {
@@ -140,17 +170,32 @@ function App() {
     return <PageLoader />;
   }
 
+  const onboardingComplete = hasCompletedOnboarding(user);
+  const authedHome = onboardingComplete ? '/chat' : '/onboarding';
+  const guardAuthedRoute = (element: ReactNode) =>
+    user ? (onboardingComplete ? element : <Navigate to="/onboarding" replace />) : <Navigate to="/login" />;
+
   return (
     <OryxPostHogProvider>
+      {config?.maintenanceMode && <MaintenanceOverlay />}
+      {!config?.maintenanceMode && (
+        <ServiceStatusBanner
+          health={health}
+          retryCountdowns={retryCountdowns}
+          onRetry={() => void refreshHealth()}
+        />
+      )}
       <Sentry.ErrorBoundary fallback={<div className="min-h-screen flex items-center justify-center">Something went wrong.</div>}>
         <Router>
           <AnalyticsProvider>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={user ? <Navigate to="/chat" /> : <LandingPage />} />
-                <Route path="/login" element={user ? <Navigate to="/chat" /> : <AuthPage mode="signin" />} />
-                <Route path="/signup" element={user ? <Navigate to="/chat" /> : <AuthPage mode="signup" />} />
-                <Route path="/onboarding" element={<Navigate to="/how-it-works" replace />} />
+                <Route path="/" element={user ? <Navigate to={authedHome} /> : <LandingPage />} />
+                <Route path="/login" element={user ? <Navigate to={authedHome} /> : <AuthPage mode="signin" />} />
+                <Route path="/signup" element={user ? <Navigate to={authedHome} /> : <AuthPage mode="signup" />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/extension-auth" element={<ExtensionAuthPage />} />
+                <Route path="/onboarding" element={user ? (onboardingComplete ? <Navigate to="/chat" replace /> : <OnboardingPage user={user} />) : <Navigate to="/signup" replace />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/how-it-works" element={<HowItWorksPage />} />
@@ -158,8 +203,8 @@ function App() {
                 <Route path="/payments-coming-soon" element={<PaymentsComingSoonPage />} />
                 <Route path="/modes" element={<ModesPage />} />
                 <Route path="/faq" element={<FaqPage />} />
-                <Route path="/dashboard" element={user ? <UserDashboard user={user} /> : <Navigate to="/login" />} />
-                <Route path="/chat" element={user ? <ChatPage user={user} /> : <Navigate to="/login" />} />
+                <Route path="/dashboard" element={guardAuthedRoute(<UserDashboard user={user!} />)} />
+                <Route path="/chat" element={guardAuthedRoute(<ChatPage user={user!} />)} />
                 <Route
                   path="/admin"
                   element={user ? (
@@ -168,9 +213,10 @@ function App() {
                     </AdminRoute>
                   ) : <Navigate to="/login" />}
                 />
-                <Route path="/history" element={user ? <HistoryPage user={user} /> : <Navigate to="/login" />} />
-                <Route path="/settings" element={user ? <SettingsPage user={user} /> : <Navigate to="/login" />} />
-                <Route path="/profile" element={user ? <ProfilePage user={user} /> : <Navigate to="/login" />} />
+                <Route path="/history" element={guardAuthedRoute(<HistoryPage user={user!} />)} />
+                <Route path="/subscription" element={guardAuthedRoute(<SubscriptionPage user={user!} />)} />
+                <Route path="/settings" element={guardAuthedRoute(<SettingsPage user={user!} />)} />
+                <Route path="/profile" element={guardAuthedRoute(<ProfilePage user={user!} />)} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
             </Suspense>

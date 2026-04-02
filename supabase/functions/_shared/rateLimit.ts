@@ -7,14 +7,16 @@ type RateLimitConfig = {
 };
 
 const LIMITS = {
-  '/solve': { requests: 10, windowMs: 60 * 1000 },
-  '/ai-proxy': { requests: 30, windowMs: 60 * 1000 },
+  '/solve': { requests: 30, windowMs: 60 * 1000 },
+  '/ai-proxy': { requests: 100, windowMs: 60 * 1000 },
   '/auth': { requests: 5, windowMs: 60 * 1000 },
   '/signup': { requests: 3, windowMs: 60 * 1000 },
   '/login': { requests: 10, windowMs: 60 * 1000 },
   '/sync-profile': { requests: 10, windowMs: 60 * 1000 },
   '/history': { requests: 60, windowMs: 60 * 1000 },
+  '/delete-account': { requests: 3, windowMs: 24 * 60 * 60 * 1000 },
   '/create-checkout': { requests: 5, windowMs: 60 * 1000 },
+  '/cancel-subscription': { requests: 5, windowMs: 60 * 1000 },
   '/admin-metrics': { requests: 20, windowMs: 60 * 1000 },
   '/save-history': { requests: 20, windowMs: 60 * 1000 },
   '/check-account-limit': { requests: 1, windowMs: 24 * 60 * 60 * 1000 },
@@ -69,4 +71,43 @@ export async function checkRateLimit(
     console.error(`[RATE_LIMIT] Unexpected failure for ${endpoint}:`, error);
     return { allowed: true };
   }
+}
+
+export async function checkRateLimitMany(
+  endpoint: string,
+  subjects: string[],
+): Promise<{ allowed: boolean; retryAfter?: number; remaining?: number }> {
+  const normalizedSubjects = [...new Set(subjects.map((value) => value.trim()).filter(Boolean))];
+  if (normalizedSubjects.length === 0) {
+    return { allowed: true };
+  }
+
+  let retryAfter = 0;
+  let remaining: number | undefined;
+
+  for (const subject of normalizedSubjects) {
+    const result = await checkRateLimit(endpoint, subject);
+    if (!result.allowed) {
+      return {
+        allowed: false,
+        retryAfter: result.retryAfter,
+        remaining: result.remaining,
+      };
+    }
+
+    if (typeof result.retryAfter === 'number') {
+      retryAfter = Math.max(retryAfter, result.retryAfter);
+    }
+    if (typeof result.remaining === 'number') {
+      remaining = typeof remaining === 'number'
+        ? Math.min(remaining, result.remaining)
+        : result.remaining;
+    }
+  }
+
+  return {
+    allowed: true,
+    retryAfter: retryAfter > 0 ? retryAfter : undefined,
+    remaining,
+  };
 }

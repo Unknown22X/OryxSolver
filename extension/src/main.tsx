@@ -1,4 +1,5 @@
 import "./instrument";
+import './i18n'; // must be before React mounts
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as Sentry from "@sentry/react";

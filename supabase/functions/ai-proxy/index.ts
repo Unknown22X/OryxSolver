@@ -1,7 +1,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
-import { buildPrompt, buildSuggestions, type GenerationMode, type StyleMode } from './modePrompts.ts';
+import { buildPreviewPrompt, buildPrompt, buildSuggestions, type GenerationMode, type StyleMode } from './modePrompts.ts';
 import { AppError, jsonError } from '../_shared/http.ts';
-import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
+import { checkRateLimitMany, getClientIp } from '../_shared/rateLimit.ts';
 import { hasValidInternalToken } from '../_shared/security.ts';
 
 
@@ -13,7 +13,64 @@ type AiProxyRequest = {
   mode?: GenerationMode;
   styleMode?: StyleMode;
   history?: Array<{ role: 'user' | 'model', text: string }>;
+  isBulk?: boolean;
+  streamPreview?: boolean;
+  previewOnly?: boolean;
+  preferredLanguage?: string;
 };
+
+function isMetaDisclosurePrompt(question: string): boolean {
+  const lower = question.trim().toLowerCase();
+  if (!lower) return false;
+
+  return [
+    /\b(prompt|system prompt|instructions|internal instructions|rules)\b/,
+    /\bwhat did i ask\b/,
+    /\bwhat did i say\b/,
+    /\bremember\b.*\b(before|earlier|previously)\b/,
+    /\bwhat model\b/,
+    /\bwhich model\b/,
+    /\bgemini\b/,
+    /\bapi key\b/,
+    /\bprovider\b/,
+    /\bhidden\b.*\bprompt\b/,
+  ].some((pattern) => pattern.test(lower));
+}
+
+function buildMetaDisclosureResponse(
+  question: string,
+  preferredLanguage?: string,
+): { answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> } {
+  const lower = question.trim().toLowerCase();
+
+  if (/\bwhat did i ask\b|\bwhat did i say\b|\bremember\b.*\b(before|earlier|previously)\b/.test(lower)) {
+    return {
+      answer: 'I can work with the current thread context, but I do not expose hidden memory or internal instructions.',
+      explanation: 'If you want, I can summarize the visible messages in this conversation or help with the next study question.',
+      steps: [],
+      model: '',
+      suggestions: buildSuggestions('standard', preferredLanguage),
+    };
+  }
+
+  if (/\bwhat model\b|\bwhich model\b|\bgemini\b|\bprovider\b|\bapi key\b/.test(lower)) {
+    return {
+      answer: 'I am OryxSolver, and I cannot share internal model, provider, or key details.',
+      explanation: 'I can still help with homework, explanations, examples, and practice questions.',
+      steps: [],
+      model: '',
+      suggestions: buildSuggestions('standard', preferredLanguage),
+    };
+  }
+
+  return {
+    answer: 'I cannot share my hidden prompt or internal instructions.',
+    explanation: 'I can explain what I help with: studying, solving homework, giving examples, and creating practice questions.',
+    steps: [],
+    model: '',
+    suggestions: buildSuggestions('standard', preferredLanguage),
+  };
+}
 
 function isComplexPrompt(question: string, imageParts: InlineImagePart[], styleMode: StyleMode): boolean {
   if (question.includes("Create an answer key for these practice questions")) return false;
@@ -57,7 +114,6 @@ function normalizeMcqAnswer(question: string, answer: string): string {
     /\b(a|b|c|d)\b[\).:-]/i.test(question) ||
     /\boption\b/i.test(question) ||
     /\bchoose\b/i.test(question) ||
-    /\bwhich\b/i.test(question) ||
     /\bmcq\b/i.test(question);
 
   if (!hasMcqSignal) return text;
@@ -186,15 +242,16 @@ function parseBulkOutput(raw: string): { answer: string; explanation: string; st
   };
 }
 
-function hasUsableStructuredOutput(question: string, raw: string): boolean {
+function hasUsableStructuredOutput(question: string, raw: string, isBulk = false): boolean {
+  if (isBulk) {
+    const bulkParsed = parseBulkOutput(raw);
+    return bulkParsed.steps.length > 0 || bulkParsed.explanation.trim().length > 0;
+  }
+
   const parsed = parseStructuredOutput(raw, question);
   const explanationText = parsed.explanation.trim();
   
-  // For bulk questions, answers might end in a number or letter (e.g., '1. A' or '2. 42')
-  const isBulkAsk = question.includes("Create an answer key for these practice questions");
-  const endsCleanly = isBulkAsk 
-    ? /[.!-):a-zA-Z0-9\s]$/.test(explanationText)
-    : /[.!-):]$/.test(explanationText);
+  const endsCleanly = /[.!-):]$/.test(explanationText);
 
   const isPlaceholderAnswer =
     parsed.answer.trim().length === 0 ||
@@ -202,10 +259,6 @@ function hasUsableStructuredOutput(question: string, raw: string): boolean {
 
   // If it doesn't end cleanly, it's definitely truncated.
   if (!endsCleanly && explanationText.length > 0) return false;
-
-  if (isBulkAsk) {
-    return parsed.steps.length > 0 || explanationText.length > 0;
-  }
 
   if (!isPlaceholderAnswer) {
     return parsed.steps.length >= 1 && (explanationText.length === 0 || explanationText.length >= 20);
@@ -220,8 +273,17 @@ async function callGemini(
   imageParts: InlineImagePart[],
   mode: GenerationMode,
   styleMode: StyleMode,
-  history: Array<{ role: 'user' | 'model', text: string }> = []
+  history: Array<{ role: 'user' | 'model', text: string }> = [],
+  isBulk = false,
+  options?: {
+    previewOnly?: boolean;
+    preferredLanguage?: string;
+  },
 ): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
+  if (isMetaDisclosurePrompt(question)) {
+    return buildMetaDisclosureResponse(question, options?.preferredLanguage);
+  }
+
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   if (!apiKey) {
     throw new AppError(500, 'AI_KEY_MISSING', 'Missing GEMINI_API_KEY secret');
@@ -235,17 +297,21 @@ async function callGemini(
   const strongModel = Deno.env.get('GEMINI_MODEL_STRONG') || normalModel;
   const backupModel = Deno.env.get('GEMINI_MODEL_BACKUP') || defaultBackup;
   const isBulkAsk = 
+    isBulk ||
     question.includes("answer key for the following questions") ||
     question.includes("Create an answer key for these practice questions") ||
     (question.match(/QUESTION\s*\d+:/gi) || []).length >= 2;
 
   const complexPrompt = isComplexPrompt(question, imageParts, styleMode);
+  const previewOnly = options?.previewOnly === true;
 
   const modelChain =
-    mode === 'fast_fallback'
+    previewOnly
+      ? [fastModel]
+      : mode === 'fast_fallback'
       ? [cheapModel, backupModel, strongModel]
       : isBulkAsk
-        ? [strongModel, backupModel, cheapModel]  // Added cheap fallback
+        ? [strongModel, backupModel, cheapModel]
         : complexPrompt
           ? [strongModel, cheapModel, backupModel]
           : [cheapModel, strongModel, backupModel];
@@ -257,21 +323,32 @@ async function callGemini(
   
   const hasHistory = history.length > 0;
 
-  const prompt = buildPrompt({
-    question: contextPrefix + question,
-    styleMode,
-    generationMode: mode,
-    hasImages: imageParts.length > 0,
-    isFollowUp: hasHistory,
-  });
+  const prompt = previewOnly
+    ? buildPreviewPrompt({
+        question: contextPrefix + question,
+        styleMode,
+        hasImages: imageParts.length > 0,
+        preferredLanguage: options?.preferredLanguage,
+      })
+    : buildPrompt({
+        question: contextPrefix + question,
+        styleMode,
+        generationMode: mode,
+        hasImages: imageParts.length > 0,
+        isFollowUp: hasHistory,
+        isBulk: isBulkAsk,
+        preferredLanguage: options?.preferredLanguage,
+      });
 
   let fullText = '';
   let resolvedModel = dedupedModelChain[0];
   let lastErrorText = '';
   let lastStatus = 500;
-  const perAttemptTimeoutMs = mode === 'fast_fallback' ? 6000 : 25000;
+  const perAttemptTimeoutMs = previewOnly ? 6000 : mode === 'fast_fallback' ? 6000 : 25000;
 
-  const primaryMaxOutputTokens = isBulkAsk
+  const primaryMaxOutputTokens = previewOnly
+    ? 500
+    : isBulkAsk
     ? 8192
     : mode === 'fast_fallback'
       ? (complexPrompt || styleMode === 'step_by_step' ? 1400 : 1000)
@@ -299,9 +376,9 @@ async function callGemini(
             { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" }
           ],
           generationConfig: {
-          maxOutputTokens: primaryMaxOutputTokens,
-          temperature: isBulkAsk ? 0.0 : (mode === 'fast_fallback' ? 0.0 : 0.1),
-        },
+            maxOutputTokens: primaryMaxOutputTokens,
+            temperature: previewOnly ? 0.0 : (isBulkAsk ? 0.0 : (mode === 'fast_fallback' ? 0.0 : 0.1)),
+          },
         }),
         signal: controller.signal,
       });
@@ -338,6 +415,10 @@ async function callGemini(
       }
 
       if (finishReason === 'MAX_TOKENS') {
+        if (previewOnly) {
+          resolvedModel = model;
+          break;
+        }
         // For bulk answers, just accept whatever we got - don't retry
         if (isBulkAsk) {
           resolvedModel = model;
@@ -470,7 +551,7 @@ async function callGemini(
     explanation: parsed.explanation,
     steps: parsed.steps,
     model: resolvedModel,
-    suggestions: buildSuggestions(styleMode),
+    suggestions: previewOnly ? [] : buildSuggestions(styleMode, options?.preferredLanguage),
   };
 }
 
@@ -480,7 +561,11 @@ Deno.serve(async (req) => {
   }
 
   const clientIp = getClientIp(req);
-  const rateLimit = await checkRateLimit('/ai-proxy', clientIp);
+  const userId = req.headers.get('x-user-id')?.trim();
+  const rateLimit = await checkRateLimitMany('/ai-proxy', [
+    ...(userId ? [`user:${userId}`] : []),
+    `ip:${clientIp}`,
+  ]);
   if (!rateLimit.allowed) {
     return jsonError(429, 'RATE_LIMITED', 'Too many requests');
   }
@@ -496,6 +581,9 @@ Deno.serve(async (req) => {
     const mode = body.mode === 'fast_fallback' ? 'fast_fallback' : 'normal';
     const styleMode: StyleMode = body.styleMode || 'standard';
     const history = Array.isArray(body.history) ? body.history : [];
+    const isBulk = Boolean(body.isBulk);
+    const previewOnly = body.previewOnly === true || body.streamPreview === true;
+    const preferredLanguage = body.preferredLanguage;
 
     if (!question) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
@@ -510,7 +598,10 @@ Deno.serve(async (req) => {
       return jsonError(413, 'HISTORY_TOO_LARGE', 'Too many history items.');
     }
 
-    const ai = await callGemini(question, imageParts, mode, styleMode, history);
+    const ai = await callGemini(question, imageParts, mode, styleMode, history, isBulk, {
+      previewOnly,
+      preferredLanguage,
+    });
     return new Response(
       JSON.stringify({
         ok: true,

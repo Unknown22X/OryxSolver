@@ -40,6 +40,43 @@ export type SolveSuccessResponse = {
   suggestions: SolveSuggestion[];
 };
 
+export type SolveStreamPhase =
+  | 'auth'
+  | 'preparing'
+  | 'cache'
+  | 'calling_ai'
+  | 'refining'
+  | 'finalizing';
+
+export type SolveStatusEvent = {
+  type: 'status';
+  phase: SolveStreamPhase;
+};
+
+export type SolvePreviewEvent = {
+  type: 'preview';
+  answer: string;
+  explanation?: string;
+  steps?: string[];
+};
+
+export type SolveFinalEvent = {
+  type: 'final';
+  data: SolveSuccessResponse;
+};
+
+export type SolveErrorEvent = {
+  type: 'error';
+  code?: string;
+  message: string;
+};
+
+export type SolveStreamEvent =
+  | SolveStatusEvent
+  | SolvePreviewEvent
+  | SolveFinalEvent
+  | SolveErrorEvent;
+
 export type ErrorResponse = {
   error: string;
   code: string;

@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Mail, Menu, Moon, Sparkles, Sun, X } from 'lucide-react';
 import { usePublicAppConfig } from '../hooks/usePublicAppConfig';
 import { supabase } from '../lib/supabase';
+import LanguageSwitcher from '../i18n/LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
 
 type MarketingLayoutProps = {
   children: React.ReactNode;
@@ -57,8 +59,11 @@ export default function MarketingLayout({
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const { config } = usePublicAppConfig();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+  const isRtl = i18n.language === 'ar';
+  
   const footerLinks = useMemo(() => getFooterLinks(config.support.email), [config.support.email]);
 
   const isDarkMode = themeMode === 'dark' || (themeMode === 'system' && systemPrefersDark);
@@ -120,7 +125,7 @@ export default function MarketingLayout({
   };
 
   return (
-    <div className={`min-h-screen flex flex-col ${className ?? ''}`}>
+    <div className={`min-h-screen flex flex-col ${className ?? ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="fixed inset-x-0 top-0 z-[100] border-b border-slate-200/70 bg-white/72 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#06101d]/78">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-3">
@@ -132,7 +137,7 @@ export default function MarketingLayout({
                 OryxSolver
               </span>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                Faster study flow
+                {t('landing.tagline')}
               </p>
             </div>
           </Link>
@@ -150,7 +155,7 @@ export default function MarketingLayout({
                       : 'text-slate-600 hover:bg-white hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white'
                   }`}
                 >
-                  {link.label}
+                  {t(`landing.nav_${link.label.toLowerCase().replace(/\s+/g, '_')}`)}
                 </button>
               );
             })}
@@ -161,10 +166,12 @@ export default function MarketingLayout({
               type="button"
               onClick={handleToggleTheme}
               className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/78 text-slate-700 shadow-sm backdrop-blur transition hover:border-sky-300 hover:text-sky-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:border-teal-300/30 dark:hover:text-white"
-              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDarkMode ? t('common.theme_light') : t('common.theme_dark')}
             >
               {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
+
+            <LanguageSwitcher />
 
             <div className="hidden items-center gap-2 sm:flex">
               {user ? (
@@ -172,14 +179,14 @@ export default function MarketingLayout({
                   to="/dashboard"
                   className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
                 >
-                  Dashboard
+                  {t('landing.dashboard')}
                 </Link>
               ) : (
                 <Link
                   to="/login"
                   className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
                 >
-                  Sign In
+                  {t('landing.sign_in')}
                 </Link>
               )}
 
@@ -187,8 +194,8 @@ export default function MarketingLayout({
                 to={user ? '/dashboard' : '/signup'}
                 className="gradient-btn inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm shadow-lg shadow-sky-500/15 transition hover:scale-[1.01]"
               >
-                {user ? 'Open app' : 'Get Started'}
-                <ArrowRight className="h-4 w-4" />
+                {user ? t('landing.open_app') : t('landing.get_started')}
+                <ArrowRight className={`h-4 w-4 ${isRtl ? 'rotate-180' : ''}`} />
               </Link>
             </div>
 
@@ -213,9 +220,9 @@ export default function MarketingLayout({
               <button
                 key={link.href}
                 onClick={() => handleNav(link.href)}
-                className="w-full rounded-3xl border border-white/8 bg-white/5 px-5 py-4 text-left text-lg font-bold text-white transition-colors hover:bg-white/10"
+                className={`w-full rounded-3xl border border-white/8 bg-white/5 px-5 py-4 text-lg font-bold text-white transition-colors hover:bg-white/10 ${isRtl ? 'text-right' : 'text-left'}`}
               >
-                {link.label}
+                {t(`landing.nav_${link.label.toLowerCase().replace(/\s+/g, '_')}`)}
               </button>
             ))}
           </div>
@@ -226,8 +233,8 @@ export default function MarketingLayout({
                 to="/dashboard"
                 className="gradient-btn inline-flex w-full items-center justify-center gap-2 rounded-3xl px-5 py-4 text-base"
               >
-                Open app
-                <ArrowRight className="h-5 w-5" />
+                {t('landing.open_app')}
+                <ArrowRight className={`h-5 w-5 ${isRtl ? 'rotate-180' : ''}`} />
               </Link>
             ) : (
               <>
@@ -235,14 +242,14 @@ export default function MarketingLayout({
                   to="/login"
                   className="inline-flex w-full items-center justify-center rounded-3xl border border-white/20 px-5 py-4 text-base font-bold text-white"
                 >
-                  Sign In
+                  {t('landing.sign_in')}
                 </Link>
                 <Link
                   to="/signup"
                   className="gradient-btn inline-flex w-full items-center justify-center gap-2 rounded-3xl px-5 py-4 text-base"
                 >
-                  Get Started
-                  <ArrowRight className="h-5 w-5" />
+                  {t('landing.get_started')}
+                  <ArrowRight className={`h-5 w-5 ${isRtl ? 'rotate-180' : ''}`} />
                 </Link>
               </>
             )}
@@ -254,20 +261,16 @@ export default function MarketingLayout({
 
       {showFooter && (
         <footer className="relative overflow-hidden border-t border-slate-200/70 bg-transparent pt-16 pb-10 dark:border-white/5">
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                footerVariant === 'dark'
-                  ? 'linear-gradient(180deg, rgba(5,7,20,0.08) 0%, rgba(5,7,20,0) 38%)'
-                  : 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 36%)',
-            }}
-          />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-40" style={{ background: 'var(--marketing-glow)' }} />
+          {!isDarkMode && footerVariant !== 'dark' && (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 42%)' }}
+            />
+          )}
 
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mb-12 grid gap-12 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
-              <div>
+              <div className={isRtl ? 'text-right' : 'text-left'}>
                 <Link to="/" className="mb-5 flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/85 shadow-sm dark:border-white/10 dark:bg-white/6">
                     <Sparkles className="h-5 w-5 text-sky-600 dark:text-teal-300" />
@@ -275,7 +278,7 @@ export default function MarketingLayout({
                   <span className="text-xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">OryxSolver</span>
                 </Link>
                 <p className="mb-5 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  Capture questions, get cleaner explanations, and keep the study flow moving between Chrome and the web app.
+                  {t('landing.footer_desc')}
                 </p>
                 <a href={`mailto:${config.support.email}`} className="inline-flex items-center gap-2 text-sm font-bold text-sky-700 transition-colors hover:text-teal-700 dark:text-teal-300 dark:hover:text-teal-200">
                   <Mail className="h-4 w-4" />
@@ -284,14 +287,14 @@ export default function MarketingLayout({
               </div>
 
               {footerLinks.map((column) => (
-                <div key={column.title}>
-                  <h4 className="mb-5 text-sm font-black uppercase tracking-[0.22em] text-slate-900 dark:text-white">{column.title}</h4>
+                <div key={column.title} className={isRtl ? 'text-right' : 'text-left'}>
+                  <h4 className="mb-5 text-sm font-black uppercase tracking-[0.22em] text-slate-900 dark:text-white">{t(`landing.footer_${column.title.toLowerCase()}`)}</h4>
                   <ul className="space-y-3">
                     {column.links.map((link) => (
                       <li key={link.label}>
                         {link.href.startsWith('mailto:') ? (
                           <a href={link.href} className="text-sm font-medium text-slate-500 transition-colors hover:text-sky-700 dark:hover:text-teal-200">
-                            {link.label}
+                            {t(`landing.nav_${link.label.toLowerCase().replace(/\s+/g, '_')}`)}
                           </a>
                         ) : (
                           <button
@@ -299,7 +302,7 @@ export default function MarketingLayout({
                             onClick={() => handleNav(link.href)}
                             className="text-sm font-medium text-slate-500 transition-colors hover:text-sky-700 dark:hover:text-teal-200"
                           >
-                            {link.label}
+                            {t(`landing.nav_${link.label.toLowerCase().replace(/\s+/g, '_')}`)}
                           </button>
                         )}
                       </li>
@@ -310,10 +313,10 @@ export default function MarketingLayout({
             </div>
 
             <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-200/70 pt-8 sm:flex-row dark:border-white/5">
-              <p className="text-xs font-medium tracking-tight text-slate-500">Copyright 2026 OryxSolver.</p>
+              <p className="text-xs font-medium tracking-tight text-slate-500">{t('landing.copyright')}</p>
               <div className="flex items-center gap-5 text-xs font-medium text-slate-500">
-                <Link to="/privacy" className="transition-colors hover:text-slate-900 dark:hover:text-slate-300">Privacy Policy</Link>
-                <Link to="/terms" className="transition-colors hover:text-slate-900 dark:hover:text-slate-300">Terms of Service</Link>
+                <Link to="/privacy" className="transition-colors hover:text-slate-900 dark:hover:text-slate-300">{t('landing.privacy_policy')}</Link>
+                <Link to="/terms" className="transition-colors hover:text-slate-900 dark:hover:text-slate-300">{t('landing.terms_of_service')}</Link>
               </div>
             </div>
           </div>

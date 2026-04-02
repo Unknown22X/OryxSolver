@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { AppError } from './http.ts';
 
 export type SupabaseLookupUser = {
   id: string;
@@ -17,8 +18,14 @@ export function getBearerToken(req: Request): string | null {
 }
 
 export async function verifySupabaseAccessToken(accessToken: string): Promise<SupabaseLookupUser> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+  const supabaseUrl =
+    Deno.env.get('SUPABASE_URL') ??
+    Deno.env.get('PROJECT_URL') ??
+    '';
+  const anonKey =
+    Deno.env.get('SUPABASE_ANON_KEY') ??
+    Deno.env.get('ANON_KEY') ??
+    '';
   if (!supabaseUrl || !anonKey) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY secret');
   }
@@ -38,6 +45,17 @@ export async function verifySupabaseAccessToken(accessToken: string): Promise<Su
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
     throw new Error(error?.message || 'Invalid Supabase token');
+  }
+
+  // Global Check: Is user locked?
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_locked')
+    .eq('auth_user_id', data.user.id)
+    .maybeSingle();
+    
+  if (profile?.is_locked) {
+    throw new AppError(403, 'ACCOUNT_LOCKED', 'Your account has been locked by an administrator.');
   }
 
   const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;

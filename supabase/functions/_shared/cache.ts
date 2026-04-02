@@ -4,6 +4,8 @@ export interface CachedAnswer {
   question_normalized: string;
   question_text: string;
   answer: string;
+  explanation: string;
+  steps: string[];
 }
 
 export function normalizeForCache(question: string): string {
@@ -19,6 +21,13 @@ async function ensureCacheTable(): Promise<void> {
   const { error } = await supabase.from('questions_cache').select('id').limit(1);
 
   if (!error) {
+    // Attempt to add new columns if they don't exist (fails silently if they do)
+    await supabase.rpc('exec_sql', {
+      query: `
+        ALTER TABLE public.questions_cache ADD COLUMN IF NOT EXISTS explanation text DEFAULT '';
+        ALTER TABLE public.questions_cache ADD COLUMN IF NOT EXISTS steps jsonb DEFAULT '[]'::jsonb;
+      `
+    });
     return;
   }
 
@@ -33,6 +42,8 @@ async function ensureCacheTable(): Promise<void> {
       question_normalized text NOT NULL UNIQUE,
       question_text text NOT NULL,
       answer text NOT NULL,
+      explanation text NOT NULL DEFAULT '',
+      steps jsonb NOT NULL DEFAULT '[]'::jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_questions_cache_normalized ON public.questions_cache (question_normalized);
@@ -58,7 +69,7 @@ export async function getCachedAnswer(question: string): Promise<CachedAnswer | 
 
   const { data, error } = await supabase
     .from('questions_cache')
-    .select('question_normalized, question_text, answer')
+    .select('question_normalized, question_text, answer, explanation, steps')
     .eq('question_normalized', normalized)
     .limit(1)
     .single();
@@ -67,10 +78,13 @@ export async function getCachedAnswer(question: string): Promise<CachedAnswer | 
     return null;
   }
 
-  return data as CachedAnswer;
+  return {
+    ...data,
+    steps: Array.isArray(data.steps) ? data.steps : []
+  } as CachedAnswer;
 }
 
-export async function saveToCache(question: string, answer: string): Promise<void> {
+export async function saveToCache(question: string, answer: string, explanation: string = '', steps: string[] = []): Promise<void> {
   await ensureCacheTable();
   const supabase = createSupabaseAdminClient();
   const normalized = normalizeForCache(question);
@@ -79,5 +93,7 @@ export async function saveToCache(question: string, answer: string): Promise<voi
     question_normalized: normalized,
     question_text: question,
     answer: answer,
+    explanation: explanation,
+    steps: steps,
   }, { onConflict: 'question_normalized' });
 }

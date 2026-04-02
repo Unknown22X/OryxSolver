@@ -47,9 +47,22 @@ export function jsonError(
   message: string,
   details?: unknown,
 ): Response {
+  const retryAfterSec =
+    typeof details === 'object' &&
+    details !== null &&
+    'retryAfter' in details &&
+    typeof (details as { retryAfter?: unknown }).retryAfter === 'number'
+      ? (details as { retryAfter: number }).retryAfter
+      : undefined;
   return new Response(
-    JSON.stringify({ error: message, code, ...(details ? { details } : {}) }),
-    { status, headers: withCors({ 'Content-Type': 'application/json' }) },
+    JSON.stringify({ error: message, code, ...(details ? { details } : {}), ...(retryAfterSec ? { retryAfter: retryAfterSec } : {}) }),
+    {
+      status,
+      headers: withCors({
+        'Content-Type': 'application/json',
+        ...(retryAfterSec ? { 'Retry-After': String(retryAfterSec) } : {}),
+      }),
+    },
   );
 }
 

@@ -41,6 +41,7 @@
   --font-heading: "Space Grotesk", "Work Sans", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Work Sans", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-marketing-heading: "Syne", "Space Grotesk", "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-arabic: "Cairo", "Segoe UI", Tahoma, Arial, sans-serif;
   
   /* Light mode colors */
   --bg-primary: #f4f7fb;
@@ -297,6 +298,92 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
+.oryx-bubble-user {
+  position: relative;
+  background: #f1f5f9;
+  color: #0f172a;
+  border-radius: 24px;
+  border-top-right-radius: 4px;
+  padding: 0.875rem 1.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+}
+
+.dark .oryx-bubble-user {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
+}
+
+.oryx-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
+}
+
+.oryx-copy-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.dark .oryx-copy-btn {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .oryx-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.oryx-bubble-ai {
+  position: relative;
+  background: var(--surface-panel);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  border-top-left-radius: 4px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-soft);
+  color: var(--text-primary);
+}
+
+.dark .oryx-bubble-ai {
+  background: rgba(30, 41, 59, 0.4);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.oryx-avatar-container {
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.oryx-avatar-container:hover {
+  transform: scale(1.1) rotate(5deg);
+}
+
 .glass-card-light {
   background-color: var(--surface-panel);
   border-color: var(--border-color);
@@ -433,3 +520,52 @@ h1, h2, h3, h4, h5, h6 {
     transform: none;
   }
 }
+
+/* ====== RTL / Arabic Support ====== */
+:root[dir="rtl"] {
+  --font-body: var(--font-arabic);
+  --font-heading: var(--font-arabic);
+  --font-marketing-heading: var(--font-arabic);
+}
+
+[dir="rtl"] body {
+  font-family: var(--font-arabic);
+  text-align: right;
+}
+
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5 {
+  font-family: var(--font-arabic);
+}
+
+/* Mirror AI bubble radius for RTL */
+[dir="rtl"] .oryx-bubble-ai {
+  border-radius: 24px;
+  border-top-right-radius: 4px;
+  border-top-left-radius: 24px;
+}
+
+[dir="rtl"] .oryx-bubble-user {
+  border-radius: 24px;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 24px;
+}
+
+/* Ensure sidebar doesn't slide from the wrong side */
+[dir="rtl"] aside[class*="left-0"] {
+  left: auto;
+  right: 0;
+  transform-origin: right;
+}
+
+[dir="rtl"] aside[class*="-translate-x-full"] {
+  transform: translateX(100%);
+}
+
+[dir="rtl"] aside[class*="translate-x-0"] {
+  transform: translateX(0);
+}
+

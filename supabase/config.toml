@@ -2,37 +2,79 @@
 enabled = true
 verify_jwt = false
 import_map = "./functions/ai-proxy/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/ai-proxy/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/ai-proxy/*.html" ]
 
 [functions.solve]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/solve/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/solve/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/solve/*.html" ]
 
 [functions.sync-profile]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/sync-profile/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/sync-profile/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/sync-profile/*.html" ]
+
+[functions.delete-account]
+enabled = true
+verify_jwt = false
+import_map = "./functions/delete-account/deno.json"
+entrypoint = "./functions/delete-account/index.ts"
+
+[functions.create-billing-portal]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/create-billing-portal/index.ts"
+
+[functions.cancel-subscription]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/cancel-subscription/index.ts"
 
 [functions.lemon-squeezy-webhook]
 enabled = true
 verify_jwt = false
 import_map = "./functions/lemon-squeezy-webhook/deno.json"
 entrypoint = "./functions/lemon-squeezy-webhook/index.ts"
+
+[functions.admin-config]
+enabled = true
+verify_jwt = false
+
+[functions.admin-metrics]
+enabled = true
+verify_jwt = false
+
+[functions.check-account-limit]
+enabled = true
+verify_jwt = false
+
+[functions.create-cache-table]
+enabled = true
+verify_jwt = false
+
+[functions.create-checkout]
+enabled = true
+verify_jwt = false
+
+[functions.history]
+enabled = true
+verify_jwt = false
+
+[functions.save-history]
+enabled = true
+verify_jwt = false
+
+[functions.set-authenticated-role]
+enabled = true
+verify_jwt = false
+
+[functions.admin-actions]
+enabled = true
+verify_jwt = false
+
+[functions.health-public]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/health-public/index.ts"

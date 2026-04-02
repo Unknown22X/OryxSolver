@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchEdge } from '../lib/edge';
 import {
   USAGE_REFRESH_EVENT,
@@ -64,15 +64,18 @@ export function useUsage(user: User | null): UseUsageReturn {
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastKnownUsageRef = useRef<UsageData | null>(null);
 
   const fetchUsage = useCallback(async () => {
     if (!user) {
       setUsage(DEFAULT_USAGE);
+      lastKnownUsageRef.current = DEFAULT_USAGE;
+      setError(null);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    setLoading((prev) => lastKnownUsageRef.current === null || prev);
     setError(null);
 
     try {
@@ -95,16 +98,23 @@ export function useUsage(user: User | null): UseUsageReturn {
         } | null;
       }>('/sync-profile', { method: 'POST' });
 
-      if (!data.usage) {
-        setUsage(DEFAULT_USAGE);
+      if (!data?.usage) {
+        const fallback = lastKnownUsageRef.current ?? DEFAULT_USAGE;
+        setUsage(fallback);
+        lastKnownUsageRef.current = fallback;
+        setError('Usage data is temporarily unavailable.');
         return;
       }
 
-      setUsage(toUsageData(data.usage));
+      const nextUsage = toUsageData(data.usage);
+      lastKnownUsageRef.current = nextUsage;
+      setUsage(nextUsage);
     } catch (err) {
       console.error('Error fetching usage:', err);
       setError((err as Error).message);
-      setUsage(DEFAULT_USAGE);
+      const fallback = lastKnownUsageRef.current ?? DEFAULT_USAGE;
+      setUsage(fallback);
+      lastKnownUsageRef.current = fallback;
     } finally {
       setLoading(false);
     }
@@ -117,7 +127,9 @@ export function useUsage(user: User | null): UseUsageReturn {
   useEffect(() => {
     const handleUsageUpdated = (event: Event) => {
       const detail = (event as CustomEvent<UsageEventPayload>).detail;
-      setUsage(toUsageData(detail));
+      const nextUsage = toUsageData(detail);
+      lastKnownUsageRef.current = nextUsage;
+      setUsage(nextUsage);
       setError(null);
       setLoading(false);
     };

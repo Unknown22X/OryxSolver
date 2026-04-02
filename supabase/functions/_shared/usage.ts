@@ -80,6 +80,7 @@ export async function getMonthlyUsage(
         break;
       case 'step_followup':
         stepQuestionsUsed += creditsSpent || 1;
+        questionsUsed += creditsSpent || 1; // Correctly count follow-ups towards question quota
         break;
       default:
         break;

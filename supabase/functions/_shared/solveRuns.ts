@@ -9,6 +9,8 @@ type SolveRunLog = {
   status: 'success' | 'error';
   errorCode?: string | null;
   usedFallback: boolean;
+  extractionQaWarnings?: string[];
+  originalQuestion?: string;
 };
 
 export async function logSolveRun(
@@ -24,6 +26,8 @@ export async function logSolveRun(
     status: log.status,
     error_code: log.errorCode ?? null,
     used_fallback: log.usedFallback,
+    extraction_qa_warnings: log.extractionQaWarnings ?? [],
+    original_question: log.originalQuestion ?? null,
   });
 
   if (error) {

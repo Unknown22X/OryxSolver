@@ -8,7 +8,7 @@ export type AppProfile = {
   email: string;
   displayName: string | null;
   photoUrl: string | null;
-  role: 'pending' | 'authenticated' | 'admin' | null;
+  role: 'pending' | 'authenticated' | 'read-only' | 'support' | 'admin' | null;
   createdAt: string;
 };
 
@@ -66,11 +66,16 @@ export function useProfile(user: User | null) {
     const handleWindowFocus = () => {
       void loadProfile();
     };
+    const handleProfileUpdate = () => {
+      void loadProfile();
+    };
 
     window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('oryx-profile-updated', handleProfileUpdate);
     return () => {
       active = false;
       window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('oryx-profile-updated', handleProfileUpdate);
     };
   }, [user]);
 

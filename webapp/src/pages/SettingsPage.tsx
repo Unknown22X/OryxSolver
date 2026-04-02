@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '@supabase/supabase-js';
+import { useTranslation } from 'react-i18next';
 import {
   Bell,
   Bug,
@@ -19,23 +20,32 @@ import {
   Star,
   Sun,
   User as UserIcon,
+  Globe,
 } from 'lucide-react';
 import AppLayout from '../components/AppLayout';
+import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { usePublicAppConfig } from '../hooks/usePublicAppConfig';
 import { useUsage } from '../hooks/useUsage';
+import { fetchEdge } from '../lib/edge';
 import { deleteHistory } from '../lib/historyApi';
 import { submitBugReport, submitFeedback } from '../lib/feedbackApi';
 import { supabase } from '../lib/supabase';
 
 export default function SettingsPage({ user }: { user: User }) {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language === 'ar';
   const navigate = useNavigate();
   const location = useLocation();
   const { config } = usePublicAppConfig();
   const { usage } = useUsage(user);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [displayName, setDisplayName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [notifications, setNotifications] = useState({
     email: true,
     marketing: false,
@@ -59,23 +69,29 @@ export default function SettingsPage({ user }: { user: User }) {
         if (stored === 'light' || stored === 'dark' || stored === 'system') {
           setTheme(stored);
         }
+        const storedNotificationEmail = localStorage.getItem('oryx_notification_email');
+        const storedNotificationMarketing = localStorage.getItem('oryx_notification_marketing');
         setPrivacy({
           saveHistory: localStorage.getItem('oryx_save_history') !== 'false',
           analyticsEnabled: localStorage.getItem('oryx_analytics') !== 'false',
         });
+        setNotifications({
+          email: storedNotificationEmail !== 'false',
+          marketing: storedNotificationMarketing === 'true',
+        });
 
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('display_name, notification_email, notification_marketing')
+          .select('display_name')
           .eq('auth_user_id', user.id)
-          .single();
+          .maybeSingle();
+
+        if (profileError) {
+          throw profileError;
+        }
 
         if (profile) {
           setDisplayName(profile.display_name || '');
-          setNotifications({
-            email: profile.notification_email !== false,
-            marketing: profile.notification_marketing === true,
-          });
         }
       } catch (err) {
         console.error('Error loading settings:', err);
@@ -110,26 +126,37 @@ export default function SettingsPage({ user }: { user: User }) {
     setMessage(null);
 
     try {
-      await supabase.auth.updateUser({
+      const { error: authError } = await supabase.auth.updateUser({
         data: { display_name: displayName },
       });
+      if (authError) throw authError;
 
-      await supabase
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           display_name: displayName,
-          notification_email: notifications.email,
-          notification_marketing: notifications.marketing,
         })
         .eq('auth_user_id', user.id);
+      if (profileError) throw profileError;
 
       localStorage.setItem('oryx_save_history', String(privacy.saveHistory));
       localStorage.setItem('oryx_analytics', String(privacy.analyticsEnabled));
+      localStorage.setItem('oryx_notification_email', String(notifications.email));
+      localStorage.setItem('oryx_notification_marketing', String(notifications.marketing));
+      
+      // Update preferred language in metadata and profile table
+      const currentLang = localStorage.getItem('oryx_language') || 'en';
+      await supabase.auth.updateUser({
+        data: { preferred_language: currentLang }
+      });
+      await supabase.from('profiles').update({ preferred_language: currentLang }).eq('auth_user_id', user.id);
 
-      setMessage({ type: 'success', text: 'Settings saved.' });
+      window.dispatchEvent(new Event('oryx-profile-updated'));
+
+      setMessage({ type: 'success', text: t('settings.settings_saved') });
     } catch (err) {
       console.error('Error saving settings:', err);
-      setMessage({ type: 'error', text: 'Failed to save settings.' });
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.error_save') });
     } finally {
       setSaving(false);
     }
@@ -145,21 +172,69 @@ export default function SettingsPage({ user }: { user: User }) {
   };
 
   const handleDeleteAccount = async () => {
-    setMessage({
-      type: 'error',
-      text: `Account deletion is not self-serve yet. Email ${config.support.email} if you need your data removed.`,
-    });
+    setMessage(null);
+
+    const confirmed = confirm(
+      t('settings.confirm_delete_account'),
+    );
+    if (!confirmed) return;
+
+    setDeletingAccount(true);
+    try {
+      await fetchEdge<{ ok: true; deleted: true }>('/delete-account', { method: 'POST' });
+      await supabase.auth.signOut();
+      navigate('/');
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      setMessage({
+        type: 'error',
+        text:
+          err instanceof Error
+            ? err.message
+            : `Failed to delete account. If this keeps happening, contact ${config.support.email}.`,
+      });
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    setMessage(null);
+
+    if (newPassword.length < 8) {
+      setMessage({ type: 'error', text: t('settings.password_min_length') });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: t('settings.passwords_no_match') });
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setNewPassword('');
+      setConfirmPassword('');
+      setMessage({ type: 'success', text: t('settings.password_updated') });
+    } catch (err) {
+      console.error('Error updating password:', err);
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.error_update_password') });
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const handleClearHistory = async () => {
-    if (!confirm('Clear all saved question history? This cannot be undone.')) return;
+    if (!confirm(t('settings.confirm_clear_history'))) return;
 
     try {
       await deleteHistory({ all: true });
-      setMessage({ type: 'success', text: 'Question history cleared.' });
+      setMessage({ type: 'success', text: t('settings.history_cleared') });
     } catch (err) {
       console.error('Error clearing history:', err);
-      setMessage({ type: 'error', text: 'Failed to clear question history.' });
+      setMessage({ type: 'error', text: t('settings.error_clear_history') });
     }
   };
 
@@ -196,10 +271,10 @@ export default function SettingsPage({ user }: { user: User }) {
       });
       setFeedbackComment('');
       setFeedbackRating(5);
-      setMessage({ type: 'success', text: 'Feedback sent. Thank you.' });
+      setMessage({ type: 'success', text: t('settings.feedback_sent') });
     } catch (err) {
       console.error('Error submitting feedback:', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to send feedback.' });
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.feedback_error') });
     } finally {
       setSubmittingFeedback(false);
     }
@@ -223,10 +298,10 @@ export default function SettingsPage({ user }: { user: User }) {
       });
       setBugSubject('');
       setBugDescription('');
-      setMessage({ type: 'success', text: 'Bug report sent. We will review it.' });
+      setMessage({ type: 'success', text: t('settings.bug_sent') });
     } catch (err) {
       console.error('Error submitting bug report:', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to send bug report.' });
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.bug_report_error') });
     } finally {
       setSubmittingBugReport(false);
     }
@@ -244,10 +319,10 @@ export default function SettingsPage({ user }: { user: User }) {
 
   return (
     <AppLayout currentPage="settings" user={user}>
-      <div className="mx-auto max-w-2xl p-6 lg:p-8">
+      <div className="mx-auto max-w-3xl px-4 py-4 sm:px-5 lg:px-6 lg:py-5" dir={isRtl ? 'rtl' : 'ltr'}>
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-black">Settings</h1>
-          <p className="font-bold text-slate-500">Manage your account, support access, and feedback flow</p>
+          <h1 className="mb-2 text-[28px] font-black">{t('settings.title')}</h1>
+          <p className="text-sm font-bold text-slate-500">{t('settings.subtitle')}</p>
         </div>
 
         {message && (
@@ -267,12 +342,12 @@ export default function SettingsPage({ user }: { user: User }) {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10">
                 <UserIcon size={20} className="text-indigo-500" />
               </div>
-              <h2 className="text-xl font-black">Profile</h2>
+              <h2 className="text-xl font-black">{t('settings.profile')}</h2>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="display-name" className="mb-2 block text-sm font-bold">Display Name</label>
+                <label htmlFor="display-name" className="mb-2 block text-sm font-bold">{t('settings.display_name')}</label>
                 <input
                   id="display-name"
                   type="text"
@@ -280,17 +355,47 @@ export default function SettingsPage({ user }: { user: User }) {
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="w-full rounded-xl border bg-transparent px-4 py-3 font-bold"
                   style={{ borderColor: 'var(--border-color)' }}
-                  placeholder="Your name"
+                  placeholder={t('settings.display_name')}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold">Email</label>
+                <label className="mb-2 block text-sm font-bold">{t('settings.email')}</label>
                 <div className="flex items-center gap-2 rounded-xl border px-4 py-3 opacity-60" style={{ borderColor: 'var(--border-color)' }}>
                   <Mail size={18} className="text-slate-500" />
                   <span className="font-bold">{user.email}</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Email cannot be changed here</p>
+                <p className="mt-1 text-xs text-slate-500">{t('settings.email_locked')}</p>
+              </div>
+
+              <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-color)' }}>
+                <p className="mb-3 text-sm font-bold">{t('settings.change_password')}</p>
+                <div className="space-y-3">
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full rounded-xl border bg-transparent px-4 py-3 font-bold"
+                    style={{ borderColor: 'var(--border-color)' }}
+                    placeholder={t('settings.new_password')}
+                  />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full rounded-xl border bg-transparent px-4 py-3 font-bold"
+                    style={{ borderColor: 'var(--border-color)' }}
+                    placeholder={t('settings.confirm_password')}
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePasswordChange}
+                    disabled={passwordSaving || !newPassword || !confirmPassword}
+                    className="w-full rounded-xl py-3 font-black gradient-btn disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {passwordSaving ? t('settings.updating_password') : t('settings.update_password')}
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -301,31 +406,34 @@ export default function SettingsPage({ user }: { user: User }) {
                 <Shield size={20} className="text-indigo-500" />
               </div>
               <div>
-                <h2 className="text-xl font-black">Subscription</h2>
-                <p className="text-sm text-slate-500">Plan details and billing entry point</p>
+                <h2 className="text-xl font-black">{t('settings.subscription')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.subscription_desc')}</p>
               </div>
             </div>
 
             <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-color)' }}>
               <p className="text-sm font-black">
-                Current plan: {usage?.subscriptionTier === 'premium' ? 'Premium' : usage?.subscriptionTier === 'pro' ? 'Pro' : 'Free'}
+                {t('settings.current_plan', { tier: usage?.subscriptionTier === 'premium' ? t('pricing.premium') : usage?.subscriptionTier === 'pro' ? t('pricing.pro') : t('pricing.free') })}
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Monthly questions: {usage?.monthlyQuestionsUsed ?? 0} used of {usage?.monthlyQuestionsLimit === -1 ? 'unlimited' : usage?.monthlyQuestionsLimit ?? 15}.
+                {t('settings.monthly_questions', { 
+                  used: usage?.monthlyQuestionsUsed ?? 0, 
+                  limit: usage?.monthlyQuestionsLimit === -1 ? t('settings.unlimited') : (usage?.monthlyQuestionsLimit ?? 15) 
+                })}
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Extra pay-as-you-go credits: {usage?.paygoCreditsRemaining ?? 0}.
+                {t('settings.paygo_credits', { count: usage?.paygoCreditsRemaining ?? 0 })}
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Oryx uses your monthly plan first. Extra credits only start being consumed after the monthly plan reaches zero.
+                {t('settings.paygo_notice')}
               </p>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
-                  onClick={() => navigate('/payments-coming-soon')}
+                  onClick={() => navigate('/subscription')}
                   className="flex-1 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
                 >
-                  Manage subscription
+                  {t('settings.manage_subscription')}
                 </button>
                 <button
                   type="button"
@@ -333,11 +441,11 @@ export default function SettingsPage({ user }: { user: User }) {
                   className="flex-1 rounded-xl border px-4 py-3 text-sm font-bold transition hover:bg-slate-50 dark:hover:bg-white/5"
                   style={{ borderColor: 'var(--border-color)' }}
                 >
-                  Contact support
+                  {t('settings.contact_support')}
                 </button>
               </div>
               <p className="mt-3 text-xs text-slate-500">
-                Payments are not live yet in-app. This section is the future billing home and currently points to a holding page instead of a live checkout.
+                {t('settings.billing_entry_desc')}
               </p>
             </div>
           </section>
@@ -347,14 +455,14 @@ export default function SettingsPage({ user }: { user: User }) {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
                 <Palette size={20} className="text-purple-500" />
               </div>
-              <h2 className="text-xl font-black">Appearance</h2>
+              <h2 className="text-xl font-black">{t('settings.appearance')}</h2>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               {[
-                { value: 'light', label: 'Light', icon: Sun },
-                { value: 'dark', label: 'Dark', icon: Moon },
-                { value: 'system', label: 'System', icon: Monitor },
+                { value: 'light', label: t('settings.theme_light'), icon: Sun },
+                { value: 'dark', label: t('settings.theme_dark'), icon: Moon },
+                { value: 'system', label: t('settings.theme_system'), icon: Monitor },
               ].map((option) => {
                 const Icon = option.icon;
                 const isActive = theme === option.value;
@@ -377,24 +485,46 @@ export default function SettingsPage({ user }: { user: User }) {
 
           <section className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
             <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10">
+                <Globe size={20} className="text-sky-500" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black">{t('settings.language')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.language_desc')}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border p-4" style={{ borderColor: 'var(--border-color)' }}>
+              <div>
+                <p className="font-bold">{t('settings.language_label')}</p>
+                <p className="text-xs text-slate-500">{t('settings.language_desc')}</p>
+              </div>
+              <LanguageSwitcher />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+            <div className="mb-6 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
                 <Bell size={20} className="text-orange-500" />
               </div>
-              <h2 className="text-xl font-black">Notifications</h2>
+              <h2 className="text-xl font-black">{t('settings.notifications')}</h2>
             </div>
 
             <div className="space-y-4">
               <ToggleRow
-                title="Email Notifications"
-                description="Receive updates about your account"
+                title={t('settings.email_notifications')}
+                description={t('settings.email_notifications_desc')}
                 checked={notifications.email}
                 onToggle={() => setNotifications((prev) => ({ ...prev, email: !prev.email }))}
+                isRtl={isRtl}
               />
               <ToggleRow
-                title="Marketing Emails"
-                description="News, updates, and promotions"
+                title={t('settings.marketing_emails')}
+                description={t('settings.marketing_emails_desc')}
                 checked={notifications.marketing}
                 onToggle={() => setNotifications((prev) => ({ ...prev, marketing: !prev.marketing }))}
+                isRtl={isRtl}
               />
             </div>
           </section>
@@ -405,25 +535,25 @@ export default function SettingsPage({ user }: { user: User }) {
                 <Keyboard size={20} className="text-blue-500" />
               </div>
               <div>
-                <h2 className="text-xl font-black">Keyboard Shortcuts</h2>
-                <p className="text-sm text-slate-500">Only shortcuts that actually exist right now</p>
+                <h2 className="text-xl font-black">{t('settings.keyboard_shortcuts')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.shortcuts_desc')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <ShortcutGroup
-                title="Web app chat"
+                title={t('settings.shortcuts_webapp')}
                 items={[
-                  { label: 'Send message', keys: ['Enter'] },
-                  { label: 'New line', keys: ['Shift', 'Enter'] },
+                  { label: t('settings.shortcut_send_message'), keys: ['Enter'] },
+                  { label: t('settings.shortcut_new_line'), keys: ['Shift', 'Enter'] },
                 ]}
               />
               <ShortcutGroup
-                title="Browser extension side panel"
+                title={t('settings.shortcuts_extension')}
                 items={[
-                  { label: 'Toggle history panel', keys: ['Ctrl', 'Shift', 'H'] },
-                  { label: 'Copy latest solution', keys: ['Ctrl', 'C'] },
-                  { label: 'Start a new question', keys: ['Ctrl', 'N'] },
+                  { label: t('settings.shortcut_toggle_history'), keys: ['Ctrl', 'Shift', 'H'] },
+                  { label: t('settings.shortcut_copy_solution'), keys: ['Ctrl', 'C'] },
+                  { label: t('settings.shortcut_new_question'), keys: ['Ctrl', 'N'] },
                 ]}
               />
             </div>
@@ -435,23 +565,25 @@ export default function SettingsPage({ user }: { user: User }) {
                 <Shield size={20} className="text-emerald-500" />
               </div>
               <div>
-                <h2 className="text-xl font-black">Privacy & Security</h2>
-                <p className="text-sm text-slate-500">Manage your data and privacy settings</p>
+                <h2 className="text-xl font-black">{t('settings.privacy')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.privacy_desc')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <ToggleRow
-                title="Save Question History"
-                description="Keep a record of your past questions"
+                title={t('settings.save_history')}
+                description={t('settings.save_history_desc')}
                 checked={privacy.saveHistory}
                 onToggle={() => setPrivacy((prev) => ({ ...prev, saveHistory: !prev.saveHistory }))}
+                isRtl={isRtl}
               />
               <ToggleRow
-                title="Anonymous Usage Analytics"
-                description="Help improve OryxSolver with anonymous product data"
+                title={t('settings.anonymous_analytics')}
+                description={t('settings.anonymous_analytics_desc')}
                 checked={privacy.analyticsEnabled}
                 onToggle={() => setPrivacy((prev) => ({ ...prev, analyticsEnabled: !prev.analyticsEnabled }))}
+                isRtl={isRtl}
               />
 
               <button
@@ -459,7 +591,7 @@ export default function SettingsPage({ user }: { user: User }) {
                 onClick={handleClearHistory}
                 className="mt-2 w-full rounded-xl border border-red-500/20 bg-red-500/5 py-3 font-bold text-red-500 transition-colors hover:bg-red-500/10"
               >
-                Clear All Question History
+                {t('settings.clear_history')}
               </button>
             </div>
           </section>
@@ -470,16 +602,16 @@ export default function SettingsPage({ user }: { user: User }) {
                 <HelpCircle size={20} className="text-sky-500" />
               </div>
               <div>
-                <h2 className="text-xl font-black">Help & Support</h2>
-                <p className="text-sm text-slate-500">Support email, docs, and a real in-app bug report flow</p>
+                <h2 className="text-xl font-black">{t('settings.help_support')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.help_support_desc')}</p>
               </div>
             </div>
 
             <div className="space-y-3" id="help-support">
-              <SupportButton label="View Tutorials" onClick={() => openSupport('tutorials')} />
-              <SupportButton label="Open FAQ" onClick={() => openSupport('faq')} />
-              <SupportButton label={`Email ${config.support.email}`} onClick={() => openSupport('support')} />
-              <SupportButton label="Jump to Bug Report Form" onClick={() => openSupport('bug')} />
+              <SupportButton label={t('settings.view_tutorials')} onClick={() => openSupport('tutorials')} />
+              <SupportButton label={t('settings.open_faq')} onClick={() => openSupport('faq')} />
+              <SupportButton label={t('settings.email_us', { email: config.support.email })} onClick={() => openSupport('support')} />
+              <SupportButton label={t('settings.jump_to_bug')} onClick={() => openSupport('bug')} />
             </div>
           </section>
 
@@ -489,14 +621,14 @@ export default function SettingsPage({ user }: { user: User }) {
                 <MessageSquare size={20} className="text-indigo-500" />
               </div>
               <div>
-                <h2 className="text-xl font-black">Share Feedback</h2>
-                <p className="text-sm text-slate-500">General product feedback. Wrong-answer feedback lives on the dashboard card.</p>
+                <h2 className="text-xl font-black">{t('settings.share_feedback')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.feedback_desc')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <p className="mb-3 block text-sm font-bold">Rating</p>
+                <p className="mb-3 block text-sm font-bold">{t('settings.rating')}</p>
                 <div className="flex flex-wrap gap-2">
                   {[1, 2, 3, 4, 5].map((value) => (
                     <button
@@ -518,14 +650,14 @@ export default function SettingsPage({ user }: { user: User }) {
               </div>
 
               <div>
-                <label htmlFor="feedback-comment" className="mb-2 block text-sm font-bold">Comment</label>
+                <label htmlFor="feedback-comment" className="mb-2 block text-sm font-bold">{t('settings.comment')}</label>
                 <textarea
                   id="feedback-comment"
                   value={feedbackComment}
                   onChange={(e) => setFeedbackComment(e.target.value)}
                   className="min-h-32 w-full rounded-xl border bg-transparent px-4 py-3 font-medium"
                   style={{ borderColor: 'var(--border-color)' }}
-                  placeholder="Tell us what feels confusing, what you want next, or what should be improved."
+                  placeholder={t('settings.feedback_placeholder')}
                 />
               </div>
 
@@ -535,7 +667,7 @@ export default function SettingsPage({ user }: { user: User }) {
                 disabled={submittingFeedback || feedbackComment.trim().length < 8}
                 className="w-full rounded-xl py-3 font-black gradient-btn disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {submittingFeedback ? 'Sending Feedback...' : 'Send Feedback'}
+                {submittingFeedback ? t('settings.sending_feedback') : t('settings.send_feedback')}
               </button>
             </div>
           </section>
@@ -550,33 +682,33 @@ export default function SettingsPage({ user }: { user: User }) {
                 <Bug size={20} className="text-rose-500" />
               </div>
               <div>
-                <h2 className="text-xl font-black">Report a Bug</h2>
-                <p className="text-sm text-slate-500">This submits to the internal feedback inbox instead of a placeholder mail link.</p>
+                <h2 className="text-xl font-black">{t('settings.report_bug')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.bug_desc')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="bug-subject" className="mb-2 block text-sm font-bold">Bug title</label>
+                <label htmlFor="bug-subject" className="mb-2 block text-sm font-bold">{t('settings.bug_title')}</label>
                 <input
                   id="bug-subject"
                   value={bugSubject}
                   onChange={(e) => setBugSubject(e.target.value)}
                   className="w-full rounded-xl border bg-transparent px-4 py-3 font-medium"
                   style={{ borderColor: 'var(--border-color)' }}
-                  placeholder="Short summary of the bug"
+                  placeholder={t('settings.bug_summary_placeholder')}
                 />
               </div>
 
               <div>
-                <label htmlFor="bug-description" className="mb-2 block text-sm font-bold">What happened?</label>
+                <label htmlFor="bug-description" className="mb-2 block text-sm font-bold">{t('settings.bug_what_happened')}</label>
                 <textarea
                   id="bug-description"
                   value={bugDescription}
                   onChange={(e) => setBugDescription(e.target.value)}
                   className="min-h-32 w-full rounded-xl border bg-transparent px-4 py-3 font-medium"
                   style={{ borderColor: 'var(--border-color)' }}
-                  placeholder="What did you expect, what actually happened, and how can we reproduce it?"
+                  placeholder={t('settings.bug_reproduce_placeholder')}
                 />
               </div>
 
@@ -586,7 +718,7 @@ export default function SettingsPage({ user }: { user: User }) {
                 disabled={submittingBugReport || bugSubject.trim().length < 4 || bugDescription.trim().length < 12}
                 className="w-full rounded-xl py-3 font-black gradient-btn disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {submittingBugReport ? 'Sending Bug Report...' : 'Send Bug Report'}
+                {submittingBugReport ? t('settings.sending_bug') : t('settings.send_bug')}
               </button>
             </div>
           </section>
@@ -599,7 +731,7 @@ export default function SettingsPage({ user }: { user: User }) {
           className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 font-black gradient-btn"
         >
           {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save size={20} />}
-          Save Settings
+          {t('settings.save')}
         </button>
 
         <section className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
@@ -607,11 +739,11 @@ export default function SettingsPage({ user }: { user: User }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-500/10">
               <LogOut size={20} className="text-slate-400" />
             </div>
-            <h2 className="text-xl font-black">Account Actions</h2>
+            <h2 className="text-xl font-black">{t('settings.account_actions')}</h2>
           </div>
 
           <p className="mb-4 text-sm text-slate-500">
-            Manage your session. Account deletion is not yet self-serve.
+            {t('settings.account_actions_desc')}
           </p>
 
           <div className="flex flex-col gap-4 sm:flex-row">
@@ -620,14 +752,15 @@ export default function SettingsPage({ user }: { user: User }) {
               onClick={handleSignOut}
               className="flex-1 rounded-xl border border-slate-700 px-6 py-3 font-bold text-slate-300 transition-colors hover:bg-white/5"
             >
-              Sign Out
+              {t('settings.sign_out')}
             </button>
             <button
               type="button"
               onClick={handleDeleteAccount}
+              disabled={deletingAccount}
               className="flex-1 rounded-xl border border-red-500/40 px-6 py-3 font-bold text-red-400 transition-colors hover:bg-red-500/10"
             >
-              Request Account Deletion
+              {deletingAccount ? t('settings.deleting_account') : t('settings.delete_account')}
             </button>
           </div>
         </section>
@@ -641,11 +774,13 @@ function ToggleRow({
   description,
   checked,
   onToggle,
+  isRtl,
 }: {
   title: string;
   description: string;
   checked: boolean;
   onToggle: () => void;
+  isRtl: boolean;
 }) {
   return (
     <div
@@ -663,7 +798,7 @@ function ToggleRow({
         onClick={onToggle}
         className={`relative h-6 w-12 rounded-full transition-all ${checked ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-800'}`}
       >
-        <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${checked ? 'left-7' : 'left-1'}`} />
+        <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${checked ? (isRtl ? 'right-7' : 'left-7') : (isRtl ? 'right-1' : 'left-1')}`} />
       </button>
     </div>
   );

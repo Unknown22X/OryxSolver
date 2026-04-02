@@ -6,6 +6,7 @@ import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
 import { getProfileForSolve, getUserSubscription, upsertProfileFromAuthUser } from '../_shared/profile.ts';
 import { getMonthlyUsage, getPlanLimits, isUnlimited } from '../_shared/usage.ts';
 import { handleOptions, jsonError, jsonOk } from '../_shared/http.ts';
+import { recordDependencyState } from '../_shared/serviceHealth.ts';
 
 Deno.serve(async (req) => {
   const options = handleOptions(req);
@@ -42,7 +43,12 @@ Deno.serve(async (req) => {
     const subscription = await getUserSubscription(supabase, user.id);
     const rawTier = (subscription.tier ?? 'free') as 'free' | 'pro' | 'premium';
     const rawStatus = subscription.status ?? 'inactive';
-    const isActiveSubscription = rawStatus === 'active' || rawStatus === 'trialing';
+    const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end) : null;
+    const hasFuturePeriod = periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() > Date.now();
+    const isActiveSubscription =
+      rawStatus === 'active' ||
+      rawStatus === 'trialing' ||
+      (rawStatus === 'canceled' && Boolean(hasFuturePeriod));
     const tier = isActiveSubscription
       ? (rawTier === 'premium' ? 'premium' : rawTier === 'pro' ? 'pro' : 'free')
       : 'free';
@@ -75,6 +81,18 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Profile sync failed';
-    return jsonError(500, 'SYNC_PROFILE_FAILED', message);
+    try {
+      const supabaseAdmin = createSupabaseAdminClient();
+      await recordDependencyState(supabaseAdmin, {
+        dependency: 'db',
+        status: 'outage',
+        message,
+        code: 'SUPABASE_UNAVAILABLE',
+        source: 'sync-profile',
+      });
+    } catch (_healthError) {
+      // Ignore health telemetry failures.
+    }
+    return jsonError(503, 'SUPABASE_UNAVAILABLE', message);
   }
 });

@@ -12,13 +12,16 @@
   "dependencies": {
     "@posthog/react": "^1.8.2",
     "@supabase/supabase-js": "^2.99.1",
+    "i18next": "^26.0.3",
     "katex": "^0.16.38",
     "lucide-react": "^0.577.0",
     "posthog-js": "^1.360.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-i18next": "^17.0.2",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
+    "recharts": "^3.8.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0"

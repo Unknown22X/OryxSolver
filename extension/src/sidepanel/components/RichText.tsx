@@ -14,6 +14,24 @@ type RichTextProps = {
 type BoundaryProps = { fallback: ReactNode; children: ReactNode };
 type BoundaryState = { hasError: boolean };
 
+function sanitizeMarkdownHref(rawHref: string | undefined): string | null {
+  const href = String(rawHref ?? '').trim();
+  if (!href) return null;
+
+  // Allow email links. Block everything else that isn't an absolute http(s) URL.
+  if (href.startsWith('mailto:')) return href;
+
+  try {
+    const parsed = new URL(href);
+    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (parsed.protocol === 'https:') return parsed.toString();
+    if (parsed.protocol === 'http:' && isLocalhost) return parsed.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 class MarkdownErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   constructor(props: BoundaryProps) {
     super(props);
@@ -50,16 +68,20 @@ function MarkdownRenderer({ text, className }: { text: string; className: string
               {children}
             </blockquote>
           ),
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="font-medium text-indigo-700 underline underline-offset-2 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200"
-            >
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            const safeHref = sanitizeMarkdownHref(href);
+            if (!safeHref) return <span>{children}</span>;
+            return (
+              <a
+                href={safeHref}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-medium text-indigo-700 underline underline-offset-2 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200"
+              >
+                {children}
+              </a>
+            );
+          },
           code: ({ className: codeClassName, children }) => {
             const language = codeClassName ?? '';
             const isBlock = language.includes('language-');

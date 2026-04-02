@@ -1,5 +1,6 @@
 import type { SupabaseLookupUser } from './auth.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { AppError } from './http.ts';
 
 type ExistingProfile = {
   id: string;
@@ -11,11 +12,13 @@ type ExistingProfile = {
 type AccessProfile = {
   id: string;
   role: string | null;
+  is_locked: boolean;
 };
 
 type Subscription = {
   tier: string | null;
   status: string | null;
+  current_period_end?: string | null;
 };
 
 export async function getUserSubscription(
@@ -24,7 +27,7 @@ export async function getUserSubscription(
 ): Promise<Subscription> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('tier, status')
+    .select('tier, status, current_period_end')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -32,7 +35,7 @@ export async function getUserSubscription(
     return { tier: 'free', status: 'inactive' };
   }
 
-  return { tier: data.tier, status: data.status };
+  return { tier: data.tier, status: data.status, current_period_end: data.current_period_end };
 }
 
 export async function upsertProfileFromAuthUser(
@@ -49,8 +52,21 @@ export async function upsertProfileFromAuthUser(
     throw new Error(`Profile read failed: ${existingProfileError.message}`);
   }
 
-  const displayName = user.displayName ?? existingProfile?.display_name ?? null;
-  const photoUrl = user.photoUrl ?? existingProfile?.photo_url ?? null;
+  // Prefer auth metadata when provided so profile edits in the webapp/extension sync correctly.
+  // If the auth field is an empty string, treat it as an explicit clear to null.
+  const displayNameFromAuth =
+    typeof user.displayName === 'string' ? user.displayName.trim() : undefined;
+  const photoUrlFromAuth =
+    typeof user.photoUrl === 'string' ? user.photoUrl.trim() : undefined;
+
+  const displayName =
+    displayNameFromAuth === undefined
+      ? (existingProfile?.display_name ?? null)
+      : (displayNameFromAuth.length > 0 ? displayNameFromAuth : null);
+  const photoUrl =
+    photoUrlFromAuth === undefined
+      ? (existingProfile?.photo_url ?? null)
+      : (photoUrlFromAuth.length > 0 ? photoUrlFromAuth : null);
   const nextRole =
     existingProfile?.role === 'admin'
       ? 'admin'
@@ -85,12 +101,16 @@ export async function getProfileForSolve(
 ): Promise<AccessProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, is_locked')
     .eq('auth_user_id', authUid)
     .maybeSingle<AccessProfile>();
 
   if (error) {
     throw new Error(`Profile lookup failed: ${error.message}`);
+  }
+
+  if (data?.is_locked) {
+    throw new AppError(403, 'ACCOUNT_LOCKED', 'Your account has been locked by an administrator.');
   }
 
   return data ?? null;

@@ -33,9 +33,14 @@ function timestampedCaptureName() {
 }
 
 export async function captureVisibleTabToFile(): Promise<File> {
-  const response = (await chrome.runtime.sendMessage({
-    type: MSG_CAPTURE_VISIBLE_TAB,
-  })) as CaptureVisibleTabResponse;
+  let response: CaptureVisibleTabResponse;
+  try {
+    response = (await chrome.runtime.sendMessage({
+      type: MSG_CAPTURE_VISIBLE_TAB,
+    })) as CaptureVisibleTabResponse;
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : 'Could not capture screen.');
+  }
 
   if (!response?.ok || !response.imageDataUrl) {
     throw new Error(response?.error || 'Could not capture screen.');
@@ -45,9 +50,14 @@ export async function captureVisibleTabToFile(): Promise<File> {
 }
 
 export async function captureCroppedAreaToFile(): Promise<File> {
-  const startResponse = (await chrome.runtime.sendMessage({
-    type: MSG_START_CROP_CAPTURE,
-  })) as CaptureVisibleTabResponse;
+  let startResponse: CaptureVisibleTabResponse;
+  try {
+    startResponse = (await chrome.runtime.sendMessage({
+      type: MSG_START_CROP_CAPTURE,
+    })) as CaptureVisibleTabResponse;
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : 'Could not start crop capture.');
+  }
 
   if (!startResponse?.ok) {
     return captureVisibleTabToFile();
@@ -72,7 +82,12 @@ export async function captureCroppedAreaToFile(): Promise<File> {
 
       if (message?.type === MSG_CROP_CAPTURE_ERROR) {
         cleanup();
-        reject(new Error(message.error || 'Crop capture failed.'));
+        const errorText = message.error || 'Crop capture failed.';
+        if (/cancel/i.test(errorText)) {
+          reject(new Error('Capture cancelled.'));
+          return;
+        }
+        captureVisibleTabToFile().then(resolve).catch(() => reject(new Error(errorText)));
       }
     };
 

@@ -5,6 +5,7 @@ import '../index.css';
 import 'katex/dist/katex.min.css';
 import App from './App.tsx';
 import * as Sentry from "@sentry/react";
+import '../i18n';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

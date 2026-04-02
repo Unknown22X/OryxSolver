@@ -9,6 +9,9 @@ const ALLOWED_KEYS = new Set([
   'privacy_content',
   'product_features',
   'support_contact',
+  'ai_system_prompt',
+  'system_limits',
+  'enabled_models'
 ]);
 
 type ConfigUpdate = {
