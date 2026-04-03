@@ -343,7 +343,10 @@ function lineLooksLikeUiCode(line: string): boolean {
     const ascii = trimmed.replace(/[^\x20-\x7E]/g, ' ');
     const styleHits = (ascii.match(/\b(?:position|display|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|float|cursor|background(?:-[a-z]+)?|font-size|max-width|min-width|top|right|bottom|left|z-index)\s*:/gi) || []).length;
     const scriptHits = (ascii.match(/\b(?:function|var|let|const|window|document|createElement|appendChild|insertBefore|getElementsByTagName|parentNode|async|await|gtag|dataLayer|modal|script|src=)\b/gi) || []).length;
+    const hasUrlLikeCode = /https?\s*:\s*\/\s*\//i.test(ascii);
+    const hasDomCode = /\$\s*\(|\)\s*;|=>|insertAfter|appendChild|querySelector|dataset\./i.test(ascii);
     if (styleHits >= 2 || scriptHits >= 2) return true;
+    if (hasUrlLikeCode || hasDomCode) return true;
     if (/@media/i.test(ascii) && /max-width|min-width|important|display\s*:|position\s*:/i.test(ascii)) return true;
     if (/[{};]/.test(ascii) && (styleHits >= 1 || scriptHits >= 1)) return true;
     return false;
@@ -468,6 +471,71 @@ function sanitizeBulkTextBlock(text: string): string {
            .replace(/\n{3,}/g, '\n\n')
            .trim();
   return out;
+}
+
+function lineLooksLikeUiNavigation(line: string): boolean {
+  const text = line.trim().toLowerCase();
+  if (!text) return false;
+
+  const englishUiNoise = [
+    'system maintenance',
+    'login',
+    'logout',
+    'settings',
+    'dashboard',
+    'notifications',
+    'microsoft teams',
+    'office 365',
+    'google drive',
+    'copyright',
+  ];
+  if (englishUiNoise.some((token) => text.includes(token))) return true;
+
+  const arabicUiNoise = [
+    'الرئيسية',
+    'مهامي',
+    'المقررات',
+    'المصادر',
+    'الواجبات',
+    'الاختبارات',
+    'لوحات النقاش',
+    'الأنشطة',
+    'مساراتي',
+    'غرفة المعلمين',
+    'الإعلانات',
+    'الرسائل',
+    'التقارير',
+    'التقويم',
+    'تسجيل الدخول',
+    'تسجيل الخروج',
+    'معلومات عن الخدمة',
+  ];
+  return arabicUiNoise.some((token) => text.includes(token));
+}
+
+function focusInlineQuestionText(rawText: string): string {
+  const MAX_INLINE_QUESTION_CHARS = 2200;
+  const MAX_INLINE_LINES = 28;
+
+  const lines = dedupeBulkLines(rawText.split(/\n+/))
+    .map((line) => sanitizeBulkTextBlock(line))
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !lineLooksLikeUiCode(line))
+    .filter((line) => !lineLooksLikeUiNavigation(line));
+
+  if (lines.length === 0) {
+    return sanitizeBulkTextBlock(rawText).slice(0, MAX_INLINE_QUESTION_CHARS);
+  }
+
+  const questionSignal = /[?؟]|(^|\s)(question|choices?|اختر|السؤال|حل|صورة الشكل|المستقيم|true|false)(\s|$)/i;
+  const firstSignalIdx = lines.findIndex((line) => questionSignal.test(line));
+  const focusedLines = firstSignalIdx > 1 ? lines.slice(Math.max(0, firstSignalIdx - 1)) : lines;
+  const clampedLines = focusedLines.slice(0, MAX_INLINE_LINES);
+  const joined = clampedLines.join('\n').trim();
+
+  if (joined.length <= MAX_INLINE_QUESTION_CHARS) return joined;
+  return `${joined.slice(0, MAX_INLINE_QUESTION_CHARS).trim()}\n...`;
 }
 
 function looksMathHeavy(text: string): boolean {
@@ -706,23 +774,24 @@ function showHighlightButton(x: number, y: number, text: string) {
                 if (contextEl.innerText.length < 50 || contextEl.querySelectorAll('img').length === 0) contextEl = contextEl.parentElement || contextEl;
 
                 const contextElements = questionEl ? findContextElements(questionEl, currentConfig) : [contextEl];
-                const contextText = dedupeBulkLines(
+                const contextTextRaw = dedupeBulkLines(
                   contextElements.flatMap((node) => sanitizeBulkTextBlock(getCleanVisibleText(node as HTMLElement)).split(/\n+/))
                 ).join('\n');
+                const contextText = focusInlineQuestionText(contextTextRaw);
 
                 const images = getImagesInContainer(contextEl, 4);
                 const contextRect = getElementViewportRect(questionEl || contextEl, currentConfig);
                 void requestAutoCrop(contextRect).then((capture) => {
                   const inlineImages = buildInlineImages(capture, images, currentConfig, 4);
                   const payloadText = [
-                    'Solve the following question accurately.',
-                    'Use the selected text as the focus, but use the full surrounding question context to avoid missing terms.',
+                    'Solve this question.',
+                    'Use the selected snippet first, and then the context.',
                     '',
                     'Selected text:',
-                    sanitizeBulkTextBlock(text.trim()),
+                    focusInlineQuestionText(sanitizeBulkTextBlock(text.trim())),
                     '',
-                    'Full context:',
-                    contextText || sanitizeBulkTextBlock(text.trim()),
+                    'Context:',
+                    contextText || focusInlineQuestionText(sanitizeBulkTextBlock(text.trim())),
                   ].join('\n');
                   chrome.runtime.sendMessage({ type: MSG_INLINE_EXTRACT_QUESTION, payload: { text: payloadText, images: inlineImages } });
                 });
@@ -858,9 +927,10 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
       const currentConfig = getCurrentSiteConfig();
       const contextElements = findContextElements(element, currentConfig);
       const extractedFields = findFieldsInContainer(element);
-      let questionText = dedupeBulkLines(
+      const questionTextRaw = dedupeBulkLines(
         contextElements.flatMap((node) => sanitizeBulkTextBlock(getCleanVisibleText(node as HTMLElement)).split(/\n+/))
       ).join('\n');
+      let questionText = focusInlineQuestionText(questionTextRaw);
       if (extractedFields.options.length > 0) {
         const choiceLines = extractedFields.options.map((opt, idx) => {
             const label = (opt.label || '').trim();
@@ -876,8 +946,8 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
       answerBox.style.display = 'block';
       answerBox.innerHTML = '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 13px;"><div style="width: 12px; height: 12px; border: 2px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: oryx-spin 0.8s linear infinite;"></div> Analyzing question...</div>';
       
-      const brevityNote = "Be extremely brief: Provide a short direct answer and a 1-2 sentence explanation max.";
-      const imageNote = questionImages.length > 0 ? "IMPORTANT: Use the attached images to solve the problem." : "";
+      const brevityNote = "Be brief: return the final answer and a short explanation (1-2 sentences).";
+      const imageNote = questionImages.length > 0 ? "Use attached images if needed." : "";
       
       let finalMathImage: string | null = null;
       if (shouldAutoCapture(currentConfig, questionText, questionImages, element.contains(element.querySelector('svg, mjx-container, .katex')))) {
@@ -891,16 +961,14 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
         payload: {
           injectionId,
           text: [
-            'Solve the following question accurately.',
+            'Solve this question.',
             brevityNote,
-            'Rules:',
-            '- If this is true/false, answer with exactly the correct option text.',
-            '- If this is multiple choice, give the correct option letter and exact option text.',
-            '- Use the passage/context if present.',
+            'If this is multiple choice, return the exact choice letter and text.',
+            'Use the passage/context if present.',
             imageNote,
             '',
             'Question:',
-            questionText.trim(),
+            focusInlineQuestionText(questionText.trim()),
           ].filter(Boolean).join('\n'),
           images: inlineImages,
         }

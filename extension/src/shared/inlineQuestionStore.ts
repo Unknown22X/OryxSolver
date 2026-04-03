@@ -4,6 +4,7 @@ import {
 } from './messageTypes';
 
 const PENDING_INLINE_QUESTION_KEY = 'pendingInlineQuestion';
+const MAX_INLINE_TEXT_CHARS = 2600;
 
 export type PendingInlineQuestionType =
   | typeof MSG_INLINE_EXTRACT_QUESTION
@@ -41,7 +42,7 @@ export function sanitizePendingInlineQuestion(
 ): PendingInlineQuestion | null {
   if (!value || !isPendingInlineQuestionType(value.type)) return null;
 
-  const text = String(value.text ?? '').trim();
+  const text = String(value.text ?? '').trim().slice(0, MAX_INLINE_TEXT_CHARS);
   const tabId = Number(value.tabId);
   const timestamp = Number(value.timestamp ?? Date.now());
 

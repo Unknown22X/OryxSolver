@@ -25,17 +25,30 @@ function isMetaDisclosurePrompt(question: string): boolean {
   const lower = question.trim().toLowerCase();
   if (!lower) return false;
 
+  // Inline extraction can include noise like CSS/JS/menu text, so only classify as
+  // meta-disclosure when there is a direct request intent plus explicit target.
+  if (lower.length > 420) return false;
+
+  const hasDirectMetaTarget =
+    /\b(system prompt|hidden prompt|internal instructions|developer instructions|api key|hidden memory)\b/.test(lower) ||
+    /\b(what model|which model|model name)\b/.test(lower);
+
+  const hasRequestIntent =
+    /\b(show|share|reveal|tell|give|expose|dump|print|display|what|which)\b/.test(lower);
+
+  const looksLikeStudyQuestion =
+    /\b(question|choices?|solve|explain|equation|true|false|final answer)\b/.test(lower) ||
+    /[?؟]/.test(lower) ||
+    /\b(اختر|السؤال|حل|درجة السؤال|صورة الشكل)\b/.test(lower);
+
+  if (looksLikeStudyQuestion) return false;
+
+  if (hasDirectMetaTarget && hasRequestIntent) return true;
+
   return [
-    /\b(prompt|system prompt|instructions|internal instructions|rules)\b/,
     /\bwhat did i ask\b/,
     /\bwhat did i say\b/,
     /\bremember\b.*\b(before|earlier|previously)\b/,
-    /\bwhat model\b/,
-    /\bwhich model\b/,
-    /\bgemini\b/,
-    /\bapi key\b/,
-    /\bprovider\b/,
-    /\bhidden\b.*\bprompt\b/,
   ].some((pattern) => pattern.test(lower));
 }
 
