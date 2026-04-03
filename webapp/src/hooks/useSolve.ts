@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { fetchEdge, fetchEdgeStream } from '../lib/edge';
 import { broadcastUsageUpdated } from '../lib/usageEvents';
+import { compressImages } from '../lib/imageCompressor';
 import type { User } from '@supabase/supabase-js';
 
 interface SolveRequest {
@@ -294,16 +295,26 @@ export function useSolve(user: User | null): UseSolveReturn {
         return finalResponse;
       };
 
+      const uploadImages =
+        request.images && request.images.length > 0
+          ? await compressImages(request.images)
+          : request.images;
+
+      const requestForUpload: SolveRequest = {
+        ...request,
+        images: uploadImages,
+      };
+
       const data = request.isBulk
         ? await fetchEdge<SolveResponse>('solve', {
             method: 'POST',
-            body: buildFormData(request, false),
+            body: buildFormData(requestForUpload, false),
             signal: abortControllerRef.current.signal,
           })
         : await (async () => {
             const response = await fetchEdgeStream('solve', {
               method: 'POST',
-              body: buildFormData(request, true),
+              body: buildFormData(requestForUpload, true),
               signal: abortControllerRef.current?.signal,
             });
             if (!response.body) {
