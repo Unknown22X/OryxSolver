@@ -96,12 +96,14 @@ export async function recordUsageEvent(
   type: UsageEventType,
   units: number,
   metadata: Record<string, any> = {},
+  costUsd: number = 0,
 ) {
   const { error } = await supabase.from('usage_events').insert({
     user_id: userId,
     event_type: type,
     credits_spent: units,
     metadata: metadata,
+    cost_usd: costUsd,
   });
 
   if (error) {

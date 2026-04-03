@@ -26,7 +26,14 @@ export async function callAiProxy(
     previewOnly?: boolean;
     preferredLanguage?: string;
   },
-): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
+): Promise<{ 
+  answer: string; 
+  explanation: string; 
+  steps: string[]; 
+  model: string; 
+  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  cost_usd?: number;
+}> {
   const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
   if (!internalToken) {
     throw new AiError(500, 'INTERNAL_TOKEN_MISSING', 'Missing INTERNAL_EDGE_TOKEN secret');
@@ -106,6 +113,7 @@ export async function callAiProxy(
             })
             .filter((s: { label: string; prompt: string }) => s.prompt.trim().length > 0)
         : [],
+      cost_usd: typeof data?.cost_usd === 'number' ? data.cost_usd : 0,
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {

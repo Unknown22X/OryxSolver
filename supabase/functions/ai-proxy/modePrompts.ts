@@ -3,6 +3,7 @@ export type GenerationMode = 'normal' | 'fast_fallback';
 
 type PromptContext = {
   question: string;
+  priorContext?: string;
   styleMode: StyleMode;
   generationMode: GenerationMode;
   hasImages: boolean;
@@ -20,9 +21,11 @@ function isConversationalPrompt(question: string, styleMode: StyleMode, hasImage
   if (text.length > 220) return false;
 
   const lightweightPatterns = [
-    /^(hi|hello|hey|yo|sup|hola)\b/i,
-    /\bwho are you\b/i,
+    /^(hi|hello|hey|yo|sup|hola|salam|مرحبا|أهلا)\b/i,
+    /\bwho (are|r) (you|u)\b/i,
+    /\bwhat (are|r) (you|u)\b/i,  // "what r u", "what are you"
     /\bwhat('?s| is) your name\b/i,
+    /\bwhat (do|can) (you|u) do\b/i,
     /\bhow are you\b/i,
     /\bthank(s| you)\b/i,
     /\bcan you help me\b/i,
@@ -31,6 +34,8 @@ function isConversationalPrompt(question: string, styleMode: StyleMode, hasImage
     /\bgive me (an )?example\b/i,
     /\bmake me a practice question\b/i,
     /\bquiz me\b/i,
+    /\bask me one similar question\b/i,
+    /\bwait for my answer\b/i,
     /\btalk to me\b/i,
     /\b(prompt|system prompt|instructions|internal instructions|rules)\b/i,
     /\bwhat did i ask\b/i,
@@ -61,10 +66,14 @@ function isConversationalPrompt(question: string, styleMode: StyleMode, hasImage
   if (styleMode === 'exam' && !/\b(make me a practice question|quiz me|give me (an )?example)\b/i.test(lower)) return false;
   if (academicSignals.some((pattern) => pattern.test(lower))) return false;
 
+  // Short general questions that aren't academic (e.g. "what is 1+2" is caught by =+- above)
+  if (text.length <= 60 && /^(what|why|how|who|where|when|can|could|would|do|are|is|tell)\b/i.test(lower)) return true;
+
   return /^(what|why|how|can|could|would|do|are|is)\b/i.test(lower) &&
     /\b(you|your|this thread|before|earlier|previous|remember)\b/i.test(lower) &&
     text.length <= 80;
 }
+
 
 const BASE_PROMPT = `
 You are OryxSolver, an AI Homework Helper.
@@ -193,7 +202,7 @@ function inferLanguageInstruction(question: string, preferredLanguage?: string):
 }
 
 export function buildPrompt(context: PromptContext): string {
-  const { question, styleMode, generationMode, hasImages, isBulk } = context;
+  const { question, priorContext = '', styleMode, generationMode, hasImages, isBulk } = context;
   const stepCountLine = generationMode === 'fast_fallback'
     ? 'Provide 3 to 5 concise steps.'
     : 'Provide 4 to 7 concise steps.';
@@ -223,7 +232,7 @@ export function buildPrompt(context: PromptContext): string {
       '- NEVER output "N/A". Always give your best guess.',
       '- You MUST answer ALL questions. Do not skip or stop early.',
       '',
-      question
+      [priorContext, question].filter(Boolean).join('\n')
     ].join('\n');
   }
 
@@ -247,6 +256,7 @@ export function buildPrompt(context: PromptContext): string {
       '- Stay helpful, direct, freindly, and human-sounding.',
       '- No preface like "sure" or "okay".',
       '',
+      priorContext ? `Context from previous conversation:\n${priorContext}\n` : '',
       `Question: ${question}`,
     ].join('\n');
   }
@@ -281,6 +291,7 @@ export function buildPrompt(context: PromptContext): string {
     hasImages ? '- Use attached images as primary context.' : '- Use question text as primary context.',
     context.isFollowUp ? '- This is a follow-up; do not repeat information from previous turns unless necessary. Focus on the new question.' : '',
     '',
+    priorContext ? `Context from previous conversation:\n${priorContext}\n` : '',
     `Question: ${question}`,
   ];
 
@@ -289,11 +300,12 @@ export function buildPrompt(context: PromptContext): string {
 
 export function buildPreviewPrompt(context: {
   question: string;
+  priorContext?: string;
   styleMode: StyleMode;
   hasImages: boolean;
   preferredLanguage?: string;
 }) {
-  const { question, styleMode, hasImages, preferredLanguage } = context;
+  const { question, priorContext = '', styleMode, hasImages, preferredLanguage } = context;
 
   return [
     'You are OryxSolver in preview mode.',
@@ -312,6 +324,7 @@ export function buildPreviewPrompt(context: {
     '- If the question truly cannot be solved, set FINAL_ANSWER to INCOMPLETE_QUESTION.',
     hasImages ? '- Use attached images as primary context.' : '- Use question text as primary context.',
     '',
+    priorContext ? `Context from previous conversation:\n${priorContext}\n` : '',
     `Question: ${question}`,
   ].join('\n');
 }

@@ -46,6 +46,8 @@ function isConversationalPrompt(question: string, answer: string, explanation: s
     /\bgive me (an )?example\b/,
     /\bmake me a practice question\b/,
     /\bquiz me\b/,
+    /\bask me one similar question\b/,
+    /\bwait for my answer\b/,
     /\b(prompt|system prompt|instructions|internal instructions|rules)\b/,
     /\bwhat did i ask\b/,
     /\bwhat did i say\b/,

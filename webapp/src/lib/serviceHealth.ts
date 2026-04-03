@@ -1,4 +1,5 @@
 import { getFunctionUrl } from './functions';
+import { isTransientSupabaseLockError, shouldHideSupabaseErrorDetails } from './supabaseAuth';
 
 export type ServiceDependency = 'network' | 'backend' | 'auth' | 'db' | 'ai';
 export type DependencyCondition = 'healthy' | 'degraded' | 'outage' | 'maintenance';
@@ -284,6 +285,10 @@ export function markOnline() {
 }
 
 export function applyServiceHealthError(error: unknown, fallbackDependency: Exclude<ServiceDependency, 'network'> = 'backend') {
+  if (isTransientSupabaseLockError(error)) {
+    return;
+  }
+
   const resilientError = error as ResilientError;
   const code = resilientError?.code;
   const dependency = resilientError?.dependency ?? dependencyFromErrorCode(code) ?? fallbackDependency;
@@ -293,7 +298,14 @@ export function applyServiceHealthError(error: unknown, fallbackDependency: Excl
   }
 
   const retryAfterSec = resilientError?.retryAfterSec;
-  const message = resilientError?.message || 'Service is temporarily unavailable.';
+  const rawMessage = resilientError?.message || 'Service is temporarily unavailable.';
+  const message = shouldHideSupabaseErrorDetails(error)
+    ? dependency === 'auth'
+      ? 'Authentication is temporarily unavailable. Please try again.'
+      : dependency === 'db'
+        ? 'Saved data is temporarily unavailable.'
+        : 'Service is temporarily unavailable.'
+    : rawMessage;
   const status = resilientError?.status ?? 0;
   const condition: DependencyCondition =
     code === 'RATE_LIMITED'

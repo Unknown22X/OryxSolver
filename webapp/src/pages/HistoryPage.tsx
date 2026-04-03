@@ -37,7 +37,7 @@ export default function HistoryPage({ user }: { user: User }) {
         setHistory(groupHistoryEntries(cached.entries));
         setError('Cloud history is temporarily unavailable. Showing cached history.');
       } else {
-        setError(err instanceof Error ? err.message : t('history.error_load'));
+        setError(t('history.error_load'));
       }
     } finally {
       setLoading(false);

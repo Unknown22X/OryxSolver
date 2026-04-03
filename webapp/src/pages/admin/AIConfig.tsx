@@ -113,7 +113,7 @@ export default function AIConfigSection({ adminRole }: { adminRole: AdminRole })
               disabled={isReadOnly}
               value={enabledModels}
               onChange={e => setEnabledModels(e.target.value)}
-              placeholder="e.g. gemini-2.0-flash-lite, gemini-2.0-flash"
+              placeholder="e.g. gemini-2.5-flash-lite, gemini-2.5-flash"
               className="w-full bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400 dark:placeholder:text-zinc-600 disabled:opacity-50"
             />
           </div>

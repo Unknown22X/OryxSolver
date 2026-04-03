@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Info, AlertTriangle, PartyPopper, X } from 'lucide-react';
 
@@ -8,6 +8,34 @@ interface BannerProps {
   message: string;
   type?: BannerType;
   id?: string; // Used to track dismissal in localStorage
+}
+
+function normalizeBannerText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function hashString(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) + hash) ^ value.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function isDismissed(dismissKey: string): boolean {
+  try {
+    return Boolean(localStorage.getItem(dismissKey));
+  } catch {
+    return false;
+  }
+}
+
+function persistDismissed(dismissKey: string) {
+  try {
+    localStorage.setItem(dismissKey, 'true');
+  } catch {
+    // ignore
+  }
 }
 
 const STYLES = {
@@ -28,21 +56,26 @@ const STYLES = {
 export default function Banner({ message, type = 'info', id = 'default' }: BannerProps) {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
-  const storageKey = `oryx_banner_dismissed_${id}_${message.length}`;
+  const normalizedMessage = useMemo(() => normalizeBannerText(message ?? ''), [message]);
+  const dismissKey = useMemo(() => {
+    const stable = `${id}:${type}:${normalizedMessage}`;
+    return `oryx_banner_dismissed_${hashString(stable)}`;
+  }, [id, type, normalizedMessage]);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem(storageKey);
-    if (!dismissed) {
-      setIsVisible(true);
+    if (!normalizedMessage) {
+      setIsVisible(false);
+      return;
     }
-  }, [storageKey]);
+    setIsVisible(!isDismissed(dismissKey));
+  }, [dismissKey, normalizedMessage]);
 
   const handleDismiss = () => {
-    localStorage.setItem(storageKey, 'true');
+    persistDismissed(dismissKey);
     setIsVisible(false);
   };
 
-  if (!isVisible || !message) return null;
+  if (!isVisible || !normalizedMessage) return null;
 
   const style = STYLES[type] || STYLES.info;
 
@@ -52,7 +85,7 @@ export default function Banner({ message, type = 'info', id = 'default' }: Banne
         {style.icon}
       </div>
       <div className="flex-1 text-[13px] font-medium leading-relaxed">
-        {message}
+        {normalizedMessage}
       </div>
       <button 
         onClick={handleDismiss}

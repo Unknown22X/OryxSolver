@@ -3,6 +3,8 @@ import { buildPreviewPrompt, buildPrompt, buildSuggestions, type GenerationMode,
 import { AppError, jsonError } from '../_shared/http.ts';
 import { checkRateLimitMany, getClientIp } from '../_shared/rateLimit.ts';
 import { hasValidInternalToken } from '../_shared/security.ts';
+import { calculateAiCost, getBudgetStatus, recordAiSpend } from '../_shared/budget.ts';
+import { createSupabaseAdminClient } from '../_shared/db.ts';
 
 
 type InlineImagePart = { inlineData: { mimeType: string; data: string } };
@@ -279,7 +281,15 @@ async function callGemini(
     previewOnly?: boolean;
     preferredLanguage?: string;
   },
-): Promise<{ answer: string; explanation: string; steps: string[]; model: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }> }> {
+): Promise<{
+  answer: string;
+  explanation: string;
+  steps: string[];
+  model: string;
+  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  cost_usd?: number;
+}> {
   if (isMetaDisclosurePrompt(question)) {
     return buildMetaDisclosureResponse(question, options?.preferredLanguage);
   }
@@ -289,13 +299,15 @@ async function callGemini(
     throw new AppError(500, 'AI_KEY_MISSING', 'Missing GEMINI_API_KEY secret');
   }
 
-  const defaultPrimary = 'gemini-1.5-pro';
-  const defaultBackup = 'gemini-2.0-flash';
-  const normalModel = Deno.env.get('GEMINI_MODEL_NORMAL') || defaultPrimary;
-  const fastModel = Deno.env.get('GEMINI_MODEL_FAST') || 'gemini-2.0-flash';
-  const cheapModel = Deno.env.get('GEMINI_MODEL_CHEAP') || 'gemini-1.5-flash-8b';
-  const strongModel = Deno.env.get('GEMINI_MODEL_STRONG') || normalModel;
-  const backupModel = Deno.env.get('GEMINI_MODEL_BACKUP') || defaultBackup;
+  // Model routing strategy:
+  // - Simple/conversational: gemini-2.0-flash-lite (fast, ~1-2s)
+  // - Complex/bulk: gemini-2.5-flash (stronger reasoning, worth the wait)
+  // - Backup: gemini-2.0-flash
+  const normalModel = Deno.env.get('GEMINI_MODEL_NORMAL') || 'gemini-2.0-flash';
+  const fastModel = Deno.env.get('GEMINI_MODEL_FAST') || 'gemini-2.0-flash-lite';
+  const cheapModel = Deno.env.get('GEMINI_MODEL_CHEAP') || 'gemini-2.0-flash-lite';
+  const strongModel = Deno.env.get('GEMINI_MODEL_STRONG') || 'gemini-2.5-flash';
+  const backupModel = Deno.env.get('GEMINI_MODEL_BACKUP') || 'gemini-2.0-flash';
   const isBulkAsk = 
     isBulk ||
     question.includes("answer key for the following questions") ||
@@ -317,21 +329,23 @@ async function callGemini(
           : [cheapModel, strongModel, backupModel];
 
   const dedupedModelChain = modelChain.filter((value, index, arr) => value && arr.indexOf(value) === index);
-  const contextPrefix = history.length > 0
-    ? `PREVIOUS CONVERSATION (for context only):\n${history.map(h => `${h.role === 'user' ? 'USER' : 'AI'}: ${h.text}`).join('\n\n')}\n\n====================\n\nNEW FOLLOW-UP QUESTION:\n`
+  const priorContext = history.length > 0
+    ? `PREVIOUS CONVERSATION (for context only):\n${history.map(h => `${h.role === 'user' ? 'USER' : 'AI'}: ${h.text}`).join('\n\n')}`
     : '';
   
   const hasHistory = history.length > 0;
 
   const prompt = previewOnly
-    ? buildPreviewPrompt({
-        question: contextPrefix + question,
+      ? buildPreviewPrompt({
+        question,
+        priorContext,
         styleMode,
         hasImages: imageParts.length > 0,
         preferredLanguage: options?.preferredLanguage,
       })
     : buildPrompt({
-        question: contextPrefix + question,
+        question,
+        priorContext,
         styleMode,
         generationMode: mode,
         hasImages: imageParts.length > 0,
@@ -344,6 +358,8 @@ async function callGemini(
   let resolvedModel = dedupedModelChain[0];
   let lastErrorText = '';
   let lastStatus = 500;
+  let lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
+  let lastCost = 0;
   const perAttemptTimeoutMs = previewOnly ? 6000 : mode === 'fast_fallback' ? 6000 : 25000;
 
   const primaryMaxOutputTokens = previewOnly
@@ -401,12 +417,27 @@ async function callGemini(
       }
 
       const data = await res.json();
+      const usage = data?.usageMetadata;
       const candidate = data?.candidates?.[0];
       const finishReason = String(candidate?.finishReason || '');
       const parts = candidate?.content?.parts;
+      // Filter out Gemini 2.5 thinking tokens (thought: true) — these are internal
+      // model reasoning and must never be shown to users or parsed as answer steps.
       fullText = Array.isArray(parts)
-        ? parts.map((p: { text?: string }) => p?.text || '').join('\n').trim()
+        ? parts
+            .filter((p: { text?: string; thought?: boolean }) => !p.thought)
+            .map((p: { text?: string }) => p?.text || '')
+            .join('\n')
+            .trim()
         : '';
+
+      lastUsage = {
+        prompt_tokens: Number(usage?.promptTokenCount || 0),
+        completion_tokens: Number(usage?.candidatesTokenCount || 0),
+        total_tokens: Number(usage?.totalTokenCount || 0),
+      };
+
+      lastCost = calculateAiCost(lastUsage.prompt_tokens, lastUsage.completion_tokens, resolvedModel);
 
       if (!fullText) {
         lastErrorText = 'Empty response from model';
@@ -541,6 +572,8 @@ async function callGemini(
       steps: bulkParsed.steps,
       model: resolvedModel,
       suggestions: [],
+      usage: lastUsage,
+      cost_usd: lastCost,
     };
   }
 
@@ -552,6 +585,8 @@ async function callGemini(
     steps: parsed.steps,
     model: resolvedModel,
     suggestions: previewOnly ? [] : buildSuggestions(styleMode, options?.preferredLanguage),
+    usage: lastUsage,
+    cost_usd: lastCost,
   };
 }
 
@@ -570,9 +605,17 @@ Deno.serve(async (req) => {
     return jsonError(429, 'RATE_LIMITED', 'Too many requests');
   }
 
+  const supabaseAdmin = createSupabaseAdminClient();
+
   try {
     if (!hasValidInternalToken(req)) {
       return jsonError(401, 'UNAUTHORIZED_INTERNAL_CALL', 'Unauthorized internal call');
+    }
+
+    // 1. Budget Pre-Check
+    const budget = await getBudgetStatus(supabaseAdmin);
+    if (budget.is_blocked) {
+      return jsonError(402, 'AI_BUDGET_EXCEEDED', 'Monthly AI budget has been reached. Service is temporarily paused.');
     }
 
     const body = (await req.json()) as AiProxyRequest;
@@ -602,14 +645,20 @@ Deno.serve(async (req) => {
       previewOnly,
       preferredLanguage,
     });
+
+    // 2. Cost Calculation & Spend Recording
+    if (ai.usage) {
+      const cost = calculateAiCost(ai.usage.prompt_tokens, ai.usage.completion_tokens, ai.model);
+      console.log(`[ai-proxy] Recording spend: $${cost} for ${ai.model} (${ai.usage.total_tokens} tokens)`);
+      
+      // Perform atomic database update
+      await recordAiSpend(supabaseAdmin, cost);
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
-        answer: ai.answer,
-        explanation: ai.explanation,
-        steps: ai.steps,
-        model: ai.model,
-        suggestions: ai.suggestions,
+        ...ai,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );

@@ -104,6 +104,8 @@ function isConversationalPrompt(question: string, answer: string, explanation: s
     /\bgive me (an )?example\b/,
     /\bmake me a practice question\b/,
     /\bquiz me\b/,
+    /\bask me one similar question\b/,
+    /\bwait for my answer\b/,
     /\b(prompt|system prompt|instructions|internal instructions|rules)\b/,
     /\bwhat did i ask\b/,
     /\bwhat did i say\b/,
@@ -404,7 +406,11 @@ export default function ChatPage({ user }: { user: User }) {
         conversationId: activeConversationId || conversationId || undefined,
       });
       if (response) {
-        trackEvent('solve_completed', { mode: styleMode });
+        trackEvent('solve_completed', {
+          mode: styleMode,
+          model: response.metadata?.model ?? null,
+          aiMode: response.metadata?.aiMode ?? null,
+        });
         setMessage('');
         setAttachments([]);
         

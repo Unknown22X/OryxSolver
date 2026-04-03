@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edge';
 import type { User, Session } from '@supabase/supabase-js';
 import { applyServiceHealthError, canPerformDependencyAction } from '../lib/serviceHealth';
+import { getSessionWithRetry, signOutWithRetry, toSafeSupabaseError, updateUserWithRetry, withSupabaseAuthRetry } from '../lib/supabaseAuth';
 
 interface AuthState {
   user: User | null;
@@ -35,7 +36,9 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getSessionWithRetry({
+          fallbackMessage: 'Authentication is temporarily unavailable. Please try again shortly.',
+        });
         setState({
           user: session?.user ?? null,
           session,
@@ -43,7 +46,8 @@ export function useAuth(): UseAuthReturn {
           error: null,
         });
       } catch (err) {
-        setState(prev => ({ ...prev, loading: false, error: (err as Error).message }));
+        const safeError = toSafeSupabaseError(err, 'Authentication is temporarily unavailable. Please try again shortly.');
+        setState(prev => ({ ...prev, loading: false, error: safeError.message }));
       }
     };
 
@@ -69,11 +73,16 @@ export function useAuth(): UseAuthReturn {
     }
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await withSupabaseAuthRetry(
+        'signInWithPassword',
+        () => supabase.auth.signInWithPassword({ email, password }),
+        { fallbackMessage: 'Authentication is temporarily unavailable. Please try again shortly.' },
+      );
       if (error) throw error;
     } catch (err) {
-      setState(prev => ({ ...prev, loading: false, error: (err as Error).message }));
-      throw err;
+      const safeError = toSafeSupabaseError(err, 'Authentication is temporarily unavailable. Please try again shortly.');
+      setState(prev => ({ ...prev, loading: false, error: safeError.message }));
+      throw safeError;
     }
   }, []);
 
@@ -89,18 +98,24 @@ export function useAuth(): UseAuthReturn {
     }
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/onboarding`,
-          ...(options?.legalMetadata ? { data: options.legalMetadata } : {}),
-        },
-      });
+      const { error } = await withSupabaseAuthRetry(
+        'signUp',
+        () =>
+          supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: `${window.location.origin}/onboarding`,
+              ...(options?.legalMetadata ? { data: options.legalMetadata } : {}),
+            },
+          }),
+        { fallbackMessage: 'Authentication is temporarily unavailable. Please try again shortly.' },
+      );
       if (error) throw error;
     } catch (err) {
-      setState(prev => ({ ...prev, loading: false, error: (err as Error).message }));
-      throw err;
+      const safeError = toSafeSupabaseError(err, 'Authentication is temporarily unavailable. Please try again shortly.');
+      setState(prev => ({ ...prev, loading: false, error: safeError.message }));
+      throw safeError;
     }
   }, []);
 
@@ -112,12 +127,15 @@ export function useAuth(): UseAuthReturn {
     }
     setState(prev => ({ ...prev, loading: true }));
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await signOutWithRetry({
+        fallbackMessage: 'Authentication is temporarily unavailable. Please try again shortly.',
+      });
       if (error) throw error;
       setState({ user: null, session: null, loading: false, error: null });
     } catch (err) {
-      setState(prev => ({ ...prev, loading: false, error: (err as Error).message }));
-      throw err;
+      const safeError = toSafeSupabaseError(err, 'Authentication is temporarily unavailable. Please try again shortly.');
+      setState(prev => ({ ...prev, loading: false, error: safeError.message }));
+      throw safeError;
     }
   }, []);
 
@@ -129,9 +147,12 @@ export function useAuth(): UseAuthReturn {
       throw error;
     }
     
-    const { error } = await supabase.auth.updateUser({
-      data,
-    });
+    const { error } = await updateUserWithRetry(
+      {
+        data,
+      },
+      { fallbackMessage: 'Profile updates are temporarily unavailable. Please try again shortly.' },
+    );
     
     if (error) throw error;
 

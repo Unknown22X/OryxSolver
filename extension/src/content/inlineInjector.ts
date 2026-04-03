@@ -330,10 +330,34 @@ function requestAutoCrop(rect: { x: number; y: number; width: number; height: nu
 
 function shouldAutoCapture(config: SiteConfig | null, text: string, images: string[], hasVisuals: boolean): boolean {
   if (config?.forceImageCapture) return true;
+  if (images.some((src) => /^https?:\/\//i.test(src))) return true;
   if (images.length > 0) return false;
   const hasMath = /[=+\-*/^]/.test(text) || /\b(x|y|z|sin|cos|tan|log)\b/i.test(text);
   const isShort = text.trim().length < 160;
   return (hasMath && isShort) || (hasVisuals && isShort);
+}
+
+function lineLooksLikeUiCode(line: string): boolean {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    const ascii = trimmed.replace(/[^\x20-\x7E]/g, ' ');
+    const styleHits = (ascii.match(/\b(?:position|display|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|float|cursor|background(?:-[a-z]+)?|font-size|max-width|min-width|top|right|bottom|left|z-index)\s*:/gi) || []).length;
+    const scriptHits = (ascii.match(/\b(?:function|var|let|const|window|document|createElement|appendChild|insertBefore|getElementsByTagName|parentNode|async|await|gtag|dataLayer|modal|script|src=)\b/gi) || []).length;
+    if (styleHits >= 2 || scriptHits >= 2) return true;
+    if (/@media/i.test(ascii) && /max-width|min-width|important|display\s*:|position\s*:/i.test(ascii)) return true;
+    if (/[{};]/.test(ascii) && (styleHits >= 1 || scriptHits >= 1)) return true;
+    return false;
+}
+
+function stripCodeLikeNoise(text: string): string {
+    const kept: string[] = [];
+    text.split(/\n+/).forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        if (lineLooksLikeUiCode(trimmed)) return;
+        kept.push(trimmed);
+    });
+    return kept.join('\n').trim();
 }
 
 function getCleanVisibleText(element: HTMLElement): string {
@@ -399,7 +423,7 @@ function getCleanVisibleText(element: HTMLElement): string {
     ];
     arabicNoise.forEach(re => { text = text.replace(re, ''); });
 
-    return sanitizeBulkTextBlock(text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim());
+    return sanitizeBulkTextBlock(stripCodeLikeNoise(text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()));
 }
 
 interface BulkQuestionEntry {
@@ -689,7 +713,7 @@ function showHighlightButton(x: number, y: number, text: string) {
                 const images = getImagesInContainer(contextEl, 4);
                 const contextRect = getElementViewportRect(questionEl || contextEl, currentConfig);
                 void requestAutoCrop(contextRect).then((capture) => {
-                  const inlineImages = capture ? [capture, ...images.filter((src) => src !== capture)].slice(0, 4) : images.slice(0, 4);
+                  const inlineImages = buildInlineImages(capture, images, currentConfig, 4);
                   const payloadText = [
                     'Solve the following question accurately.',
                     'Use the selected text as the focus, but use the full surrounding question context to avoid missing terms.',
@@ -723,13 +747,20 @@ function findQuestionContainer(el: HTMLElement | null): HTMLElement | null {
 
 function getImagesInContainer(container: HTMLElement, max = 6): string[] {
     const images: string[] = [];
+    const isLikelyUiAsset = (value: string) => /logo|icon|avatar|profile|favicon|badge|spinner|office|outlook|microsoft|google|gstatic|clarity/i.test(value);
     const imgs = container.querySelectorAll('img');
     for (const img of Array.from(imgs)) {
         if (images.length >= max) break;
         const src = img.getAttribute('src') || img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
-        if (!src || src.includes('icon') || src.includes('logo') || src === 'null') continue;
-        const w = img.width || img.naturalWidth; const h = img.height || img.naturalHeight;
-        if ((w > 0 && w < 12) || (h > 0 && h < 12)) continue;
+        if (!src || src === 'null') continue;
+        const alt = `${img.getAttribute('alt') || ''} ${img.getAttribute('aria-label') || ''} ${img.className || ''}`.toLowerCase();
+        if (isLikelyUiAsset(`${src} ${alt}`)) continue;
+        if (img.closest('header, nav, footer, [role="banner"], [role="navigation"], .navbar, .header, .footer, .toolbar')) continue;
+        const rect = img.getBoundingClientRect();
+        const w = rect.width || img.width || img.naturalWidth;
+        const h = rect.height || img.height || img.naturalHeight;
+        if ((w > 0 && w < 24) || (h > 0 && h < 24)) continue;
+        if (w > 0 && h > 0 && (w * h) < 900) continue;
         if (!images.includes(src)) images.push(src);
     }
     // Also scan for picture/choice elements
@@ -752,11 +783,20 @@ function getImagesInContainer(container: HTMLElement, max = 6): string[] {
             const bg = style.backgroundImage;
             if (bg && bg.startsWith('url(') && !bg.includes('none')) {
                 const url = bg.slice(4, -1).replace(/['"]/g, "");
-                if (url.startsWith('http') && !images.includes(url)) images.push(url);
+                const rect = (el as HTMLElement).getBoundingClientRect();
+                if (rect.width >= 24 && rect.height >= 24 && url.startsWith('http') && !isLikelyUiAsset(url) && !images.includes(url)) images.push(url);
             }
         }
     }
     return images;
+}
+
+function buildInlineImages(primaryCapture: string | null, images: string[], config: SiteConfig | null, max = 4): string[] {
+    const deduped = images.filter((src, index) => src && images.indexOf(src) === index);
+    if (!primaryCapture) return deduped.slice(0, max);
+    if (config?.forceImageCapture) return [primaryCapture];
+    if (deduped.some((src) => /^https?:\/\//i.test(src))) return [primaryCapture];
+    return [primaryCapture, ...deduped.filter((src) => src !== primaryCapture)].slice(0, max);
 }
 
 function findFieldsInContainer(container: HTMLElement): QuestionFields {
@@ -844,9 +884,7 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
           const rect = getElementViewportRect(element, currentConfig);
           finalMathImage = await requestAutoCrop(rect);
       }
-      const inlineImages = finalMathImage
-        ? [finalMathImage, ...questionImages.filter((src) => src !== finalMathImage)].slice(0, 4)
-        : questionImages.slice(0, 4);
+      const inlineImages = buildInlineImages(finalMathImage, questionImages, currentConfig, 4);
       
       chrome.runtime.sendMessage({
         type: MSG_INLINE_SOLVE_AND_INJECT,

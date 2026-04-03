@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Info, AlertTriangle, PartyPopper, X } from 'lucide-react';
 
 type BannerType = 'info' | 'warning' | 'success';
@@ -7,6 +7,54 @@ interface BannerProps {
   message: string;
   type?: BannerType;
   id?: string;
+}
+
+function normalizeBannerText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function hashString(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) + hash) ^ value.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function readCookie(name: string): string | null {
+  try {
+    const parts = document.cookie.split(';');
+    for (const raw of parts) {
+      const [k, ...rest] = raw.trim().split('=');
+      if (k === name) return decodeURIComponent(rest.join('='));
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function isDismissed(dismissKey: string): boolean {
+  try {
+    return Boolean(localStorage.getItem(dismissKey));
+  } catch {
+    return readCookie(dismissKey) === '1';
+  }
+}
+
+function persistDismissed(dismissKey: string) {
+  try {
+    localStorage.setItem(dismissKey, 'true');
+  } catch {
+    // ignore
+  }
+
+  // Cookie fallback for environments where storage is blocked or non-persistent.
+  try {
+    document.cookie = `${dismissKey}=1; max-age=${60 * 60 * 24 * 365}; path=/; samesite=lax`;
+  } catch {
+    // ignore
+  }
 }
 
 const STYLES = {
@@ -26,21 +74,26 @@ const STYLES = {
 
 export default function Banner({ message, type = 'info', id = 'webapp-announcement' }: BannerProps) {
   const [isVisible, setIsVisible] = useState(false);
-  const storageKey = `oryx_banner_dismissed_${id}_${message.length}`;
+  const normalizedMessage = useMemo(() => normalizeBannerText(message ?? ''), [message]);
+  const dismissKey = useMemo(() => {
+    const stable = `${id}:${type}:${normalizedMessage}`;
+    return `oryx_banner_dismissed_${hashString(stable)}`;
+  }, [id, type, normalizedMessage]);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem(storageKey);
-    if (!dismissed) {
-      setIsVisible(true);
+    if (!normalizedMessage) {
+      setIsVisible(false);
+      return;
     }
-  }, [storageKey]);
+    setIsVisible(!isDismissed(dismissKey));
+  }, [dismissKey, normalizedMessage]);
 
   const handleDismiss = () => {
-    localStorage.setItem(storageKey, 'true');
+    persistDismissed(dismissKey);
     setIsVisible(false);
   };
 
-  if (!isVisible || !message) return null;
+  if (!isVisible || !normalizedMessage) return null;
 
   const style = STYLES[type] || STYLES.info;
 
@@ -51,7 +104,7 @@ export default function Banner({ message, type = 'info', id = 'webapp-announceme
           {style.icon}
         </div>
         <p className="text-sm font-medium leading-none">
-          {message}
+          {normalizedMessage}
         </p>
       </div>
       <button 

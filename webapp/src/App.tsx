@@ -14,6 +14,7 @@ import MaintenanceOverlay from './components/MaintenanceOverlay';
 import ServiceStatusBanner from './components/ServiceStatusBanner';
 import { hasCompletedOnboarding } from './lib/onboarding';
 import { useServiceHealth } from './hooks/useServiceHealth';
+import { getSessionWithRetry, updateUserWithRetry } from './lib/supabaseAuth';
 
 // Lazy load pages for better performance
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -99,7 +100,9 @@ function App() {
 
     const checkSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getSessionWithRetry({
+          fallbackMessage: 'Authentication is temporarily unavailable. Please retry.',
+        });
         setUser(session?.user ?? null);
         syncTelemetryUser(session?.user ?? null);
       } catch (err) {
@@ -155,7 +158,10 @@ function App() {
           return;
         }
 
-        const { error } = await supabase.auth.updateUser({ data: pending });
+        const { error } = await updateUserWithRetry(
+          { data: pending },
+          { fallbackMessage: 'We could not sync your account details right now. Please try again.' },
+        );
         if (error) throw error;
         clearPendingLegalConsent();
       } catch (error) {

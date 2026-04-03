@@ -251,7 +251,12 @@ export function useSolve(
         clearInterruptedTurns();
         setLastSendTime(Date.now());
         setQuotedStep(null);
-        analytics.track('solve_completed', { mode: payload.styleMode, isBulk: !!payload.isBulk });
+        analytics.track('solve_completed', {
+          mode: payload.styleMode,
+          isBulk: !!payload.isBulk,
+          model: response.metadata?.model ?? null,
+          aiMode: response.metadata?.aiMode ?? null,
+        });
         return { 
           answer: response.answer, 
           explanation: response.explanation,

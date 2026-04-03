@@ -3,6 +3,24 @@ import { requireAdminAccess, requireSupportAccess, requireAdminOnlyAccess } from
 import { AppError, handleOptions, jsonError, jsonOk } from '../_shared/http.ts';
 import { clearRecordedDependencyBreakers, loadServiceHealthSnapshot } from '../_shared/serviceHealth.ts';
 
+function normalizeAdminSubscriptionTier(value: unknown): 'free' | 'pro' | 'premium' {
+  return value === 'premium' ? 'premium' : value === 'pro' ? 'pro' : 'free';
+}
+
+function resolveAdminSubscriptionStatus(
+  tier: 'free' | 'pro' | 'premium',
+  previousStatus?: string | null,
+): 'active' | 'inactive' | 'trialing' {
+  if (tier === 'free') return 'inactive';
+  if (previousStatus === 'trialing') return 'trialing';
+  return 'active';
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 Deno.serve(async (req) => {
   const options = handleOptions(req);
   if (options) return options;
@@ -32,12 +50,50 @@ Deno.serve(async (req) => {
           dbQuery = dbQuery.or(`email.ilike.%${query}%,display_name.ilike.%${query}%`);
         }
 
-        const { data: users, count, error } = await dbQuery
+        const { data: usersRaw, count, error } = await dbQuery
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1);
 
         if (error) throw new AppError(500, 'USER_SEARCH_FAILED', error.message);
-        return jsonOk({ users, total: count, page, limit });
+
+        const users = (usersRaw ?? []) as Array<Record<string, unknown>>;
+
+        // profiles -> subscriptions implicit join can be broken depending on schema evolution.
+        // Fetch subscriptions explicitly by auth uid and attach as `subscriptions: [{ tier, status }]`.
+        const authUids = users
+          .map((u) => u.auth_user_id)
+          .filter(isUuid)
+          .map((uid) => uid.trim());
+
+        const subscriptionMap = new Map<string, { tier: string | null; status: string }>();
+        if (authUids.length > 0) {
+          const { data: subs, error: subsErr } = await supabaseAdmin
+            .from('subscriptions')
+            .select('user_id, tier, status')
+            .in('user_id', authUids);
+
+          if (subsErr) throw new AppError(500, 'SUBSCRIPTION_LOOKUP_FAILED', subsErr.message);
+
+          (subs ?? []).forEach((row: any) => {
+            if (row?.user_id) {
+              subscriptionMap.set(String(row.user_id), {
+                tier: row.tier ?? null,
+                status: row.status ?? 'inactive',
+              });
+            }
+          });
+        }
+
+        const usersWithSubs = users.map((u) => {
+          const authUid = isUuid(u.auth_user_id) ? u.auth_user_id.trim() : '';
+          const sub = authUid ? subscriptionMap.get(authUid) : undefined;
+          return {
+            ...u,
+            subscriptions: sub ? [{ tier: sub.tier, status: sub.status }] : [],
+          };
+        });
+
+        return jsonOk({ users: usersWithSubs, total: count, page, limit });
       }
 
       if (action === 'history') {
@@ -147,18 +203,20 @@ Deno.serve(async (req) => {
 
         // 2. Handle Subscription Updates (tier)
         if (updates.subscription_tier !== undefined) {
+          const nextTier = normalizeAdminSubscriptionTier(updates.subscription_tier);
           const { data: subBefore } = await supabaseAdmin
             .from('subscriptions')
             .select('*')
             .eq('user_id', targetUserId)
             .maybeSingle();
+          const nextStatus = resolveAdminSubscriptionStatus(nextTier, subBefore?.status);
 
           const { error: sErr } = await supabaseAdmin
             .from('subscriptions')
             .upsert({
               user_id: targetUserId,
-              tier: updates.subscription_tier,
-              status: subBefore?.status || 'active',
+              tier: nextTier,
+              status: nextStatus,
               updated_at: new Date().toISOString()
             }, { onConflict: 'user_id' });
 
@@ -171,7 +229,7 @@ Deno.serve(async (req) => {
             action_type: 'PLAN_CHANGE',
             target_user_id: targetUserId,
             payload_before: subBefore || {},
-            payload_after: { tier: updates.subscription_tier },
+            payload_after: { tier: nextTier, status: nextStatus },
             reason
           });
         }

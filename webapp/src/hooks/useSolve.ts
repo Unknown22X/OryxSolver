@@ -32,6 +32,11 @@ interface SolveResponse {
   };
   metadata?: {
     conversationId?: string;
+    model?: string;
+    aiMode?: 'normal' | 'fast_fallback';
+    styleMode?: string;
+    isBulk?: boolean;
+    isFollowUp?: boolean;
   };
   isPreview?: boolean;
   statusPhase?: SolveStreamPhase;

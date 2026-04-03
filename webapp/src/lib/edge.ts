@@ -1,6 +1,6 @@
-import { supabase } from './supabase';
 import { getFunctionUrl } from './functions';
 import { applyServiceHealthError, resilientFetch } from './serviceHealth';
+import { getSessionWithRetry, toSafeSupabaseError } from './supabaseAuth';
 
 function buildEdgeError(message: string, code?: string, status?: number) {
   const error = new Error(message) as Error & { code?: string; status?: number };
@@ -11,7 +11,9 @@ function buildEdgeError(message: string, code?: string, status?: number) {
 
 export async function getAccessToken(): Promise<string> {
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await getSessionWithRetry({
+      fallbackMessage: 'Authentication is temporarily unavailable. Please retry.',
+    });
     if (error) throw error;
     const token = data.session?.access_token;
     if (!token) {
@@ -20,7 +22,7 @@ export async function getAccessToken(): Promise<string> {
     return token;
   } catch (error) {
     applyServiceHealthError(error, 'auth');
-    throw error;
+    throw toSafeSupabaseError(error, 'Authentication is temporarily unavailable. Please retry.');
   }
 }
 

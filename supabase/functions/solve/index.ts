@@ -281,8 +281,10 @@ async function extractImageParts(form: FormData): Promise<ExtractedImages> {
         continue;
       } catch (err) {
         console.error(`[SOLVE] Failed to fetch remote image: ${url}`, err);
-        // We throw here because the user expects specifically these images to be analyzed.
-        // If we skip, the AI might give a wrong answer due to missing context.
+        if (parts.length > 0) {
+          console.warn('[SOLVE] Skipping remote image because another image part is already attached:', url.substring(0, 100));
+          continue;
+        }
         throw new AppError(400, 'REMOTE_IMAGE_FETCH_FAILED', `Failed to retrieve image: ${url}. Please upload it directly.`);
       }
     }
@@ -1116,7 +1118,7 @@ Deno.serve(async (req) => {
         images: imageCount,
         is_follow_up: isFollowUp,
         conversation_id: conversationId,
-      });
+      }, ai.cost_usd || 0);
       if (imageCount > 0) {
         await recordUsageEvent(supabaseAdmin, user.id, 'image_vision', imageCount, {
           mode: runMode,
