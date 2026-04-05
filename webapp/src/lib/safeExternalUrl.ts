@@ -2,8 +2,6 @@ const DEFAULT_ALLOWED_HOSTS = [
   'lemonsqueezy.com',
   'www.lemonsqueezy.com',
   'checkout.lemonsqueezy.com',
-  'localhost',
-  '127.0.0.1',
 ];
 
 function matchesAllowedHost(hostname: string, allowedHosts: string[]): boolean {
@@ -16,8 +14,7 @@ export function sanitizeExternalUrl(
 ): string | null {
   try {
     const parsed = new URL(rawUrl);
-    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost)) return null;
+    if (parsed.protocol !== 'https:') return null;
     if (!matchesAllowedHost(parsed.hostname, allowedHosts)) return null;
     return parsed.toString();
   } catch {

@@ -19,7 +19,117 @@ type AiProxyRequest = {
   streamPreview?: boolean;
   previewOnly?: boolean;
   preferredLanguage?: string;
+  surface?: 'webapp' | 'extension';
+  streamResponse?: boolean;
 };
+
+type AiProxySuccess = {
+  answer: string;
+  explanation: string;
+  steps: string[];
+  model: string;
+  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  cost_usd?: number;
+};
+
+type AiProxyStreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'final'; data: { ok: true } & AiProxySuccess }
+  | { type: 'error'; code?: string; message: string };
+
+function createNdjsonWriter(): { response: Response; write: (event: AiProxyStreamEvent) => void; close: () => void } {
+  const encoder = new TextEncoder();
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let closed = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controllerRef = controller;
+    },
+  });
+
+  return {
+    response: new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
+    }),
+    write(event) {
+      if (!controllerRef || closed) return;
+      controllerRef.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+    },
+    close() {
+      if (!controllerRef || closed) return;
+      try {
+        controllerRef.close();
+      } finally {
+        closed = true;
+        controllerRef = null;
+      }
+    },
+  };
+}
+
+function getDeltaSuffix(existing: string, incoming: string): string {
+  if (!incoming) return '';
+  if (!existing) return incoming;
+  if (incoming.startsWith(existing)) return incoming.slice(existing.length);
+
+  const maxOverlap = Math.min(existing.length, incoming.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (existing.endsWith(incoming.slice(0, overlap))) {
+      return incoming.slice(overlap);
+    }
+  }
+
+  return incoming;
+}
+
+async function parseGeminiSseStream(
+  stream: ReadableStream<Uint8Array>,
+  onData: (payload: unknown) => void,
+) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const events = buffer.split('\n\n');
+      buffer = events.pop() ?? '';
+
+      for (const event of events) {
+        const lines = event
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+        const dataLines = lines
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trim())
+          .filter(Boolean);
+        if (dataLines.length === 0) continue;
+
+        const payloadText = dataLines.join('\n');
+        if (payloadText === '[DONE]') continue;
+
+        try {
+          onData(JSON.parse(payloadText));
+        } catch (error) {
+          console.warn('[ai-proxy] Failed to parse streamed SSE payload', error);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 function isMetaDisclosurePrompt(question: string): boolean {
   const lower = question.trim().toLowerCase();
@@ -227,6 +337,43 @@ function parseStructuredOutput(raw: string, question: string): { answer: string;
   return { answer, explanation, steps };
 }
 
+function parseWebappOutput(raw: string, question: string): { answer: string; explanation: string; steps: string[] } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { answer: 'Answer available in explanation', explanation: '', steps: [] };
+  }
+
+  const hasStructuredSections = /^(FINAL_ANSWER|ANSWER|RESULT|STEPS|EXPLANATION)\s*:/im.test(trimmed);
+  if (!hasStructuredSections) {
+    return { answer: trimmed, explanation: '', steps: [] };
+  }
+
+  const parsed = parseStructuredOutput(trimmed, question);
+  const parts: string[] = [];
+
+  if (parsed.answer && parsed.answer.toLowerCase() !== 'answer available in explanation') {
+    parts.push(parsed.answer.trim());
+  }
+
+  if (parsed.steps.length > 0) {
+    parts.push(parsed.steps.join('\n\n'));
+  }
+
+  if (
+    parsed.explanation.trim() &&
+    normalizeComparableText(parsed.explanation) !== normalizeComparableText(parsed.answer) &&
+    normalizeComparableText(parsed.explanation) !== normalizeComparableText(parsed.steps.join('\n'))
+  ) {
+    parts.push(parsed.explanation.trim());
+  }
+
+  return {
+    answer: parts.join('\n\n').trim() || trimmed,
+    explanation: '',
+    steps: [],
+  };
+}
+
 /** Dedicated parser for bulk answer keys - extracts ANSWER_KEY section and strips number prefixes */
 function parseBulkOutput(raw: string): { answer: string; explanation: string; steps: string[] } {
   const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -257,10 +404,23 @@ function parseBulkOutput(raw: string): { answer: string; explanation: string; st
   };
 }
 
-function hasUsableStructuredOutput(question: string, raw: string, isBulk = false): boolean {
+function hasUsableStructuredOutput(
+  question: string,
+  raw: string,
+  isBulk = false,
+  surface?: 'webapp' | 'extension',
+): boolean {
   if (isBulk) {
     const bulkParsed = parseBulkOutput(raw);
     return bulkParsed.steps.length > 0 || bulkParsed.explanation.trim().length > 0;
+  }
+
+  if (surface === 'webapp') {
+    const text = parseWebappOutput(raw, question).answer.trim();
+    if (!text) return false;
+    if (text.length <= 8) return /^[A-D]$/i.test(text) || /^(true|false)$/i.test(text);
+    if (text.length <= 24) return /[.!?)\]]$/.test(text) || text.split(/\s+/).length >= 3;
+    return /[.!?)\]]$/.test(text) || text.split(/\s+/).length >= 8;
   }
 
   const parsed = parseStructuredOutput(raw, question);
@@ -293,16 +453,11 @@ async function callGemini(
   options?: {
     previewOnly?: boolean;
     preferredLanguage?: string;
+    surface?: 'webapp' | 'extension';
+    streamResponse?: boolean;
+    onDelta?: (text: string) => void;
   },
-): Promise<{
-  answer: string;
-  explanation: string;
-  steps: string[];
-  model: string;
-  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  cost_usd?: number;
-}> {
+): Promise<AiProxySuccess> {
   if (isMetaDisclosurePrompt(question)) {
     return buildMetaDisclosureResponse(question, options?.preferredLanguage);
   }
@@ -329,6 +484,7 @@ async function callGemini(
 
   const complexPrompt = isComplexPrompt(question, imageParts, styleMode);
   const previewOnly = options?.previewOnly === true;
+  const streamResponse = options?.streamResponse === true && !previewOnly && !isBulkAsk;
 
   const modelChain =
     previewOnly
@@ -355,6 +511,7 @@ async function callGemini(
         styleMode,
         hasImages: imageParts.length > 0,
         preferredLanguage: options?.preferredLanguage,
+        surface: options?.surface,
       })
     : buildPrompt({
         question,
@@ -365,6 +522,7 @@ async function callGemini(
         isFollowUp: hasHistory,
         isBulk: isBulkAsk,
         preferredLanguage: options?.preferredLanguage,
+        surface: options?.surface,
       });
 
   let fullText = '';
@@ -383,6 +541,124 @@ async function callGemini(
       ? (complexPrompt || styleMode === 'step_by_step' ? 1400 : 1000)
       : (complexPrompt || styleMode === 'step_by_step' ? 4096 : 3000);
   const bulkTimeoutMs = 45000; // Safer gap below Supabase 60s gateway
+
+  if (streamResponse) {
+    for (const model of dedupedModelChain) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), perAttemptTimeoutMs + 20000);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: prompt }, ...imageParts],
+              },
+            ],
+            safetySettings: [
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            ],
+            generationConfig: {
+              maxOutputTokens: primaryMaxOutputTokens,
+              temperature: mode === 'fast_fallback' ? 0.0 : 0.1,
+            },
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          lastErrorText = errText;
+          lastStatus = res.status;
+          const shouldTryNext =
+            res.status === 429 ||
+            res.status === 404 ||
+            res.status >= 500;
+          if (shouldTryNext) {
+            if (res.status === 429) await new Promise((resolve) => setTimeout(resolve, 1500));
+            continue;
+          }
+          throw new AppError(502, 'AI_PROVIDER_ERROR', `AI provider failed: ${res.status}`, errText);
+        }
+
+        if (!res.body) {
+          lastErrorText = 'Streaming response body missing';
+          lastStatus = 502;
+          continue;
+        }
+
+        let streamedText = '';
+        await parseGeminiSseStream(res.body, (payload) => {
+          const data = payload as {
+            candidates?: Array<{
+              finishReason?: string;
+              content?: {
+                parts?: Array<{ text?: string; thought?: boolean }>;
+              };
+            }>;
+            usageMetadata?: {
+              promptTokenCount?: number;
+              candidatesTokenCount?: number;
+              totalTokenCount?: number;
+            };
+          };
+
+          const candidate = data?.candidates?.[0];
+          const chunkText = Array.isArray(candidate?.content?.parts)
+            ? candidate.content.parts
+                .filter((part) => !part?.thought)
+                .map((part) => part?.text || '')
+                .join('')
+            : '';
+
+          if (chunkText) {
+            const delta = getDeltaSuffix(streamedText, chunkText);
+            if (delta) {
+              streamedText += delta;
+              options?.onDelta?.(delta);
+            }
+          }
+
+          if (data?.usageMetadata) {
+            lastUsage = {
+              prompt_tokens: Number(data.usageMetadata.promptTokenCount || 0),
+              completion_tokens: Number(data.usageMetadata.candidatesTokenCount || 0),
+              total_tokens: Number(data.usageMetadata.totalTokenCount || 0),
+            };
+          }
+        });
+
+        fullText = streamedText.trim();
+        if (lastUsage) {
+          lastCost = calculateAiCost(lastUsage.prompt_tokens, lastUsage.completion_tokens, model);
+        }
+
+        if (!fullText) {
+          lastErrorText = 'Empty streamed response from model';
+          lastStatus = 502;
+          continue;
+        }
+
+        resolvedModel = model;
+        break;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          lastErrorText = `Model ${model} timed out`;
+          lastStatus = 504;
+          continue;
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+  } else {
 
   for (const model of dedupedModelChain) {
     const controller = new AbortController();
@@ -469,7 +745,7 @@ async function callGemini(
           break;
         }
 
-        const hasUsablePartial = hasUsableStructuredOutput(question, fullText);
+        const hasUsablePartial = hasUsableStructuredOutput(question, fullText, false, options?.surface);
 
         if (!hasUsablePartial) {
           // Try one continuation pass before failing this model.
@@ -479,18 +755,32 @@ async function callGemini(
               () => continuationController.abort(),
               perAttemptTimeoutMs + 3000,
             );
-            const continuationPrompt = [
-              prompt,
-              '',
-              'Previous output was truncated. Continue exactly from where it stopped.',
-              'Rules:',
-              '- Do not restart or repeat FINAL_ANSWER.',
-              '- Continue with the remaining STEPS and EXPLANATION only.',
-              '- Keep the same language and format.',
-              '',
-              'Previous partial output:',
-              fullText,
-            ].join('\n');
+            const continuationPrompt = options?.surface === 'webapp'
+              ? [
+                  prompt,
+                  '',
+                  'Previous output was truncated. Continue exactly from where it stopped.',
+                  'Rules:',
+                  '- Do not restart from the beginning.',
+                  '- Continue the same markdown reply naturally.',
+                  '- Keep the same language, tone, and formatting.',
+                  '- Do not add FINAL_ANSWER, STEPS, or EXPLANATION labels unless the user explicitly asked for them.',
+                  '',
+                  'Previous partial output:',
+                  fullText,
+                ].join('\n')
+              : [
+                  prompt,
+                  '',
+                  'Previous output was truncated. Continue exactly from where it stopped.',
+                  'Rules:',
+                  '- Do not restart or repeat FINAL_ANSWER.',
+                  '- Continue with the remaining STEPS and EXPLANATION only.',
+                  '- Keep the same language and format.',
+                  '',
+                  'Previous partial output:',
+                  fullText,
+                ].join('\n');
 
             const continuationRes = await fetch(url, {
               method: 'POST',
@@ -520,7 +810,7 @@ async function callGemini(
 
               if (continuationText) {
                 const merged = `${fullText}\n${continuationText}`.trim();
-                if (hasUsableStructuredOutput(question, merged)) {
+                if (hasUsableStructuredOutput(question, merged, false, options?.surface)) {
                   fullText = merged;
                 } else {
                   lastErrorText = `Model ${model} continuation still incomplete`;
@@ -562,6 +852,7 @@ async function callGemini(
       clearTimeout(timeoutId);
     }
   }
+  }
 
   if (!fullText) {
     if (lastStatus === 429) {
@@ -590,7 +881,9 @@ async function callGemini(
     };
   }
 
-  const parsed = parseStructuredOutput(fullText, question);
+  const parsed = options?.surface === 'webapp'
+    ? parseWebappOutput(fullText, question)
+    : parseStructuredOutput(fullText, question);
 
   return {
     answer: parsed.answer,
@@ -640,6 +933,8 @@ Deno.serve(async (req) => {
     const isBulk = Boolean(body.isBulk);
     const previewOnly = body.previewOnly === true || body.streamPreview === true;
     const preferredLanguage = body.preferredLanguage;
+    const surface = body.surface === 'webapp' ? 'webapp' : body.surface === 'extension' ? 'extension' : undefined;
+    const streamResponse = body.streamResponse === true && !previewOnly && !isBulk;
 
     if (!question) {
       return jsonError(400, 'QUESTION_REQUIRED', 'Question is required');
@@ -654,9 +949,47 @@ Deno.serve(async (req) => {
       return jsonError(413, 'HISTORY_TOO_LARGE', 'Too many history items.');
     }
 
+    if (streamResponse) {
+      const writer = createNdjsonWriter();
+      try {
+        const ai = await callGemini(question, imageParts, mode, styleMode, history, isBulk, {
+          previewOnly,
+          preferredLanguage,
+          surface,
+          streamResponse: true,
+          onDelta: (text) => writer.write({ type: 'delta', text }),
+        });
+
+        if (ai.usage) {
+          const cost = calculateAiCost(ai.usage.prompt_tokens, ai.usage.completion_tokens, ai.model);
+          await recordAiSpend(supabaseAdmin, cost);
+        }
+
+        writer.write({
+          type: 'final',
+          data: {
+            ok: true,
+            ...ai,
+          },
+        });
+      } catch (error) {
+        if (error instanceof AppError) {
+          writer.write({ type: 'error', code: error.code, message: error.message });
+        } else {
+          const message = error instanceof Error ? error.message : 'AI proxy failed';
+          writer.write({ type: 'error', code: 'AI_PROXY_FAILED', message });
+        }
+      } finally {
+        writer.close();
+      }
+
+      return writer.response;
+    }
+
     const ai = await callGemini(question, imageParts, mode, styleMode, history, isBulk, {
       previewOnly,
       preferredLanguage,
+      surface,
     });
 
     // 2. Cost Calculation & Spend Recording

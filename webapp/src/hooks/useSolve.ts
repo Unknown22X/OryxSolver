@@ -9,6 +9,7 @@ interface SolveRequest {
   images?: File[];
   styleMode?: string;
   language?: string;
+  surface?: 'webapp' | 'extension';
   history?: Array<{ role: 'user' | 'model'; text: string }>;
   conversationId?: string;
   isBulk?: boolean;
@@ -55,6 +56,7 @@ type SolveStreamPhase =
 type SolveStreamEvent =
   | { type: 'status'; phase: SolveStreamPhase }
   | { type: 'preview'; answer: string; explanation?: string; steps?: string[] }
+  | { type: 'delta'; text: string }
   | { type: 'final'; data: SolveResponse }
   | { type: 'error'; code?: string; message: string };
 
@@ -82,6 +84,7 @@ export function useSolve(user: User | null): UseSolveReturn {
   const [chatSession, setChatSession] = useState<ChatMessage[]>([]);
   const managedObjectUrlsRef = useRef<Set<string>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const previewTimersRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     const stillUsed = new Set<string>();
@@ -104,6 +107,10 @@ export function useSolve(user: User | null): UseSolveReturn {
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
+      for (const timer of previewTimersRef.current.values()) {
+        window.clearTimeout(timer);
+      }
+      previewTimersRef.current.clear();
       for (const url of managedObjectUrlsRef.current) {
         URL.revokeObjectURL(url);
       }
@@ -125,6 +132,9 @@ export function useSolve(user: User | null): UseSolveReturn {
     if (request.language) {
       formData.append('language', request.language);
     }
+    if (request.surface) {
+      formData.append('surface', request.surface);
+    }
     if (request.history && request.history.length > 0) {
       formData.append('history', JSON.stringify(request.history));
     }
@@ -142,10 +152,83 @@ export function useSolve(user: User | null): UseSolveReturn {
     return formData;
   }, []);
 
+  const clearPreviewTimer = useCallback((messageId: string) => {
+    const timerId = previewTimersRef.current.get(messageId);
+    if (typeof timerId === 'number') {
+      window.clearTimeout(timerId);
+      previewTimersRef.current.delete(messageId);
+    }
+  }, []);
+
+  const animatePreviewAnswer = useCallback((
+    messageId: string,
+    answer: string,
+    explanation = '',
+    steps: string[] = [],
+  ) => {
+    clearPreviewTimer(messageId);
+    const fullAnswer = answer.trim();
+    if (!fullAnswer) {
+      setChatSession((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                response: {
+                  answer: fullAnswer,
+                  explanation,
+                  steps,
+                  suggestions: [],
+                  isPreview: true,
+                  statusPhase: 'refining',
+                },
+              }
+            : msg,
+        ),
+      );
+      return;
+    }
+
+    let nextIndex = 0;
+    const chunkSize = Math.max(1, Math.ceil(fullAnswer.length / 36));
+
+    const tick = () => {
+      nextIndex = Math.min(fullAnswer.length, nextIndex + chunkSize);
+      const nextAnswer = fullAnswer.slice(0, nextIndex);
+
+      setChatSession((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                response: {
+                  answer: nextAnswer,
+                  explanation,
+                  steps,
+                  suggestions: [],
+                  isPreview: true,
+                  statusPhase: 'refining',
+                },
+              }
+            : msg,
+        ),
+      );
+
+      if (nextIndex < fullAnswer.length) {
+        const timerId = window.setTimeout(tick, 18);
+        previewTimersRef.current.set(messageId, timerId);
+      } else {
+        previewTimersRef.current.delete(messageId);
+      }
+    };
+
+    tick();
+  }, [clearPreviewTimer]);
+
   const isStreamEvent = useCallback((value: unknown): value is SolveStreamEvent => {
     if (!value || typeof value !== 'object') return false;
     const event = value as { type?: unknown };
-    return event.type === 'status' || event.type === 'preview' || event.type === 'final' || event.type === 'error';
+    return event.type === 'status' || event.type === 'preview' || event.type === 'delta' || event.type === 'final' || event.type === 'error';
   }, []);
 
   const sendMessage = useCallback(async (request: SolveRequest): Promise<SolveResponse | null> => {
@@ -173,7 +256,7 @@ export function useSolve(user: User | null): UseSolveReturn {
         question: request.text,
         images: previewImages,
         isBulk: request.isBulk,
-        response: { answer: 'Thinking...', explanation: '', statusPhase: 'preparing' },
+        response: { answer: '', explanation: '', statusPhase: 'preparing' },
       };
       setChatSession((prev) => [...prev, pendingMessage]);
 
@@ -187,7 +270,28 @@ export function useSolve(user: User | null): UseSolveReturn {
                     response: {
                       ...msg.response,
                       statusPhase: event.phase,
-                      answer: msg.response.isPreview ? msg.response.answer : 'Thinking...',
+                      answer: msg.response.answer,
+                    },
+                  }
+                : msg,
+            ),
+          );
+          return;
+        }
+
+        if (event.type === 'delta') {
+          setChatSession((prev) =>
+            prev.map((msg) =>
+              msg.id === pendingId
+                ? {
+                    ...msg,
+                    response: {
+                      ...msg.response,
+                      answer: `${msg.response.answer || ''}${event.text}`,
+                      explanation: '',
+                      steps: [],
+                      isPreview: true,
+                      statusPhase: 'refining',
                     },
                   }
                 : msg,
@@ -197,22 +301,11 @@ export function useSolve(user: User | null): UseSolveReturn {
         }
 
         if (event.type === 'preview') {
-          setChatSession((prev) =>
-            prev.map((msg) =>
-              msg.id === pendingId
-                ? {
-                    ...msg,
-                    response: {
-                      answer: event.answer,
-                      explanation: event.explanation || '',
-                      steps: Array.isArray(event.steps) ? event.steps : [],
-                      suggestions: [],
-                      isPreview: true,
-                      statusPhase: 'refining',
-                    },
-                  }
-                : msg,
-            ),
+          animatePreviewAnswer(
+            pendingId,
+            event.answer,
+            event.explanation || '',
+            Array.isArray(event.steps) ? event.steps : [],
           );
         }
       };
@@ -327,6 +420,7 @@ export function useSolve(user: User | null): UseSolveReturn {
         broadcastUsageUpdated(data.usage);
       }
 
+      clearPreviewTimer(pendingId);
       clearInterruptedMessages();
       setChatSession((prev) =>
         prev.map((msg) =>
@@ -338,6 +432,7 @@ export function useSolve(user: User | null): UseSolveReturn {
 
       return data;
     } catch (err) {
+      clearPreviewTimer(pendingId);
       const code = err instanceof Error && 'code' in err ? String((err as Error & { code?: string }).code || '') : '';
       if (err instanceof Error && (err.name === 'AbortError' || code === 'STREAM_INTERRUPTED')) {
         if (code === 'STREAM_INTERRUPTED') {
@@ -385,7 +480,7 @@ export function useSolve(user: User | null): UseSolveReturn {
     } finally {
       setIsSending(false);
     }
-  }, [buildFormData, clearInterruptedMessages, isStreamEvent, user]);
+  }, [animatePreviewAnswer, buildFormData, clearInterruptedMessages, clearPreviewTimer, isStreamEvent, user]);
 
   const clearSession = useCallback(() => {
     setChatSession([]);

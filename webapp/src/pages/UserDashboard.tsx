@@ -24,9 +24,12 @@ import {
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import AppLayout from '../components/AppLayout';
 import { submitAnswerFeedback } from '../lib/feedbackApi';
-import { fetchHistoryList, type HistoryEntry } from '../lib/historyApi';
+import { fetchAllHistoryEntries, type HistoryEntry } from '../lib/historyApi';
+import { buildMonthlySolveSeries, computeCurrentStreak, countSolvesOnDay } from '../lib/studyMetrics';
 import { useProfile } from '../hooks/useProfile';
 import { useUsage } from '../hooks/useUsage';
+import { getOnboardingPreferences } from '../lib/onboarding';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 import { useTranslation } from 'react-i18next';
 
 type AnswerFeedbackDraft = {
@@ -70,15 +73,16 @@ export default function UserDashboard({ user }: { user: User }) {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, AnswerFeedbackDraft>>({});
   const [isPlanExplainerOpen, setIsPlanExplainerOpen] = useState(false);
+  const onboarding = useMemo(() => getOnboardingPreferences(user), [user]);
 
   useEffect(() => {
     let active = true;
 
     async function loadHistory() {
       try {
-        const data = await fetchHistoryList({ limit: 40 });
+        const entries = await fetchAllHistoryEntries({ limit: 200, maxPages: 6 });
         if (!active) return;
-        setHistory(data.entries);
+        setHistory(entries);
       } catch (error) {
         if (!active) return;
         console.error('Failed to load history:', error);
@@ -93,58 +97,18 @@ export default function UserDashboard({ user }: { user: User }) {
       active = false;
     };
   }, []);
-
-
-  const historyByDay = useMemo(() => {
-    const map: Record<string, number> = {};
-    history.forEach((entry) => {
-      const dayKey = new Date(entry.created_at).toISOString().split('T')[0];
-      map[dayKey] = (map[dayKey] || 0) + 1;
-    });
-    return map;
-  }, [history]);
-
-  const currentStreak = useMemo(() => {
-    const today = new Date();
-    let streak = 0;
-    for (let offset = 0; offset < 7; offset += 1) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - offset);
-      const key = date.toISOString().split('T')[0];
-      if (historyByDay[key]) {
-        streak += 1;
-      } else {
-        if (offset === 0) continue;
-        break;
-      }
-    }
-    return streak;
-  }, [historyByDay]);
+  const currentStreak = useMemo(() => computeCurrentStreak(history), [history]);
+  const todaySolved = useMemo(() => countSolvesOnDay(history), [history]);
 
   
-  const usageByMonth = useMemo(() => {
-    const counts: Record<string, number> = {};
-    history.forEach((entry) => {
-      const monthKey = new Date(entry.created_at).toISOString().slice(0, 7);
-      counts[monthKey] = (counts[monthKey] || 0) + 1;
-    });
-    
-    const result = [];
-    const now = new Date();
-    for (let i = 4; i >= 0; i -= 1) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = d.toISOString().slice(0, 7);
-      const isCurrentMonth = i === 0;
-      
-      const label = d.toLocaleDateString(i18n.language, { month: 'short' });
-      
-      result.push({
-        label,
-        count: isCurrentMonth ? (usage?.monthlyQuestionsUsed ?? counts[key] ?? 0) : (counts[key] ?? 0),
-      });
-    }
-    return result;
-  }, [history, usage]);
+  const usageByMonth = useMemo(
+    () =>
+      buildMonthlySolveSeries(history, i18n.language, {
+        months: 5,
+        currentMonthCountOverride: usage?.monthlyQuestionsUsed ?? null,
+      }),
+    [history, i18n.language, usage?.monthlyQuestionsUsed],
+  );
 
   const isAdmin = profile?.role === 'admin';
   const isPro = usage?.subscriptionTier !== 'free';
@@ -190,16 +154,11 @@ export default function UserDashboard({ user }: { user: User }) {
   // Dynamic coaching copy
   const coachingSubtitle = useMemo(() => {
     if (totalSolves === 0) return t('dashboard.coaching_start');
-    
-    const todaySolved = history.filter(h => {
-      const today = new Date().toDateString();
-      return new Date(h.created_at).toDateString() === today;
-    }).length;
 
     if (todaySolved >= 1) return t('dashboard.coaching_done_today', { count: todaySolved });
     if (currentStreak > 0) return t('dashboard.coaching_streak_alive', { count: currentStreak });
     return t('dashboard.coaching_momentum', { count: totalSolves });
-  }, [totalSolves, history, currentStreak, t]);
+  }, [currentStreak, t, todaySolved, totalSolves]);
 
   if (usageLoading || profileLoading) {
     return (
@@ -259,7 +218,7 @@ export default function UserDashboard({ user }: { user: User }) {
         ...draft,
         submitting: false,
         submitted: false,
-        error: error instanceof Error ? error.message : 'Failed to save feedback.',
+        error: toPublicErrorMessage(error, 'Failed to save feedback.'),
       }));
     }
   };
@@ -312,7 +271,7 @@ export default function UserDashboard({ user }: { user: User }) {
         ...current,
         submitting: false,
         submitted: false,
-        error: error instanceof Error ? error.message : 'Failed to save feedback.',
+        error: toPublicErrorMessage(error, 'Failed to save feedback.'),
       }));
     }
   };
@@ -336,6 +295,22 @@ export default function UserDashboard({ user }: { user: User }) {
               <p className="mb-6 max-w-2xl text-[15px] font-medium leading-relaxed text-slate-600 dark:text-slate-400 lg:text-base">
                 {coachingSubtitle}
               </p>
+              {onboarding.completed && (
+                <div className="mb-6 inline-flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-violet-200/70 bg-violet-50/70 px-4 py-3 text-xs font-bold text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200">
+                  <span>{t(`onboarding.goal_${onboarding.goal}_title`, { defaultValue: 'Study goal set' })}</span>
+                  {onboarding.subjects.slice(0, 3).map((subject) => (
+                    <span
+                      key={subject}
+                      className="rounded-full border border-violet-300/60 bg-white/70 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-violet-700 dark:border-violet-400/20 dark:bg-violet-950/30 dark:text-violet-200"
+                    >
+                      {t(`onboarding.subject_${subject.toLowerCase()}`, { defaultValue: subject })}
+                    </span>
+                  ))}
+                  <span className="rounded-full border border-violet-300/60 bg-white/70 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-violet-700 dark:border-violet-400/20 dark:bg-violet-950/30 dark:text-violet-200">
+                    {t(`onboarding.mode_${onboarding.mode}_title`, { defaultValue: onboarding.mode })}
+                  </span>
+                </div>
+              )}
 
               <div className="flex flex-col items-stretch gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <button
@@ -482,7 +457,7 @@ export default function UserDashboard({ user }: { user: User }) {
                        </p>
                     </div>
                     <p className="text-[9px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-tighter">
-                       {t('dashboard.follow_ups_free')}
+                       {t('dashboard.all_messages_count', { defaultValue: 'Every message you send counts toward your allowance.' })}
                     </p>
                     <div className="pb-6" />
                  </div>
@@ -515,7 +490,9 @@ export default function UserDashboard({ user }: { user: User }) {
                             <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 mt-1.5" />
                             <div>
                                <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">{t('dashboard.follow_ups')}</p>
-                               <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic">{t('dashboard.follow_ups_desc')}</p>
+                               <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic">
+                                 {t('dashboard.all_messages_desc', { defaultValue: 'New questions and follow-up replies both count as solves, so the rule stays simple and predictable.' })}
+                               </p>
                             </div>
                          </div>
                          <div className="flex items-start gap-3">
@@ -560,25 +537,25 @@ export default function UserDashboard({ user }: { user: User }) {
                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">{t('dashboard.daily_goal')}</p>
                  <div className="flex items-center justify-between mb-3">
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
-                      {Math.min(usageByMonth[4]?.count ?? 0, 1)} <span className="text-xs font-bold text-slate-500 italic">/ 1</span>
+                      {Math.min(todaySolved, 1)} <span className="text-xs font-bold text-slate-500 italic">/ 1</span>
                     </p>
                     <Target className="text-indigo-500 border border-indigo-500/10 p-0.5 rounded-md" size={18} />
                  </div>
                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden mb-3">
                    <div 
                      className="h-full rounded-full bg-indigo-500 transition-all duration-1000" 
-                     style={{ width: usageByMonth[4]?.count > 0 ? '100%' : '0%' }}
+                     style={{ width: todaySolved > 0 ? '100%' : '0%' }}
                    />
                  </div>
                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-slate-500 italic">{usageByMonth[4]?.count > 0 ? t('dashboard.goal_met') : t('dashboard.goal_remaining')}</p>
+                    <p className="text-[10px] font-bold text-slate-500 italic">{todaySolved > 0 ? t('dashboard.goal_met') : t('dashboard.goal_remaining')}</p>
                     <button 
                       onClick={() => navigate('/chat')}
                       className={`text-[10px] font-black uppercase tracking-widest transition-colors ${
-                        usageByMonth[4]?.count > 0 ? 'text-slate-600 pointer-events-none' : 'text-indigo-400 hover:text-indigo-300'
+                        todaySolved > 0 ? 'text-slate-600 pointer-events-none' : 'text-indigo-400 hover:text-indigo-300'
                       }`}
                     >
-                      {usageByMonth[4]?.count > 0 ? t('dashboard.complete') : t('dashboard.solve_now')}
+                      {todaySolved > 0 ? t('dashboard.complete') : t('dashboard.solve_now')}
                     </button>
                  </div>
                </div>

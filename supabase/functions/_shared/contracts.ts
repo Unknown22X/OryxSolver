@@ -60,6 +60,11 @@ export type SolvePreviewEvent = {
   steps?: string[];
 };
 
+export type SolveDeltaEvent = {
+  type: 'delta';
+  text: string;
+};
+
 export type SolveFinalEvent = {
   type: 'final';
   data: SolveSuccessResponse;
@@ -74,6 +79,7 @@ export type SolveErrorEvent = {
 export type SolveStreamEvent =
   | SolveStatusEvent
   | SolvePreviewEvent
+  | SolveDeltaEvent
   | SolveFinalEvent
   | SolveErrorEvent;
 

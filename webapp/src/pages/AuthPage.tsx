@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Sparkles, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { fetchPublicAppConfig, FALLBACK_PUBLIC_CONFIG } from '../lib/appConfig';
 import {
   buildLegalConsentMetadata,
   clearPendingLegalConsent,
   storePendingLegalConsent,
 } from '../lib/legalConsent';
+import { getFriendlyAuthErrorMessage, readAuthFlowError } from '../lib/authErrors';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 
 export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
   const { t } = useTranslation();
@@ -22,6 +24,7 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
   const [otp, setOtp] = useState('');
   const [signupStep, setSignupStep] = useState<'form' | 'confirm'>('form');
   const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const navigate = useNavigate();
@@ -69,6 +72,12 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const authFlowError = readAuthFlowError(location.search, location.hash);
+    if (!authFlowError) return;
+    setMessage({ text: getFriendlyAuthErrorMessage(authFlowError), type: 'error' });
+  }, [location.hash, location.search]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +144,7 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
         window.location.assign(redirectTarget);
       }
     } catch (err) {
-      const messageText = err instanceof Error ? err.message : t('auth.auth_failed', { defaultValue: 'Authentication failed' });
+      const messageText = toPublicErrorMessage(err, t('auth.auth_failed', { defaultValue: 'Authentication failed' }));
       setMessage({ text: messageText, type: 'error' });
     } finally {
       setLoading(false);
@@ -165,7 +174,7 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
     });
     if (error) {
       clearPendingLegalConsent();
-      setMessage({ text: error.message, type: 'error' });
+      setMessage({ text: toPublicErrorMessage(error, 'Google sign-in could not be started. Please try again.'), type: 'error' });
     }
   };
 
@@ -188,7 +197,7 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
       setOtp('');
       window.location.assign(redirectTarget);
     } catch (err) {
-      const messageText = err instanceof Error ? err.message : 'OTP verification failed';
+      const messageText = toPublicErrorMessage(err, 'Verification failed. Please request a new confirmation email.');
       setMessage({ text: messageText, type: 'error' });
     } finally {
       setLoading(false);
@@ -209,7 +218,7 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
       if (error) throw error;
       setMessage({ text: t('auth.resend_success', { defaultValue: 'We sent a new confirmation email.' }), type: 'success' });
     } catch (err) {
-      const messageText = err instanceof Error ? err.message : 'Failed to resend confirmation email';
+      const messageText = toPublicErrorMessage(err, 'We could not resend the confirmation email right now.');
       setMessage({ text: messageText, type: 'error' });
     } finally {
       setLoading(false);
@@ -318,13 +327,21 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
-                      type="password" 
+                      type={showPassword ? 'text' : 'password'} 
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={t('auth.password_placeholder')}
-                      className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
+                      className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-12 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
                       required={!isForgotPassword}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-2 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
               )}

@@ -15,7 +15,7 @@ function getBannerTone(health: ServiceHealthSnapshot) {
 }
 
 export default function ServiceStatusBanner({ health, retryCountdowns, onRetry }: Props) {
-  if (health.overall === 'healthy') return null;
+  if (health.overall === 'healthy' || (health.overall === 'degraded' && !health.readOnly)) return null;
 
   const firstBlockedDependency = (['backend', 'auth', 'db', 'ai'] as const).find(
     (dependency) => health.dependencies[dependency].status !== 'healthy',

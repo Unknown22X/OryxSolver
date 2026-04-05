@@ -6,6 +6,8 @@ import {
   Bell,
   Bug,
   ChevronRight,
+  Eye,
+  EyeOff,
   HelpCircle,
   Keyboard,
   Loader2,
@@ -30,6 +32,7 @@ import { fetchEdge } from '../lib/edge';
 import { deleteHistory } from '../lib/historyApi';
 import { submitBugReport, submitFeedback } from '../lib/feedbackApi';
 import { supabase } from '../lib/supabase';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 
 export default function SettingsPage({ user }: { user: User }) {
   const { t, i18n } = useTranslation();
@@ -46,6 +49,8 @@ export default function SettingsPage({ user }: { user: User }) {
   const [displayName, setDisplayName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [notifications, setNotifications] = useState({
     email: true,
     marketing: false,
@@ -156,7 +161,7 @@ export default function SettingsPage({ user }: { user: User }) {
       setMessage({ type: 'success', text: t('settings.settings_saved') });
     } catch (err) {
       console.error('Error saving settings:', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.error_save') });
+      setMessage({ type: 'error', text: toPublicErrorMessage(err, t('settings.error_save')) });
     } finally {
       setSaving(false);
     }
@@ -188,10 +193,10 @@ export default function SettingsPage({ user }: { user: User }) {
       console.error('Error deleting account:', err);
       setMessage({
         type: 'error',
-        text:
-          err instanceof Error
-            ? err.message
-            : `Failed to delete account. If this keeps happening, contact ${config.support.email}.`,
+        text: toPublicErrorMessage(
+          err,
+          `Failed to delete account. If this keeps happening, contact ${config.support.email}.`,
+        ),
       });
     } finally {
       setDeletingAccount(false);
@@ -220,7 +225,7 @@ export default function SettingsPage({ user }: { user: User }) {
       setMessage({ type: 'success', text: t('settings.password_updated') });
     } catch (err) {
       console.error('Error updating password:', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.error_update_password') });
+      setMessage({ type: 'error', text: toPublicErrorMessage(err, t('settings.error_update_password')) });
     } finally {
       setPasswordSaving(false);
     }
@@ -274,7 +279,7 @@ export default function SettingsPage({ user }: { user: User }) {
       setMessage({ type: 'success', text: t('settings.feedback_sent') });
     } catch (err) {
       console.error('Error submitting feedback:', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.feedback_error') });
+      setMessage({ type: 'error', text: toPublicErrorMessage(err, t('settings.feedback_error')) });
     } finally {
       setSubmittingFeedback(false);
     }
@@ -301,7 +306,7 @@ export default function SettingsPage({ user }: { user: User }) {
       setMessage({ type: 'success', text: t('settings.bug_sent') });
     } catch (err) {
       console.error('Error submitting bug report:', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.bug_report_error') });
+      setMessage({ type: 'error', text: toPublicErrorMessage(err, t('settings.bug_report_error')) });
     } finally {
       setSubmittingBugReport(false);
     }
@@ -371,22 +376,42 @@ export default function SettingsPage({ user }: { user: User }) {
               <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-color)' }}>
                 <p className="mb-3 text-sm font-bold">{t('settings.change_password')}</p>
                 <div className="space-y-3">
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full rounded-xl border bg-transparent px-4 py-3 font-bold"
-                    style={{ borderColor: 'var(--border-color)' }}
-                    placeholder={t('settings.new_password')}
-                  />
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full rounded-xl border bg-transparent px-4 py-3 font-bold"
-                    style={{ borderColor: 'var(--border-color)' }}
-                    placeholder={t('settings.confirm_password')}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full rounded-xl border bg-transparent px-4 py-3 pr-12 font-bold"
+                      style={{ borderColor: 'var(--border-color)' }}
+                      placeholder={t('settings.new_password')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                      title={showNewPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full rounded-xl border bg-transparent px-4 py-3 pr-12 font-bold"
+                      style={{ borderColor: 'var(--border-color)' }}
+                      placeholder={t('settings.confirm_password')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={handlePasswordChange}

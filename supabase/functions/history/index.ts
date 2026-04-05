@@ -4,6 +4,7 @@ import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/
 import { checkRateLimit, getClientIp } from '../_shared/rateLimit.ts';
 import { handleOptions, jsonError, jsonOk } from '../_shared/http.ts';
 import type { HistoryEntry, HistoryListResponse } from '../_shared/contracts.ts';
+import { resolveHistoryImageUrls } from '../_shared/history.ts';
 import { recordDependencyState } from '../_shared/serviceHealth.ts';
 
 const DEFAULT_LIMIT = 50;
@@ -44,6 +45,7 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createSupabaseUserClient(token);
+    const supabaseAdmin = createSupabaseAdminClient();
     const url = new URL(req.url);
 
     if (req.method === 'DELETE') {
@@ -126,7 +128,12 @@ Deno.serve(async (req) => {
       return jsonError(500, 'HISTORY_FETCH_FAILED', error.message);
     }
 
-    const entries = (data ?? []) as HistoryEntry[];
+    const entries = await Promise.all(
+      ((data ?? []) as HistoryEntry[]).map(async (entry) => ({
+        ...entry,
+        image_urls: await resolveHistoryImageUrls(supabaseAdmin, entry.image_urls),
+      })),
+    );
     const nextCursor = entries.length === limit
       ? entries[entries.length - 1]?.created_at ?? null
       : null;

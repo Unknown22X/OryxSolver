@@ -12,6 +12,7 @@ import { useProfile } from '../hooks/useProfile';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@supabase/supabase-js';
+import { submitFeatureRequest } from '../lib/feedbackApi';
 
 type SubscriptionTier = 'free' | 'pro' | 'premium';
 
@@ -73,6 +74,15 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(user === undefined);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [requestedFeatures, setRequestedFeatures] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('oryx_requested_features');
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [requestingFeatureId, setRequestingFeatureId] = useState<string | null>(null);
   const navigate = useNavigate();
   const [authUser, setAuthUser] = useState<User | null>(user ?? null);
   const { t, i18n } = useTranslation();
@@ -121,6 +131,38 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
+  };
+
+  const handleFeatureRequest = async (item: NavItem) => {
+    if (!authUser) {
+      navigate('/login');
+      return;
+    }
+    if (requestedFeatures[item.id] || requestingFeatureId === item.id) {
+      return;
+    }
+
+    setRequestingFeatureId(item.id);
+    try {
+      await submitFeatureRequest({
+        userId: authUser.id,
+        featureId: item.id,
+        featureLabel: item.label,
+      });
+      setRequestedFeatures((prev) => {
+        const next = { ...prev, [item.id]: true };
+        try {
+          localStorage.setItem('oryx_requested_features', JSON.stringify(next));
+        } catch {
+          // Ignore storage write errors.
+        }
+        return next;
+      });
+    } catch (error) {
+      console.error('Failed to submit feature request:', error);
+    } finally {
+      setRequestingFeatureId(null);
+    }
   };
 
   const navItems: NavItem[] = [
@@ -237,19 +279,27 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
               const isActive = currentPage === item.id;
               if (item.soon) {
                 const toneClasses = getSoonToneClasses(item.soonTone);
+                const requested = requestedFeatures[item.id];
+                const requesting = requestingFeatureId === item.id;
                 return (
-                  <div
+                  <button
                     key={item.id}
-                    className={`flex items-center gap-3 rounded-2xl border ${isChatLayout ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm'} transition-colors ${toneClasses.row}`}
+                    type="button"
+                    onClick={() => void handleFeatureRequest(item)}
+                    className={`flex w-full items-center gap-3 rounded-2xl border ${isChatLayout ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm'} text-left transition-colors ${toneClasses.row}`}
                   >
                     <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${toneClasses.iconWrap}`}>
                       <Icon size={16} />
                     </div>
                     <span className="font-bold">{item.label}</span>
                     <span className={`mr-auto rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${toneClasses.badge}`}>
-                      {t('nav.soon')}
+                      {requesting
+                        ? t('common.loading', { defaultValue: 'Loading' })
+                        : requested
+                          ? t('nav.requested', { defaultValue: 'Requested' })
+                          : t('nav.request', { defaultValue: 'Request' })}
                     </span>
-                  </div>
+                  </button>
                 );
               }
               return (

@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type FeedbackKind = 'general' | 'bug_report' | 'answer_quality';
+export type FeedbackKind = 'general' | 'bug_report' | 'answer_quality' | 'feature_request';
 export type AnswerFeedbackOutcome = 'correct' | 'incorrect';
 
 export type FeedbackInput = {
@@ -106,6 +106,37 @@ export async function submitBugReport(input: {
       ...(input.metadata ?? {}),
       kind: 'bug_report',
       subject,
+    },
+  });
+}
+
+export async function submitFeatureRequest(input: {
+  userId: string;
+  featureId: string;
+  featureLabel: string;
+  comment?: string;
+}): Promise<void> {
+  const featureId = input.featureId.trim().toLowerCase();
+  const featureLabel = input.featureLabel.trim();
+  const comment = input.comment?.trim();
+
+  if (!/^[a-z0-9_-]{2,48}$/i.test(featureId)) {
+    throw new Error('Invalid feature request.');
+  }
+
+  if (!featureLabel) {
+    throw new Error('Feature name is required.');
+  }
+
+  await submitFeedback({
+    userId: input.userId,
+    rating: 5,
+    comment: comment ? `Feature request: ${featureLabel}. ${comment}` : `Feature request: ${featureLabel}.`,
+    metadata: {
+      kind: 'feature_request',
+      featureId,
+      featureLabel,
+      surface: 'webapp',
     },
   });
 }

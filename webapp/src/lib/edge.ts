@@ -1,6 +1,6 @@
 import { getFunctionUrl } from './functions';
 import { applyServiceHealthError, resilientFetch } from './serviceHealth';
-import { getSessionWithRetry, toSafeSupabaseError } from './supabaseAuth';
+import { getSessionWithRetry, toPublicErrorMessage, toSafeSupabaseError } from './supabaseAuth';
 
 function buildEdgeError(message: string, code?: string, status?: number) {
   const error = new Error(message) as Error & { code?: string; status?: number };
@@ -55,7 +55,7 @@ export async function fetchEdge<T>(
   );
 
   if (!resp.ok) {
-   let message = `Request failed with status ${resp.status}`;
+    let message = `Request failed with status ${resp.status}`;
     let code: string | undefined;
     let errorBody: any;
     try {
@@ -77,7 +77,17 @@ export async function fetchEdge<T>(
       resp.headers.get('Retry-After') ??
       (typeof errorBody?.retryAfter === 'number' ? String(errorBody.retryAfter) : undefined) ??
       (typeof errorBody?.details?.retryAfter === 'number' ? String(errorBody.details.retryAfter) : undefined);
-    const error = buildEdgeError(typeof message === 'string' ? message : JSON.stringify(message), code, resp.status);
+    const fallbackMessage =
+      resp.status === 429
+        ? 'Too many requests. Please wait and try again.'
+        : resp.status >= 500
+          ? 'Service is temporarily unavailable. Please try again shortly.'
+          : 'Request failed. Please try again.';
+    const safeMessage = toPublicErrorMessage(
+      typeof message === 'string' ? message : JSON.stringify(message),
+      fallbackMessage,
+    );
+    const error = buildEdgeError(safeMessage, code, resp.status);
     if (retryAfter) {
       (error as Error & { retryAfterSec?: number }).retryAfterSec = Number.parseInt(retryAfter, 10);
     }
@@ -138,7 +148,17 @@ export async function fetchEdgeStream(
       resp.headers.get('Retry-After') ??
       (typeof errorBody?.retryAfter === 'number' ? String(errorBody.retryAfter) : undefined) ??
       (typeof errorBody?.details?.retryAfter === 'number' ? String(errorBody.details.retryAfter) : undefined);
-    const error = buildEdgeError(typeof message === 'string' ? message : JSON.stringify(message), code, resp.status);
+    const fallbackMessage =
+      resp.status === 429
+        ? 'Too many requests. Please wait and try again.'
+        : resp.status >= 500
+          ? 'Service is temporarily unavailable. Please try again shortly.'
+          : 'Request failed. Please try again.';
+    const safeMessage = toPublicErrorMessage(
+      typeof message === 'string' ? message : JSON.stringify(message),
+      fallbackMessage,
+    );
+    const error = buildEdgeError(safeMessage, code, resp.status);
     if (retryAfter) {
       (error as Error & { retryAfterSec?: number }).retryAfterSec = Number.parseInt(retryAfter, 10);
     }

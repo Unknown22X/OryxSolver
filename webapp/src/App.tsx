@@ -15,6 +15,7 @@ import ServiceStatusBanner from './components/ServiceStatusBanner';
 import { hasCompletedOnboarding } from './lib/onboarding';
 import { useServiceHealth } from './hooks/useServiceHealth';
 import { getSessionWithRetry, updateUserWithRetry } from './lib/supabaseAuth';
+import { readAuthFlowError } from './lib/authErrors';
 
 // Lazy load pages for better performance
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -27,7 +28,6 @@ const TermsPage = lazy(() => import('./pages/TermsPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const HowItWorksPage = lazy(() => import('./pages/HowItWorksPage'));
 const PricingPage = lazy(() => import('./pages/PricingPage'));
-const PaymentsComingSoonPage = lazy(() => import('./pages/PaymentsComingSoonPage'));
 const ModesPage = lazy(() => import('./pages/ModesPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -178,6 +178,11 @@ function App() {
 
   const onboardingComplete = hasCompletedOnboarding(user);
   const authedHome = onboardingComplete ? '/chat' : '/onboarding';
+  const authFlowError =
+    typeof window !== 'undefined' ? readAuthFlowError(window.location.search, window.location.hash) : null;
+  const rootAuthRedirect = authFlowError
+    ? `/login?auth_error_code=${encodeURIComponent(authFlowError.code)}&auth_error_description=${encodeURIComponent(authFlowError.description)}`
+    : null;
   const guardAuthedRoute = (element: ReactNode) =>
     user ? (onboardingComplete ? element : <Navigate to="/onboarding" replace />) : <Navigate to="/login" />;
 
@@ -196,7 +201,7 @@ function App() {
           <AnalyticsProvider>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={user ? <Navigate to={authedHome} /> : <LandingPage />} />
+                <Route path="/" element={rootAuthRedirect ? <Navigate to={rootAuthRedirect} replace /> : user ? <Navigate to={authedHome} /> : <LandingPage />} />
                 <Route path="/login" element={user ? <Navigate to={authedHome} /> : <AuthPage mode="signin" />} />
                 <Route path="/signup" element={user ? <Navigate to={authedHome} /> : <AuthPage mode="signup" />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -206,7 +211,7 @@ function App() {
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/how-it-works" element={<HowItWorksPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
-                <Route path="/payments-coming-soon" element={<PaymentsComingSoonPage />} />
+                <Route path="/payments-coming-soon" element={user ? <Navigate to="/subscription" replace /> : <Navigate to="/login" replace />} />
                 <Route path="/modes" element={<ModesPage />} />
                 <Route path="/faq" element={<FaqPage />} />
                 <Route path="/dashboard" element={guardAuthedRoute(<UserDashboard user={user!} />)} />

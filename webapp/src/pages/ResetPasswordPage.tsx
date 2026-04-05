@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, ArrowRight, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 
 export default function ResetPasswordPage() {
   const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const navigate = useNavigate();
@@ -35,7 +38,7 @@ export default function ResetPasswordPage() {
         navigate('/chat');
       }, 1500);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : t('auth.error_update_password', { defaultValue: 'Failed to update password' });
+      const errorMessage = toPublicErrorMessage(err, t('auth.error_update_password', { defaultValue: 'Failed to update password' }));
       setMessage({ text: errorMessage, type: 'error' });
     } finally {
       setLoading(false);
@@ -80,13 +83,21 @@ export default function ResetPasswordPage() {
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
-                    type="password" 
+                    type={showPassword ? 'text' : 'password'} 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={t('auth.new_password_placeholder', { defaultValue: 'Enter new password' })}
-                    className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
+                    className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-12 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-2 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
 
@@ -95,13 +106,21 @@ export default function ResetPasswordPage() {
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
-                    type="password" 
+                    type={showConfirmPassword ? 'text' : 'password'} 
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder={t('auth.confirm_password_placeholder', { defaultValue: 'Confirm new password' })}
-                    className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
+                    className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-12 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-2 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
 

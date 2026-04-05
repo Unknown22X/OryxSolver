@@ -10,6 +10,14 @@ const INTERNAL_SUPABASE_PATTERNS = [
   /@supabase\/gotrue-js/i,
   /gotrue/i,
   /AbortError/i,
+  /TypeError:\s*Load failed/i,
+  /\bLoad failed\b/i,
+  /\bFailed to fetch\b/i,
+  /\bNetworkError\b/i,
+  /\bNetwork request failed\b/i,
+  /\bfetch failed\b/i,
+  /[a-z0-9]{20}\.supabase\.co/i,
+  /supabase\.co/i,
 ];
 
 function wait(ms: number) {
@@ -34,12 +42,26 @@ export function shouldHideSupabaseErrorDetails(error: unknown) {
   return INTERNAL_SUPABASE_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-export function toSafeSupabaseError(error: unknown, fallbackMessage: string) {
-  if (!shouldHideSupabaseErrorDetails(error)) {
-    return error instanceof Error ? error : new Error(fallbackMessage);
+export function toPublicErrorMessage(error: unknown, fallbackMessage: string) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return 'You appear to be offline. Reconnect and try again.';
   }
 
-  const safeError = new Error(fallbackMessage) as Error & {
+  const message = getErrorMessage(error).replace(/\s+/g, ' ').trim();
+  if (!message || shouldHideSupabaseErrorDetails(error)) {
+    return fallbackMessage;
+  }
+
+  return message;
+}
+
+export function toSafeSupabaseError(error: unknown, fallbackMessage: string) {
+  const publicMessage = toPublicErrorMessage(error, fallbackMessage);
+  if (!shouldHideSupabaseErrorDetails(error)) {
+    return error instanceof Error ? new Error(publicMessage) : new Error(publicMessage);
+  }
+
+  const safeError = new Error(publicMessage) as Error & {
     cause?: unknown;
     code?: string;
     status?: number;

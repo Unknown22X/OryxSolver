@@ -20,11 +20,13 @@ import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edge';
 import { trackEvent } from '../lib/analyticsClient';
 import {
+  getOnboardingPreferences,
   markOnboardingCompletedLocally,
   type OnboardingGoal,
   type OnboardingMode,
   type OnboardingTheme,
 } from '../lib/onboarding';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 
 const GOAL_OPTIONS: Array<{
   value: OnboardingGoal;
@@ -90,6 +92,7 @@ export default function OnboardingPage({ user }: { user: User }) {
   const [error, setError] = useState<string | null>(null);
 
   const progress = ((step + 1) / 4) * 100;
+  const savedPreferences = useMemo(() => getOnboardingPreferences(user), [user]);
   const previewLine = useMemo(() => {
     const subjectText = subjects.slice(0, 2).map(s => t(`onboarding.subject_${s.toLowerCase()}`)).join(' + ') || t('onboarding.your_subjects');
     switch (mode) {
@@ -105,6 +108,15 @@ export default function OnboardingPage({ user }: { user: User }) {
   useEffect(() => {
     trackEvent('onboarding_started', { source: 'webapp' });
   }, []);
+
+  useEffect(() => {
+    setGoal(savedPreferences.goal);
+    if (savedPreferences.subjects.length > 0) {
+      setSubjects(savedPreferences.subjects.slice(0, 4));
+    }
+    setMode(savedPreferences.mode);
+    setTheme(savedPreferences.theme);
+  }, [savedPreferences]);
 
   const toggleSubject = (subject: string) => {
     setSubjects((current) => {
@@ -156,7 +168,7 @@ export default function OnboardingPage({ user }: { user: User }) {
 
       navigate('/chat?welcome=1', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('onboarding.error_failed'));
+      setError(toPublicErrorMessage(err, t('onboarding.error_failed')));
     } finally {
       setSaving(false);
     }

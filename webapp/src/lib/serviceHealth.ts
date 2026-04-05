@@ -120,7 +120,7 @@ function recomputeSnapshot(snapshot: ServiceHealthSnapshot): ServiceHealthSnapsh
     readOnly = true;
   } else if (dependencyStates.includes('degraded')) {
     overall = 'degraded';
-    readOnly = true;
+    readOnly = false;
   }
 
   return {
@@ -363,7 +363,7 @@ export async function resilientFetch(
 
   if (circuit.openUntil && Date.now() < circuit.openUntil) {
     const retryAfterSec = Math.ceil((circuit.openUntil - Date.now()) / 1000);
-    throw createResilientError('Service temporarily paused while waiting for recovery.', {
+    throw createResilientError('Service is reconnecting. Please retry in a moment.', {
       code: 'SERVICE_DEGRADED',
       dependency,
       retryAfterSec,
@@ -437,6 +437,12 @@ export async function resilientFetch(
               ...(error as Partial<ResilientError>),
               dependency: (error as Partial<ResilientError>).dependency ?? dependency,
             });
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        resilientError.code = 'NETWORK_OFFLINE';
+        resilientError.dependency = 'network';
+        resilientError.message = 'You appear to be offline.';
+      }
 
       if (safeToRetry && attempt < retries && (resilientError.status ? shouldRetryStatus(resilientError.status) : true)) {
         lastError = resilientError;

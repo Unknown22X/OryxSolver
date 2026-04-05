@@ -13,27 +13,22 @@ export class AiError extends Error {
   }
 }
 
-export async function callAiProxy(
+function getAiProxyRequestInit(
   question: string,
   imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
-  mode: 'normal' | 'fast_fallback' = 'normal',
-  styleMode: StyleMode = 'standard',
-  history: Array<{ role: 'user' | 'model', text: string }> = [],
-  isBulk = false,
+  mode: 'normal' | 'fast_fallback',
+  styleMode: StyleMode,
+  history: Array<{ role: 'user' | 'model', text: string }>,
+  isBulk: boolean,
   userId?: string,
   options?: {
     streamPreview?: boolean;
     previewOnly?: boolean;
     preferredLanguage?: string;
+    surface?: 'webapp' | 'extension';
+    streamResponse?: boolean;
   },
-): Promise<{ 
-  answer: string; 
-  explanation: string; 
-  steps: string[]; 
-  model: string; 
-  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
-  cost_usd?: number;
-}> {
+): { url: string; init: RequestInit } {
   const internalToken = Deno.env.get('INTERNAL_EDGE_TOKEN');
   if (!internalToken) {
     throw new AiError(500, 'INTERNAL_TOKEN_MISSING', 'Missing INTERNAL_EDGE_TOKEN secret');
@@ -46,15 +41,9 @@ export async function callAiProxy(
     throw new AiError(500, 'SUPABASE_URL_MISSING', 'Missing SUPABASE_URL');
   }
 
-  const url = `${supabaseUrl}/functions/v1/ai-proxy`;
-  const controller = new AbortController();
-  // Must be larger than ai-proxy total attempt window (including fallback models),
-  // otherwise solve aborts while ai-proxy is still processing.
-  const timeoutMs = mode === 'fast_fallback' ? 18000 : 60000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(url, {
+  return {
+    url: `${supabaseUrl}/functions/v1/ai-proxy`,
+    init: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,7 +60,54 @@ export async function callAiProxy(
         streamPreview: options?.streamPreview === true,
         previewOnly: options?.previewOnly === true,
         preferredLanguage: options?.preferredLanguage,
+        surface: options?.surface,
+        streamResponse: options?.streamResponse === true,
       }),
+    },
+  };
+}
+
+export async function callAiProxy(
+  question: string,
+  imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
+  mode: 'normal' | 'fast_fallback' = 'normal',
+  styleMode: StyleMode = 'standard',
+  history: Array<{ role: 'user' | 'model', text: string }> = [],
+  isBulk = false,
+  userId?: string,
+  options?: {
+    streamPreview?: boolean;
+    previewOnly?: boolean;
+    preferredLanguage?: string;
+    surface?: 'webapp' | 'extension';
+  },
+): Promise<{ 
+  answer: string; 
+  explanation: string; 
+  steps: string[]; 
+  model: string; 
+  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  cost_usd?: number;
+}> {
+  const { url, init } = getAiProxyRequestInit(
+    question,
+    imageParts,
+    mode,
+    styleMode,
+    history,
+    isBulk,
+    userId,
+    options,
+  );
+  const controller = new AbortController();
+  // Must be larger than ai-proxy total attempt window (including fallback models),
+  // otherwise solve aborts while ai-proxy is still processing.
+  const timeoutMs = mode === 'fast_fallback' ? 18000 : 60000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      ...init,
       signal: controller.signal,
     });
 
@@ -115,6 +151,71 @@ export async function callAiProxy(
         : [],
       cost_usd: typeof data?.cost_usd === 'number' ? data.cost_usd : 0,
     };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new AiError(504, 'AI_TIMEOUT', 'AI response timed out. Please retry.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function callAiProxyStream(
+  question: string,
+  imageParts: Array<{ inlineData: { mimeType: string; data: string } }>,
+  mode: 'normal' | 'fast_fallback' = 'normal',
+  styleMode: StyleMode = 'standard',
+  history: Array<{ role: 'user' | 'model', text: string }> = [],
+  isBulk = false,
+  userId?: string,
+  options?: {
+    preferredLanguage?: string;
+    surface?: 'webapp' | 'extension';
+  },
+): Promise<Response> {
+  const { url, init } = getAiProxyRequestInit(
+    question,
+    imageParts,
+    mode,
+    styleMode,
+    history,
+    isBulk,
+    userId,
+    {
+      preferredLanguage: options?.preferredLanguage,
+      surface: options?.surface,
+      streamResponse: true,
+    },
+  );
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), mode === 'fast_fallback' ? 20000 : 65000);
+
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let code = 'AI_PROXY_ERROR';
+      let message = `AI proxy failed: ${res.status}`;
+      try {
+        const errJson = JSON.parse(errText) as { code?: string; error?: string };
+        if (typeof errJson.code === 'string') code = errJson.code;
+        if (typeof errJson.error === 'string') message = errJson.error;
+      } catch {
+        if (errText.trim()) message = `${message} ${errText}`;
+      }
+      const status = res.status === 429 ? 429
+        : res.status === 503 ? 503
+        : res.status === 504 ? 504
+        : 502;
+      throw new AiError(status, code, message);
+    }
+
+    return res;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new AiError(504, 'AI_TIMEOUT', 'AI response timed out. Please retry.');

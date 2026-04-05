@@ -13,10 +13,39 @@ export type OnboardingMetadata = {
   onboarding_theme?: OnboardingTheme;
 };
 
+export type OnboardingPreferences = {
+  goal: OnboardingGoal;
+  subjects: string[];
+  mode: OnboardingMode;
+  theme: OnboardingTheme;
+  completed: boolean;
+};
+
 function getMetadata(user: User | null | undefined): OnboardingMetadata {
   if (!user) return {};
   const metadata = (user.user_metadata ?? {}) as OnboardingMetadata;
   return metadata;
+}
+
+export function getOnboardingPreferences(user: User | null | undefined): OnboardingPreferences {
+  const metadata = getMetadata(user);
+  const goal = metadata.onboarding_goal;
+  const mode = metadata.onboarding_mode;
+  const theme = metadata.onboarding_theme;
+  const subjects = Array.isArray(metadata.onboarding_subjects)
+    ? metadata.onboarding_subjects.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+
+  return {
+    goal:
+      goal === 'ace_exams' || goal === 'daily_homework' || goal === 'learn_faster' || goal === 'bulk_revision'
+        ? goal
+        : 'daily_homework',
+    subjects,
+    mode: mode === 'exam' || mode === 'eli5' || mode === 'standard' ? mode : 'standard',
+    theme: theme === 'light' || theme === 'dark' || theme === 'system' ? theme : 'system',
+    completed: hasCompletedOnboarding(user),
+  };
 }
 
 export function getOnboardingStorageKey(userId: string) {

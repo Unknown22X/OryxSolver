@@ -25,7 +25,7 @@ function getCheckoutRedirectUrl(): string {
   const appUrl =
     Deno.env.get('WEBAPP_URL') ??
     Deno.env.get('VITE_WEBAPP_URL') ??
-    'http://localhost:5173';
+    'https://oryxsolver.com';
   return `${appUrl.replace(/\/$/, '')}/dashboard?checkout=success`;
 }
 

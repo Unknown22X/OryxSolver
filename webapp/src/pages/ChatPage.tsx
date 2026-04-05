@@ -5,10 +5,10 @@ import {
   Sparkles, Send, Paperclip, X, Copy, Check,
   Zap, Loader2, MessageSquare, Lightbulb, 
   BookOpen, Calculator, Bot, Menu, Plus, History, Search, ChevronRight,
-  Flame, Trophy, ArrowRight, Play
+  Flame, Trophy, ArrowRight, Play, ThumbsDown, ThumbsUp
 } from 'lucide-react';
 import { useSolve } from '../hooks/useSolve';
-import { fetchHistoryList } from '../lib/historyApi';
+import { fetchAllHistoryEntries, fetchHistoryList, type HistoryEntry } from '../lib/historyApi';
 import { groupHistoryEntries } from '../lib/historyThreads';
 import { trackEvent } from '../lib/analyticsClient';
 import { useUsage } from '../hooks/useUsage';
@@ -16,6 +16,9 @@ import { useTranslation } from 'react-i18next';
 import RichText from '../components/RichText';
 import type { User } from '@supabase/supabase-js';
 import { useServiceHealth } from '../hooks/useServiceHealth';
+import { submitFeedback } from '../lib/feedbackApi';
+import { computeCurrentStreak } from '../lib/studyMetrics';
+import { getOnboardingPreferences } from '../lib/onboarding';
 
 type StyleMode = 'standard' | 'exam' | 'eli5' | 'step_by_step' | 'gen_alpha';
 type SolveStreamPhase = 'auth' | 'preparing' | 'cache' | 'calling_ai' | 'refining' | 'finalizing';
@@ -40,24 +43,9 @@ interface HistorySidebarEntry {
   rootQuestion?: string;
 }
 
-const HISTORY_ENTRY_CHAR_LIMIT = 12000;
-const HISTORY_TOTAL_CHAR_BUDGET = 32000;
-const HISTORY_MAX_ITEMS = 12;
-
-function parseExplanationSteps(explanation: string): string[] {
-  return explanation
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) =>
-      line
-        .replace(/^(\d+[).\s-]+|[-*]\s+)/, '')
-        .replace(/\*\*/g, '')
-        .replace(/`/g, '')
-        .trim(),
-    )
-    .filter(Boolean);
-}
+const HISTORY_ENTRY_CHAR_LIMIT = 8000;
+const HISTORY_TOTAL_CHAR_BUDGET = 12000;
+const HISTORY_MAX_ITEMS = 6;
 
 function normalizeComparableText(value: string): string {
   return value
@@ -65,6 +53,41 @@ function normalizeComparableText(value: string): string {
     .replace(/[*`]/g, '')
     .trim()
     .toLowerCase();
+}
+
+function buildRenderableResponse(message: {
+  response?: {
+    answer?: string;
+    steps?: string[];
+    explanation?: string;
+  };
+}) {
+  const answer = message.response?.answer?.trim() ?? '';
+  const explanation = message.response?.explanation?.trim() ?? '';
+  const steps = (message.response?.steps ?? []).map((step) => step.trim()).filter(Boolean);
+  const answerMissing = answer.toLowerCase() === 'answer available in explanation';
+  const normalizedAnswer = normalizeComparableText(answer);
+  const normalizedSteps = normalizeComparableText(steps.join('\n'));
+  const normalizedExplanation = normalizeComparableText(explanation);
+  const parts: string[] = [];
+
+  if (answer && !answerMissing) {
+    parts.push(answer);
+  }
+
+  if (steps.length > 0 && normalizedSteps !== normalizedAnswer) {
+    parts.push(steps.join('\n\n'));
+  }
+
+  if (
+    explanation &&
+    normalizedExplanation !== normalizedAnswer &&
+    normalizedExplanation !== normalizedSteps
+  ) {
+    parts.push(explanation);
+  }
+
+  return parts.join('\n\n').trim();
 }
 
 function trimHistoryForRequest(history: Array<{ role: 'user' | 'model'; text: string }>) {
@@ -89,101 +112,6 @@ function trimHistoryForRequest(history: Array<{ role: 'user' | 'model'; text: st
   return trimmedNewestFirst.reverse();
 }
 
-function isConversationalPrompt(question: string, answer: string, explanation: string) {
-  const combined = `${question}\n${answer}\n${explanation}`.toLowerCase();
-  const prompt = question.trim().toLowerCase();
-
-  const conversationalPatterns = [
-    /^(hi|hello|hey|yo)\b/,
-    /\bwho are you\b/,
-    /\bwhat('?s| is) your name\b/,
-    /\bhow are you\b/,
-    /\bthank(s| you)\b/,
-    /\bi('?m| am) (tired|bored|stressed|sick) of stud/,
-    /\bmotivate me\b/,
-    /\bgive me (an )?example\b/,
-    /\bmake me a practice question\b/,
-    /\bquiz me\b/,
-    /\bask me one similar question\b/,
-    /\bwait for my answer\b/,
-    /\b(prompt|system prompt|instructions|internal instructions|rules)\b/,
-    /\bwhat did i ask\b/,
-    /\bwhat did i say\b/,
-    /\bremember\b.*\b(before|earlier|previously)\b/,
-    /\bwhat model\b/,
-    /\bwhich model\b/,
-    /\bgemini\b/,
-    /\bapi key\b/,
-  ];
-
-  if (conversationalPatterns.some((pattern) => pattern.test(combined))) return true;
-  if (/[=+\-*/^]/.test(prompt)) return false;
-  if (/\bsolve\b|\bcalculate\b|\bderive\b|\bequation\b|\bformula\b/i.test(prompt)) return false;
-  return (
-    prompt.length <= 80 &&
-    /^(what|why|how|can|could|would|do|are|is)\b/.test(prompt) &&
-    /\b(you|your|this thread|before|earlier|previous|remember)\b/.test(prompt)
-  );
-}
-
-function getResponsePresentation(question: string, answer: string, steps: string[], explanation: string, t: any) {
-  const cleanAnswer = answer.trim();
-  const combined = `${cleanAnswer}\n${explanation}`.toLowerCase();
-  const looksLikeChoice =
-    /^(option\s+)?[a-d](?:[).:]\s*|\s*$)/i.test(cleanAnswer) ||
-    /^choice\s+[a-d]\b/i.test(cleanAnswer);
-  const shortSingleBlock = cleanAnswer.length > 0 && cleanAnswer.length <= 90 && !cleanAnswer.includes('\n');
-  const conversational = isConversationalPrompt(question, answer, explanation);
-
-  if (conversational) {
-    return {
-      answerLabel: t('chat.response'),
-      answerHint: t('chat.natural_reply'),
-      explanationLabel: t('chat.more_context'),
-      layout: 'chat' as const,
-      hideSteps: true,
-    };
-  }
-
-  if (steps.length > 0) {
-    return {
-      answerLabel: looksLikeChoice ? t('chat.selected_answer') : t('chat.answer'),
-      answerHint: looksLikeChoice ? t('chat.chosen_result') : t('chat.main_result'),
-      explanationLabel: t('chat.why_this_works'),
-      layout: 'answer' as const,
-      hideSteps: false,
-    };
-  }
-
-  if (/(example|practice|quiz|flash[\s-]?card)/i.test(combined)) {
-    return {
-      answerLabel: t('chat.example'),
-      answerHint: t('chat.practice_response'),
-      explanationLabel: t('chat.how_to_use_it'),
-      layout: 'answer' as const,
-      hideSteps: true,
-    };
-  }
-
-  if (shortSingleBlock) {
-    return {
-      answerLabel: t('chat.quick_answer'),
-      answerHint: t('chat.direct_response'),
-      explanationLabel: t('chat.more_context'),
-      layout: 'answer' as const,
-      hideSteps: true,
-    };
-  }
-
-  return {
-    answerLabel: t('chat.response'),
-    answerHint: t('chat.main_response'),
-    explanationLabel: t('chat.more_context'),
-    layout: 'answer' as const,
-    hideSteps: false,
-  };
-}
-
 function getModeToneClass(mode: StyleMode) {
   switch (mode) {
     case 'exam':
@@ -204,6 +132,7 @@ export default function ChatPage({ user }: { user: User }) {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language === 'ar';
   const STREAM_PHASE_LABELS = getStreamPhaseLabels(t);
+  const onboarding = useMemo(() => getOnboardingPreferences(user), [user]);
 
   const STYLE_MODES: Array<{ value: StyleMode; label: string; icon: React.ReactNode; desc: string }> = useMemo(() => [
     { value: 'standard', label: t('chat.mode_standard'), icon: <Zap size={14} />, desc: t('chat.mode_standard_desc') },
@@ -225,18 +154,21 @@ export default function ChatPage({ user }: { user: User }) {
 
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
-  const [styleMode, setStyleMode] = useState<StyleMode>('standard');
+  const [styleMode, setStyleMode] = useState<StyleMode>(() => onboarding.mode);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth >= 2200;
   });
   const [history, setHistory] = useState<HistorySidebarEntry[]>([]);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [historySearch, setHistorySearch] = useState('');
   const [historyLoading, setHistoryLoading] = useState(true);
   const [chatLoading, setChatLoading] = useState(false);
   const [initialHistoryLoaded, setInitialHistoryLoaded] = useState(false); // Track if history for current conv is loaded
   const [activeConversationId, setActiveConversationId] = useState<string | null>(conversationId);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [reactionByMessage, setReactionByMessage] = useState<Record<string, 'up' | 'down'>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -244,6 +176,8 @@ export default function ChatPage({ user }: { user: User }) {
   const { chatSession, sendMessage, isSending, error, setSession, clearSession } = useSolve(user);
   const { usage, refetch: refetchUsage } = useUsage(user);
   const { health, retryCountdowns, refresh: refreshHealth } = useServiceHealth();
+  const currentStreak = useMemo(() => computeCurrentStreak(historyEntries), [historyEntries]);
+  const totalSolveCount = historyEntries.length;
   const solveBlocked =
     health.readOnly &&
     (health.dependencies.network.status === 'outage' ||
@@ -258,9 +192,10 @@ export default function ChatPage({ user }: { user: User }) {
   const loadHistory = async () => {
     try {
       setHistoryLoading(true);
-      const data = await fetchHistoryList({ limit: 50 });
+      const entries = await fetchAllHistoryEntries({ limit: 200, maxPages: 4 });
+      setHistoryEntries(entries);
       setHistory(
-        groupHistoryEntries(data.entries).map((entry) => ({
+        groupHistoryEntries(entries).map((entry) => ({
           id: entry.id,
           subject: entry.rootQuestion,
           question: entry.rootQuestion,
@@ -311,11 +246,15 @@ export default function ChatPage({ user }: { user: User }) {
             answer: entry.answer,
             explanation: entry.explanation || '',
             steps: entry.steps || [],
+            metadata: {
+              styleMode: entry.style_mode ?? undefined,
+              conversationId: entry.conversation_id ?? entry.id,
+            },
           },
         }));
         setSession(mappedSession);
         setActiveConversationId(id);
-        const threadMode = reversed.find((entry) => typeof entry.style_mode === 'string')?.style_mode;
+        const threadMode = data.entries.find((entry) => typeof entry.style_mode === 'string')?.style_mode;
         if (
           threadMode === 'standard' ||
           threadMode === 'exam' ||
@@ -342,12 +281,13 @@ export default function ChatPage({ user }: { user: User }) {
       setChatLoading(false);
       clearSession();
       setActiveConversationId(null);
+      setStyleMode(onboarding.mode);
       setInitialHistoryLoaded(true); // No conversation to load
     }
     return () => {
       cancelled = true;
     };
-  }, [conversationId, setSession, clearSession]);
+  }, [clearSession, conversationId, onboarding.mode, setSession]);
 
   useEffect(() => {
     // Scroll to bottom only when a new message is added, not on initial history load
@@ -402,6 +342,7 @@ export default function ChatPage({ user }: { user: User }) {
         images: currentAttachments,
         styleMode,
         language: i18n.language,
+        surface: 'webapp',
         history: historyForSolve,
         conversationId: activeConversationId || conversationId || undefined,
       });
@@ -437,6 +378,36 @@ export default function ChatPage({ user }: { user: User }) {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleReaction = async (messageId: string, reaction: 'up' | 'down', conversationRef?: string | null) => {
+    if (reactionByMessage[messageId] || !conversationRef) return;
+
+    setReactionByMessage((prev) => ({ ...prev, [messageId]: reaction }));
+    try {
+      await submitFeedback({
+        userId: user.id,
+        conversationId: conversationRef,
+        rating: reaction === 'up' ? 5 : 1,
+        comment: reaction === 'up'
+          ? 'User marked this answer as helpful.'
+          : 'User marked this answer as not helpful.',
+        metadata: {
+          kind: 'answer_quality',
+          surface: 'webapp',
+          source: 'chat_reaction',
+          reaction,
+          historyEntryId: messageId,
+        },
+      });
+    } catch (feedbackError) {
+      console.error('Failed to save chat reaction', feedbackError);
+      setReactionByMessage((prev) => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+    }
   };
 
   const filteredHistory = history.filter(h => 
@@ -585,6 +556,22 @@ export default function ChatPage({ user }: { user: User }) {
                 <p className="mb-5 max-w-2xl text-[15px] font-medium leading-relaxed text-gray-600 dark:text-gray-300 md:text-[17px]">
                   {t('chat.prompt_desc')}
                 </p>
+                {onboarding.completed && (
+                  <div className="mb-5 flex max-w-3xl flex-wrap items-center justify-center gap-2 rounded-[24px] border border-indigo-200/70 bg-indigo-50/80 px-4 py-3 text-center text-xs font-bold text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200">
+                    <span>{t(`onboarding.goal_${onboarding.goal}_title`, { defaultValue: 'Study goal saved' })}</span>
+                    {onboarding.subjects.slice(0, 3).map((subject) => (
+                      <span
+                        key={subject}
+                        className="rounded-full border border-indigo-300/60 bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-950/30 dark:text-indigo-100"
+                      >
+                        {t(`onboarding.subject_${subject.toLowerCase()}`, { defaultValue: subject })}
+                      </span>
+                    ))}
+                    <span className="rounded-full border border-indigo-300/60 bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-950/30 dark:text-indigo-100">
+                      {t(`onboarding.mode_${onboarding.mode}_title`, { defaultValue: onboarding.mode })}
+                    </span>
+                  </div>
+                )}
 
                 {/* Engagement Stats Row */}
                 <div className="mb-6 flex flex-wrap items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 duration-700 delay-100">
@@ -594,7 +581,7 @@ export default function ChatPage({ user }: { user: User }) {
                     </div>
                     <div className="text-left">
                       <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] leading-none text-orange-600 dark:text-orange-400">{t('chat.streak')}</p>
-                      <p className="text-base font-bold leading-none text-slate-900 dark:text-white">{t('chat.days', { count: 3 })}</p>
+                      <p className="text-base font-bold leading-none text-slate-900 dark:text-white">{t('chat.days', { count: currentStreak })}</p>
                     </div>
                   </div>
 
@@ -604,7 +591,7 @@ export default function ChatPage({ user }: { user: User }) {
                     </div>
                     <div className="text-left">
                       <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] leading-none text-indigo-600 dark:text-indigo-400">{t('chat.solves')}</p>
-                      <p className="text-base font-bold leading-none text-slate-900 dark:text-white">{t('chat.total', { count: history.length || 0 })}</p>
+                      <p className="text-base font-bold leading-none text-slate-900 dark:text-white">{t('chat.total', { count: totalSolveCount })}</p>
                     </div>
                   </div>
                 </div>
@@ -688,28 +675,13 @@ export default function ChatPage({ user }: { user: User }) {
                 )}
                 {chatSession.map((msg) => {
                   const ans = msg.response?.answer?.trim() || '';
-                  const exp = msg.response?.explanation?.trim() || '';
+                  const renderedResponse = buildRenderableResponse(msg);
                   const statusLabel = msg.response?.statusPhase ? STREAM_PHASE_LABELS[msg.response.statusPhase] : null;
-                  const answerMissing = ans.toLowerCase() === 'answer available in explanation';
-                  const fallbackSteps = (msg.response?.steps?.length ?? 0) > 0 ? [] : parseExplanationSteps(exp);
-                  const rawSteps = (msg.response?.steps?.length ?? 0) > 0 ? msg.response?.steps || [] : fallbackSteps;
-                  const preliminaryPresentation = getResponsePresentation(msg.question, ans, rawSteps, exp, t);
-                  const candidateSteps = preliminaryPresentation.hideSteps ? [] : rawSteps;
-                  const validSteps = candidateSteps.filter((step) => {
-                    const normalizedStep = normalizeComparableText(step);
-                    return (
-                      normalizedStep.length > 0 &&
-                      normalizedStep !== normalizeComparableText(ans) &&
-                      normalizedStep !== normalizeComparableText(exp)
-                    );
-                  });
-                  const stepsCombined = normalizeComparableText(validSteps.join('\n'));
-                  const showExplanation =
-                    exp &&
-                    !answerMissing &&
-                    normalizeComparableText(exp) !== normalizeComparableText(ans) &&
-                    normalizeComparableText(exp) !== stepsCombined;
-                  const presentation = getResponsePresentation(msg.question, ans, validSteps, exp, t);
+                  const responseStyleMode = msg.response?.metadata?.styleMode;
+                  const reaction = reactionByMessage[msg.id];
+                  const isThinking = !renderedResponse && !msg.error;
+                  const isStreaming = Boolean(msg.response?.isPreview || (statusLabel && !msg.response?.interrupted));
+                  const copyableResponse = renderedResponse || ans;
 
                   return (
                   <div key={msg.id} className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -719,7 +691,14 @@ export default function ChatPage({ user }: { user: User }) {
                         {msg.images && msg.images.length > 0 && (
                           <div className="mt-4 grid grid-cols-2 gap-3">
                             {msg.images.map((img, i) => (
-                              <img key={i} src={img} alt="Attached" className="w-full h-auto rounded-[18px] border border-slate-200/20 object-cover shadow-sm" />
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => setLightboxImage(img)}
+                                className="overflow-hidden rounded-[18px] border border-slate-200/20 shadow-sm transition-transform hover:scale-[1.01]"
+                              >
+                                <img src={img} alt="Attached" className="w-full h-auto object-cover" />
+                              </button>
                             ))}
                           </div>
                         )}
@@ -741,92 +720,92 @@ export default function ChatPage({ user }: { user: User }) {
                           <Bot size={20} className="text-indigo-600 dark:text-indigo-400" />
                         </div>
                         <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[90%]">
-                          <div className={`oryx-bubble-ai relative prose-slate text-slate-800 dark:prose-invert dark:text-slate-100 ${presentation.layout === 'chat' ? `max-w-fit ${isRtl ? 'pl-12' : 'pr-12'} pb-4` : 'max-w-none pb-10'} group/ai-bubble`}>
-                            <button 
-                              onClick={() => copyToClipboard(ans, msg.id)} 
-                              className={`oryx-copy-btn absolute bottom-2 ${isRtl ? 'left-3' : 'right-3'} opacity-0 group-hover/ai-bubble:opacity-100 shadow-sm z-10`}
-                              title={t('chat.copy_response')}
-                            >
-                              {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                              <span className="text-[9px]">{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
-                            </button>
+                          <div className="oryx-bubble-ai relative max-w-none overflow-hidden pb-5">
                             {msg.error && (
                               <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                                 <div className="font-black uppercase tracking-[0.16em] text-[10px] mb-1">{t('chat.request_failed')}</div>
                                 <p>{msg.error}</p>
                               </div>
                             )}
-                            {ans && ans.toLowerCase() !== 'answer available in explanation' && presentation.layout === 'answer' && (
-                              <div className="mb-6 rounded-[24px] border border-indigo-100/80 bg-indigo-50/70 p-5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
-                                <div className="mb-3 flex items-center gap-2 text-indigo-600 dark:text-indigo-300">
-                                  <Sparkles size={14} />
-                                  <span className="text-[10px] font-black uppercase tracking-[0.22em]">{presentation.answerLabel}</span>
-                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400 dark:text-indigo-200/70">
-                                    {presentation.answerHint}
-                                  </span>
-                                  {(statusLabel || msg.response.isPreview || msg.response.interrupted) && (
-                                    <span className="ml-auto rounded-full border border-indigo-200/80 bg-white/70 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-indigo-600 dark:border-indigo-400/20 dark:bg-indigo-950/30 dark:text-indigo-200">
-                                    {msg.response.interrupted ? t('chat.interrupted') : msg.response.isPreview ? t('chat.preview') : statusLabel}
-                                    </span>
-                                  )}
+                            <div className="mb-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                              <span className="inline-flex items-center gap-2 rounded-full border border-indigo-200/80 bg-indigo-50/80 px-3 py-1 text-indigo-600 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200">
+                                <Sparkles size={12} />
+                                Oryx
+                              </span>
+                              {responseStyleMode && (
+                                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 ${getModeToneClass(responseStyleMode as StyleMode)}`}>
+                                  {STYLE_MODES.find((mode) => mode.value === responseStyleMode)?.label ?? responseStyleMode}
+                                </span>
+                              )}
+                              {(statusLabel || msg.response.isPreview || msg.response.interrupted) && (
+                                <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                                  {msg.response.interrupted ? t('chat.interrupted') : msg.response.isPreview ? t('chat.preview') : statusLabel}
+                                </span>
+                              )}
+                            </div>
+
+                            {isThinking ? (
+                              <div className="flex items-center gap-3 py-2 text-slate-600 dark:text-slate-300">
+                                <div className="flex gap-1.5">
+                                  <div className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.3s]" />
+                                  <div className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]" />
+                                  <div className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" />
                                 </div>
-                                {ans === 'Thinking...' ? (
-                                  <div className="flex items-center gap-3 py-2">
-                                    <div className="flex gap-1.5">
-                                      <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.3s]" />
-                                      <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]" />
-                                      <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" />
-                                    </div>
-                                    <span className="text-xs font-black uppercase tracking-widest text-indigo-500/70">{t('chat.analyzing')}</span>
+                                <span className="text-sm font-medium">{t('chat.analyzing')}</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                <RichText
+                                  content={renderedResponse}
+                                  className="text-[15.5px] leading-7 text-slate-800 dark:text-slate-100 [&_.katex]:text-slate-900 dark:[&_.katex]:text-white"
+                                />
+                                {isStreaming && (
+                                  <div className="flex items-center gap-2 text-xs font-medium text-indigo-500 dark:text-indigo-300">
+                                    <span className="inline-block h-4 w-[2px] animate-pulse rounded-full bg-current" />
+                                    {t('chat.writing', { defaultValue: 'Writing...' })}
                                   </div>
-                                ) : (
-                                  <RichText
-                                    content={ans}
-                                    className="text-[16px] font-semibold leading-relaxed text-slate-900 dark:text-white [&_.katex]:text-slate-900 dark:[&_.katex]:text-white"
-                                  />
                                 )}
                               </div>
                             )}
 
-                            {statusLabel && !msg.response.interrupted && (
-                              <div className="mb-4 rounded-2xl border border-indigo-100/80 bg-indigo-50/60 px-4 py-3 text-xs font-semibold text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-950/20 dark:text-indigo-200">
-                                {statusLabel}
-                              </div>
-                            )}
-
-                            {ans && ans.toLowerCase() !== 'answer available in explanation' && presentation.layout === 'chat' && (
-                              <RichText
-                                content={ans}
-                                className="text-[15px] leading-relaxed text-slate-800 dark:text-slate-100"
-                              />
-                            )}
-
-                            {validSteps.length > 0 && (
-                              <div className="space-y-3 mt-4">
-                                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                  <MessageSquare size={14} />
-                                  <span className="text-xs font-semibold uppercase tracking-wider">{t('chat.steps')}</span>
+                            {copyableResponse && (
+                              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-4 dark:border-white/10">
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(copyableResponse, `${msg.id}-full`)}
+                                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition-colors hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-indigo-400/30 dark:hover:text-indigo-300"
+                                >
+                                  {copiedId === `${msg.id}-full` ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                  {copiedId === `${msg.id}-full`
+                                    ? t('chat.copied', { defaultValue: 'Copied' })
+                                    : t('chat.copy_full_response', { defaultValue: 'Copy full response' })}
+                                </button>
+                                <div className="ml-auto flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReaction(msg.id, 'up', msg.response?.metadata?.conversationId ?? activeConversationId)}
+                                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
+                                      reaction === 'up'
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                        : 'border-slate-200 bg-white/70 text-slate-400 hover:border-emerald-200 hover:text-emerald-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:border-emerald-500/20 dark:hover:text-emerald-300'
+                                    }`}
+                                    title={t('chat.helpful', { defaultValue: 'Helpful' })}
+                                  >
+                                    <ThumbsUp size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReaction(msg.id, 'down', msg.response?.metadata?.conversationId ?? activeConversationId)}
+                                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
+                                      reaction === 'down'
+                                        ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300'
+                                        : 'border-slate-200 bg-white/70 text-slate-400 hover:border-rose-200 hover:text-rose-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:border-rose-500/20 dark:hover:text-rose-300'
+                                    }`}
+                                    title={t('chat.not_helpful', { defaultValue: 'Not helpful' })}
+                                  >
+                                    <ThumbsDown size={15} />
+                                  </button>
                                 </div>
-                                {validSteps.map((step, i) => (
-                                  <div key={i} className="flex items-start gap-2">
-                                    <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium" style={{ backgroundColor: 'var(--surface-soft)', color: 'var(--text-secondary)' }}>
-                                      {i + 1}
-                                    </div>
-                                    <div className="flex-1">
-                                      <RichText content={step} className="text-[15px] leading-relaxed text-slate-800 dark:text-slate-200" />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {showExplanation && (
-                              <div className="mt-5 rounded-xl border p-4" style={{ backgroundColor: 'var(--surface-soft)', borderColor: 'var(--border-color)' }}>
-                                <div className="flex items-center gap-2 mb-2 text-gray-600 dark:text-gray-400">
-                                  <Lightbulb size={14} />
-                                  <span className="text-xs font-semibold uppercase tracking-wider">{presentation.explanationLabel}</span>
-                                </div>
-                                <RichText content={exp} className="text-sm leading-relaxed text-slate-700 dark:text-slate-200" />
                               </div>
                             )}
                           </div>
@@ -844,16 +823,43 @@ export default function ChatPage({ user }: { user: User }) {
           <div className="flex-none w-full border-t p-4 pt-4 pb-6 md:pb-8" style={{ background: 'linear-gradient(180deg, transparent 0%, var(--surface-header) 24%, var(--surface-panel-strong) 100%)', borderColor: 'var(--border-color)' }}>
             <div className="mx-auto max-w-3xl lg:max-w-4xl">
               {chatSession.length > 0 && (
-                <div className="mb-3 flex items-center justify-between px-2">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                    <Sparkles size={12} className="text-indigo-500 dark:text-indigo-300" />
-                    {t('chat.mode_locked')} {STYLE_MODES.find((mode) => mode.value === styleMode)?.label ?? t('chat.mode_standard')}
+                <div className="mb-3 space-y-2 px-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                      <Sparkles size={12} className="text-indigo-500 dark:text-indigo-300" />
+                      {t('chat.current_mode', {
+                        defaultValue: 'Current mode',
+                      })}{' '}
+                      {STYLE_MODES.find((mode) => mode.value === styleMode)?.label ?? t('chat.mode_standard')}
+                    </div>
+                    {activeConversationId && (
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        {t('chat.mode_switch_hint', { defaultValue: 'You can switch modes mid-chat.' })}
+                      </span>
+                    )}
                   </div>
-                  {activeConversationId && (
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {t('chat.follow_ups_stay')}
-                    </span>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {STYLE_MODES.map((mode) => {
+                      const isLocked = usage?.subscriptionTier === 'free' && (mode.value === 'gen_alpha' || mode.value === 'step_by_step');
+                      const isActive = styleMode === mode.value;
+                      return (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          onClick={() => setStyleMode(mode.value)}
+                          disabled={isLocked}
+                          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
+                            isActive
+                              ? 'border-indigo-500 bg-indigo-500 text-white shadow-lg shadow-indigo-500/15'
+                              : 'border-slate-200 bg-white/70 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-indigo-400/30 dark:hover:text-indigo-300'
+                          } ${isLocked ? 'cursor-not-allowed opacity-45 grayscale' : ''}`}
+                        >
+                          {mode.icon}
+                          {mode.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               {solveBlocked && (
@@ -939,6 +945,26 @@ export default function ChatPage({ user }: { user: User }) {
           </div>
         </main>
       </div>
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/85 p-6 backdrop-blur-sm"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxImage(null)}
+            className={`absolute top-5 ${isRtl ? 'left-5' : 'right-5'} rounded-full bg-white/10 p-3 text-white transition-colors hover:bg-white/20`}
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Expanded attachment"
+            className="max-h-[88vh] max-w-[92vw] rounded-[28px] border border-white/10 object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </AppLayout>
   );
 }

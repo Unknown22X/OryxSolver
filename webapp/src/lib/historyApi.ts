@@ -62,6 +62,26 @@ export async function fetchHistoryList(params?: {
   }
 }
 
+export async function fetchAllHistoryEntries(params?: {
+  limit?: number;
+  maxPages?: number;
+}): Promise<HistoryEntry[]> {
+  const pageLimit = Math.min(params?.limit ?? 200, 200);
+  const maxPages = Math.max(params?.maxPages ?? 6, 1);
+  const entries: HistoryEntry[] = [];
+  let before: string | undefined;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const data = await fetchHistoryList({ limit: pageLimit, before });
+    if (!data.entries.length) break;
+    entries.push(...data.entries);
+    if (!data.nextCursor) break;
+    before = data.nextCursor;
+  }
+
+  return entries;
+}
+
 export async function deleteHistory(params: { conversationId?: string; all?: boolean }): Promise<void> {
   const search = new URLSearchParams();
   if (params.all) search.set('all', 'true');

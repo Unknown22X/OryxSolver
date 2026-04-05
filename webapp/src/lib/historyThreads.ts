@@ -39,7 +39,6 @@ export function groupHistoryEntries(entries: HistoryEntry[]): ThreadedHistoryEnt
     }
 
     existing.rootQuestion = entry.question;
-    existing.created_at = entry.created_at;
     if (!existing.style_mode && entry.style_mode) {
       existing.style_mode = entry.style_mode;
     }

@@ -1,8 +1,8 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { getBearerToken, verifySupabaseAccessToken } from '../_shared/auth.ts';
 import { createSupabaseAdminClient, createSupabaseUserClient } from '../_shared/db.ts';
-import { callAiProxy, AiError } from '../_shared/ai.ts';
-import { saveHistoryEntry } from '../_shared/history.ts';
+import { callAiProxy, callAiProxyStream, AiError } from '../_shared/ai.ts';
+import { persistHistoryImageFiles, saveHistoryEntry } from '../_shared/history.ts';
 import { logSolveRun } from '../_shared/solveRuns.ts';
 import { getMonthlyUsage, getPlanLimits, isUnlimited, recordUsageEvent } from '../_shared/usage.ts';
 import { getCachedAnswer, saveToCache } from '../_shared/cache.ts';
@@ -16,6 +16,21 @@ import {
 import { consumePaygoCredit, getPaygoCreditsRemaining } from '../_shared/creditWallet.ts';
 import type { SolveStatusEvent, SolveStreamEvent, SolveSuccessResponse, StyleMode } from '../_shared/contracts.ts';
 import { recordDependencyState } from '../_shared/serviceHealth.ts';
+
+type AiProxyStreamEvent =
+  | { type: 'delta'; text: string }
+  | {
+      type: 'final';
+      data: {
+        answer?: string;
+        explanation?: string;
+        steps?: string[];
+        model?: string;
+        suggestions?: Array<{ label?: string; prompt?: string; styleMode?: StyleMode }>;
+        cost_usd?: number;
+      };
+    }
+  | { type: 'error'; code?: string; message: string };
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -74,13 +89,14 @@ type ImagePart = { inlineData: { mimeType: string; data: string } };
 type ExtractedImages = {
   acceptedUrls: string[];
   parts: ImagePart[];
+  uploads: File[];
 };
 
 const MAX_HISTORY_ENTRY_CHARS = 12000;
-const MAX_HISTORY_INPUT_ITEMS = 40;
-const MAX_HISTORY_TOTAL_CHARS = 48000;
-const TARGET_HISTORY_ITEMS = 12;
-const SAFE_HISTORY_CHAR_BUDGET = 36000;
+const MAX_HISTORY_INPUT_ITEMS = 20;
+const MAX_HISTORY_TOTAL_CHARS = 24000;
+const TARGET_HISTORY_ITEMS = 6;
+const SAFE_HISTORY_CHAR_BUDGET = 16000;
 
 function assertQuestionLength(question: string) {
   if (question.length > 12000) {
@@ -290,7 +306,11 @@ async function extractImageParts(form: FormData): Promise<ExtractedImages> {
     }
   }
 
-  return { acceptedUrls, parts };
+  return {
+    acceptedUrls,
+    parts,
+    uploads: uniqueFiles.filter((file) => file.type.startsWith('image/')),
+  };
 }
 
 function chooseAiMode(
@@ -428,6 +448,116 @@ function createStreamWriter(): { response: Response; write: StreamWrite; close: 
         controllerRef = null;
       }
     },
+  };
+}
+
+function isAiProxyStreamEvent(value: unknown): value is AiProxyStreamEvent {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as { type?: unknown };
+  return event.type === 'delta' || event.type === 'final' || event.type === 'error';
+}
+
+async function readAiProxyStream(
+  response: Response,
+  onDelta: (text: string) => void,
+): Promise<{
+  answer: string;
+  explanation: string;
+  steps: string[];
+  model: string;
+  suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  cost_usd?: number;
+}> {
+  if (!response.body) {
+    throw new AiError(502, 'AI_STREAM_MISSING', 'AI stream returned no body.');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalPayload: {
+    answer?: string;
+    explanation?: string;
+    steps?: string[];
+    model?: string;
+    suggestions?: Array<{ label?: string; prompt?: string; styleMode?: StyleMode }>;
+    cost_usd?: number;
+  } | null = null;
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+
+        if (!isAiProxyStreamEvent(parsed)) continue;
+
+        if (parsed.type === 'delta') {
+          onDelta(parsed.text);
+          continue;
+        }
+
+        if (parsed.type === 'error') {
+          throw new AiError(502, parsed.code || 'AI_PROXY_STREAM_ERROR', parsed.message);
+        }
+
+        finalPayload = parsed.data;
+      }
+    }
+
+    const trailing = buffer.trim();
+    if (trailing) {
+      try {
+        const parsed: unknown = JSON.parse(trailing);
+        if (isAiProxyStreamEvent(parsed)) {
+          if (parsed.type === 'delta') {
+            onDelta(parsed.text);
+          } else if (parsed.type === 'error') {
+            throw new AiError(502, parsed.code || 'AI_PROXY_STREAM_ERROR', parsed.message);
+          } else {
+            finalPayload = parsed.data;
+          }
+        }
+      } catch {
+        // Ignore malformed trailing fragments.
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!finalPayload) {
+    throw new AiError(503, 'AI_STREAM_INTERRUPTED', 'AI stream ended before the final response.');
+  }
+
+  return {
+    answer: typeof finalPayload.answer === 'string' ? finalPayload.answer : '',
+    explanation: typeof finalPayload.explanation === 'string' ? finalPayload.explanation : '',
+    steps: Array.isArray(finalPayload.steps) ? finalPayload.steps.map((step) => String(step)) : [],
+    model: typeof finalPayload.model === 'string' && finalPayload.model.trim() ? finalPayload.model : 'unknown',
+    suggestions: Array.isArray(finalPayload.suggestions)
+      ? finalPayload.suggestions
+          .filter((item) => typeof item?.prompt === 'string' && item.prompt.trim())
+          .map((item) => ({
+            label: typeof item?.label === 'string' ? item.label : 'Try this',
+            prompt: String(item?.prompt || ''),
+            ...(typeof item?.styleMode === 'string' ? { styleMode: item.styleMode } : {}),
+          }))
+      : [],
+    cost_usd: typeof finalPayload.cost_usd === 'number' ? finalPayload.cost_usd : 0,
   };
 }
 
@@ -684,8 +814,10 @@ Deno.serve(async (req) => {
     const styleMode = parseStyleMode(String(form.get('style_mode') ?? 'standard').trim());
     runStyleMode = styleMode;
     const preferredLanguage = String(form.get('language') ?? '').trim() || undefined;
+    const surface = String(form.get('surface') ?? '').trim().toLowerCase();
+    const responseSurface = surface === 'webapp' ? 'webapp' : surface === 'extension' ? 'extension' : undefined;
     const quotedStep = form.get('quoted_step');
-    const { acceptedUrls: acceptedImageUrls, parts: imageParts } = await extractImageParts(form);
+    const { acceptedUrls: acceptedImageUrls, parts: imageParts, uploads: uploadedImageFiles } = await extractImageParts(form);
     const question =
       rawQuestion.length > 0
         ? rawQuestion
@@ -707,13 +839,14 @@ Deno.serve(async (req) => {
     }
     const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
     const imageCount = imageParts.length;
+    const realtimeStreamingEnabled = streamRequested && responseSurface === 'webapp' && !isBulk;
     const cacheSafe = isCacheSafeRequest({
       imageCount,
       history,
       quotedStep,
       isBulk,
     });
-    const previewEligible = streamRequested && isPreviewEligibleRequest({
+    const previewEligible = !realtimeStreamingEnabled && streamRequested && isPreviewEligibleRequest({
       imageCount,
       history,
       quotedStep,
@@ -897,6 +1030,18 @@ Deno.serve(async (req) => {
       };
 
       const cachedPostWork = (async () => {
+        const persistedImageRefs = await persistHistoryImageFiles(supabaseAdmin, user.id, uploadedImageFiles);
+        await saveHistoryEntry(supabaseAdmin, {
+          authUserId: user.id,
+          question: repairedQuestion,
+          answer: cachedAnswer.answer,
+          explanation: cachedAnswer.explanation || '[This answer was retrieved from cache - asked before]',
+          conversationId,
+          styleMode,
+          image_urls: [...acceptedImageUrls, ...persistedImageRefs],
+          is_bulk: isBulk,
+          steps: cachedAnswer.steps?.length > 0 ? cachedAnswer.steps : ['Answer retrieved from cache (no AI call needed)'],
+        });
         if (usePaygoCredit) {
           await consumePaygoCredit(supabaseAdmin, user.id, 1, {
             conversationId,
@@ -954,29 +1099,63 @@ Deno.serve(async (req) => {
     let ai: Awaited<ReturnType<typeof callAiProxy>>;
     let previewLatencyMs: number | null = null;
     let finalAiStartedAt = Date.now();
+    const runAiAttempt = async (
+      questionToSolve: string,
+      modeOverride: 'normal' | 'fast_fallback',
+      styleOverride: StyleMode,
+    ) => {
+      if (realtimeStreamingEnabled && streamContext) {
+        const response = await callAiProxyStream(
+          questionToSolve,
+          imageParts,
+          modeOverride,
+          styleOverride,
+          history,
+          isBulk,
+          user.id,
+          {
+            preferredLanguage,
+            surface: responseSurface,
+          },
+        );
+        return await readAiProxyStream(response, (text) => {
+          emitStream({ type: 'delta', text });
+        });
+      }
+
+      return await callAiProxy(questionToSolve, imageParts, modeOverride, styleOverride, history, isBulk, user.id, {
+        preferredLanguage,
+        surface: responseSurface,
+      });
+    };
+
     const runFinalAi = async (questionToSolve: string, styleOverride: StyleMode = styleMode) => {
       try {
-        return await callAiProxy(questionToSolve, imageParts, initialMode, styleOverride, history, isBulk, user.id, { preferredLanguage });
+        return await runAiAttempt(questionToSolve, initialMode, styleOverride);
       } catch (error) {
         if (error instanceof AiError && (
           error.code === 'AI_TIMEOUT' ||
+          error.code === 'AI_STREAM_INTERRUPTED' ||
           error.code === 'AI_INCOMPLETE_OUTPUT' ||
           error.code === 'AI_PROVIDER_ERROR'
         )) {
           aiFallbackUsed = true;
           emitStatus('refining');
           try {
-            return await callAiProxy(questionToSolve, imageParts, 'fast_fallback', styleOverride, history, isBulk, user.id);
+            return await runAiAttempt(questionToSolve, 'fast_fallback', styleOverride);
           } catch (fallbackError) {
             if (fallbackError instanceof AiError && fallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
-              const conciseQuestion = `${questionToSolve}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
+              const conciseQuestion = responseSurface === 'webapp'
+                ? `${questionToSolve}\n\nOutput constraint: Keep the reply concise, natural, and complete. Use short paragraphs or compact bullets only if they help clarity.`
+                : `${questionToSolve}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
               try {
-                return await callAiProxy(conciseQuestion, imageParts, 'fast_fallback', styleOverride, history, isBulk, user.id);
+                return await runAiAttempt(conciseQuestion, 'fast_fallback', styleOverride);
               } catch (finalFallbackError) {
                 if (finalFallbackError instanceof AiError && finalFallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
-                  const ultraCompactQuestion =
-                    `${questionToSolve}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
-                  return await callAiProxy(ultraCompactQuestion, imageParts, 'fast_fallback', 'standard', history, isBulk, user.id);
+                  const ultraCompactQuestion = responseSurface === 'webapp'
+                    ? `${questionToSolve}\n\nOutput constraint: Give the most helpful short answer possible in natural chat style. No rigid labels.`
+                    : `${questionToSolve}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
+                  return await runAiAttempt(ultraCompactQuestion, 'fast_fallback', 'standard');
                 }
                 throw finalFallbackError;
               }
@@ -1000,7 +1179,7 @@ Deno.serve(async (req) => {
           history,
           false,
           user.id,
-          { streamPreview: true, previewOnly: true, preferredLanguage },
+          { streamPreview: true, previewOnly: true, preferredLanguage, surface: responseSurface },
         );
         previewLatencyMs = Date.now() - previewStartedAt;
         console.log(`[${reqId}] preview completed`, { previewLatencyMs });
@@ -1082,6 +1261,7 @@ Deno.serve(async (req) => {
 
     emitStatus('finalizing');
     const postAnswerWork = (async () => {
+      const persistedImageRefs = await persistHistoryImageFiles(supabaseAdmin, user.id, uploadedImageFiles);
       if (cacheSafe && ai.answer.trim().toUpperCase() !== 'INCOMPLETE_QUESTION') {
         try {
           await saveToCache(repairedQuestion, ai.answer, ai.explanation, ai.steps);
@@ -1098,7 +1278,7 @@ Deno.serve(async (req) => {
         explanation: ai.explanation,
         conversationId,
         styleMode,
-        image_urls: acceptedImageUrls,
+        image_urls: [...acceptedImageUrls, ...persistedImageRefs],
         is_bulk: isBulk,
         steps: ai.steps,
       });
