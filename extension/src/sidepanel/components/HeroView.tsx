@@ -34,8 +34,8 @@ export default function HeroView({
   return (
     <div className="flex h-full w-full flex-col items-center overflow-y-auto custom-scrollbar pb-4 pt-4">
       <div className="mb-4 flex flex-col items-center px-6 text-center">
-        <div className="mb-4 flex h-20 w-20 items-center justify-center transition-all bg-transparent animate-float">
-          <img src={logoUrl} alt="Oryx" className="h-full w-full object-contain" />
+        <div className="mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-[24%] bg-transparent transition-all animate-float">
+          <img src={logoUrl} alt="Oryx" className="oryx-logo-clean h-full w-full object-contain" />
         </div>
 
         <h2 className="mb-2 text-[32px] font-black leading-[1] tracking-tighter text-slate-900 drop-shadow-sm dark:text-white">

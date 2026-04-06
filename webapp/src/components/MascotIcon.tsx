@@ -4,6 +4,7 @@ export type MascotName =
   | 'logo' 
   | 'sparkle' 
   | 'bot-avatar' 
+  | 'scholar'
   | 'thinking' 
   | 'greeting' 
   | 'historian' 
@@ -26,6 +27,7 @@ const MASCOT_MAP: Record<MascotName, string> = {
   'logo': '/app_icons/logo.png',
   'sparkle': '/app_icons/sparkle.png',
   'bot-avatar': '/app_icons/bot-avatar.png',
+  'scholar': '/app_icons/bot-avatar.png',
   'thinking': '/app_icons/thinking.png',
   'greeting': '/app_icons/greeting.png',
   'historian': '/app_icons/historian.png',
@@ -47,12 +49,13 @@ export const MascotIcon: React.FC<MascotIconProps> = ({
 }) => {
   const src = MASCOT_MAP[name];
   const dimension = typeof size === 'number' ? `${size}px` : size;
+  const logoClassName = name === 'logo' ? 'oryx-logo-clean' : '';
 
   return (
     <img 
       src={src} 
       alt={alt || `${name} mascot`}
-      className={`object-contain inline-block shrink-0 ${className}`}
+      className={`object-contain inline-block shrink-0 ${logoClassName} ${className}`.trim()}
       style={{ 
         width: dimension, 
         height: dimension,

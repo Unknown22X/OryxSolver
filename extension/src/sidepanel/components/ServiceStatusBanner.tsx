@@ -14,8 +14,16 @@ function getBannerTone(health: ServiceHealthSnapshot) {
   return 'bg-indigo-600 text-white';
 }
 
+function sanitizeBannerMessage(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes('supabase.co') || normalized.includes('failed to fetch') || normalized.includes('networkerror')) {
+    return 'Service is temporarily unavailable. Please try again.';
+  }
+  return message;
+}
+
 export default function ServiceStatusBanner({ health, retryCountdowns, onRetry }: Props) {
-  if (health.overall === 'healthy') return null;
+  if (health.overall === 'healthy' || (health.overall === 'degraded' && !health.readOnly)) return null;
 
   const firstBlockedDependency = (['backend', 'auth', 'db', 'ai'] as const).find(
     (dependency) => health.dependencies[dependency].status !== 'healthy',
@@ -30,7 +38,7 @@ export default function ServiceStatusBanner({ health, retryCountdowns, onRetry }
           <div className="text-[9px] font-black uppercase tracking-[0.18em] opacity-80">
             {health.readOnly ? 'Read-only mode' : 'Service notice'}
           </div>
-          <div className="leading-relaxed">{health.message}</div>
+          <div className="leading-relaxed">{sanitizeBannerMessage(health.message)}</div>
         </div>
         {retryCountdown > 0 ? (
           <span className="rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em]">

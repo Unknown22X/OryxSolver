@@ -24,6 +24,8 @@ import {
   User as UserIcon,
   Globe,
 } from 'lucide-react';
+import { MascotIcon } from '../components/MascotIcon';
+
 import AppLayout from '../components/AppLayout';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { usePublicAppConfig } from '../hooks/usePublicAppConfig';
@@ -624,13 +626,14 @@ export default function SettingsPage({ user }: { user: User }) {
           <section className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10">
-                <img src="/app_icons/Engineer.png" alt="Help" className="w-6 h-6 object-contain" />
+                <MascotIcon name="engineer" size={24} />
               </div>
               <div>
                 <h2 className="text-xl font-black">{t('settings.help_support')}</h2>
                 <p className="text-sm text-slate-500">{t('settings.help_support_desc')}</p>
               </div>
             </div>
+
 
             <div className="space-y-3" id="help-support">
               <SupportButton label={t('settings.view_tutorials')} onClick={() => openSupport('tutorials')} />

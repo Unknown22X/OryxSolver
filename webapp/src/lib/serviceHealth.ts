@@ -1,4 +1,3 @@
-import { getFunctionUrl } from './functions';
 import { isTransientSupabaseLockError, shouldHideSupabaseErrorDetails } from './supabaseAuth';
 
 export type ServiceDependency = 'network' | 'backend' | 'auth' | 'db' | 'ai';
@@ -50,6 +49,8 @@ const STORAGE_KEY = 'oryx_service_health_snapshot';
 const DEPENDENCIES: ServiceDependency[] = ['network', 'backend', 'auth', 'db', 'ai'];
 const listeners = new Set<Listener>();
 const circuitState = new Map<ServiceDependency, { failures: number; openUntil: number | null }>();
+let healthEndpointDisabledUntil = 0;
+const explicitHealthEndpointUrl = String(import.meta.env.VITE_HEALTH_PUBLIC_API_URL ?? '').trim();
 
 function nowIso() {
   return new Date().toISOString();
@@ -89,7 +90,8 @@ function createDefaultSnapshot(): ServiceHealthSnapshot {
 function readStoredSnapshot() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as ServiceHealthSnapshot) : null;
+    if (!raw) return null;
+    return sanitizeSnapshotMessages(JSON.parse(raw) as ServiceHealthSnapshot);
   } catch {
     return null;
   }
@@ -226,6 +228,36 @@ function dependencyFromErrorCode(code?: string): Exclude<ServiceDependency, 'net
   return 'backend';
 }
 
+function sanitizeHealthMessage(message: string, dependency: ServiceDependency) {
+  const normalized = message.toLowerCase();
+  const isSupabase = normalized.includes('supabase.co');
+  const isFetch = normalized.includes('failed to fetch') || normalized.includes('networkerror');
+  if (dependency === 'network') return 'You appear to be offline.';
+  if (isSupabase || isFetch) return 'Service is temporarily unavailable. Please try again.';
+  return message;
+}
+
+function sanitizeSnapshotMessages(snapshot: ServiceHealthSnapshot): ServiceHealthSnapshot {
+  const sanitizedDependencies = Object.fromEntries(
+    DEPENDENCIES.map((dependency) => [
+      dependency,
+      {
+        ...snapshot.dependencies[dependency],
+        message: sanitizeHealthMessage(
+          snapshot.dependencies[dependency].message || 'Service is temporarily unavailable. Please try again.',
+          dependency,
+        ),
+      },
+    ]),
+  ) as ServiceHealthSnapshot['dependencies'];
+
+  return {
+    ...snapshot,
+    message: sanitizeHealthMessage(snapshot.message || 'Service is temporarily unavailable. Please try again.', 'backend'),
+    dependencies: sanitizedDependencies,
+  };
+}
+
 export function subscribeServiceHealth(listener: Listener) {
   listeners.add(listener);
   listener(currentSnapshot);
@@ -262,7 +294,24 @@ export function mergeRemoteServiceHealth(partial: Partial<ServiceHealthSnapshot>
 }
 
 export async function fetchPublicServiceHealth() {
-  const response = await fetch(getFunctionUrl('health-public'), { method: 'GET' });
+  // Only poll public health when explicitly configured for this environment.
+  // Deriving it from the generic API base causes 404 noise in environments
+  // where /health-public is not deployed.
+  const url = explicitHealthEndpointUrl || '';
+  if (!url) {
+    return { health: currentSnapshot };
+  }
+  if (healthEndpointDisabledUntil > Date.now()) {
+    return { health: currentSnapshot };
+  }
+
+  const response = await fetch(url, { method: 'GET' });
+  if (response.status === 404) {
+    // Endpoint not deployed in this environment; avoid repeated failed calls.
+    healthEndpointDisabledUntil = Date.now() + 30 * 60 * 1000;
+    console.warn(`[service-health] ${url} returned 404. Health polling paused for 30 minutes.`);
+    return { health: currentSnapshot };
+  }
   if (!response.ok) {
     throw createResilientError(`Health request failed: ${response.status}`, {
       code: response.status >= 500 ? 'BACKEND_UNREACHABLE' : 'SERVICE_DEGRADED',
@@ -299,13 +348,14 @@ export function applyServiceHealthError(error: unknown, fallbackDependency: Excl
 
   const retryAfterSec = resilientError?.retryAfterSec;
   const rawMessage = resilientError?.message || 'Service is temporarily unavailable.';
+  const sanitized = sanitizeHealthMessage(rawMessage, dependency);
   const message = shouldHideSupabaseErrorDetails(error)
     ? dependency === 'auth'
       ? 'Authentication is temporarily unavailable. Please try again.'
       : dependency === 'db'
         ? 'Saved data is temporarily unavailable.'
         : 'Service is temporarily unavailable.'
-    : rawMessage;
+    : sanitized;
   const status = resilientError?.status ?? 0;
   const condition: DependencyCondition =
     code === 'RATE_LIMITED'

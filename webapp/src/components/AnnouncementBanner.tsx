@@ -94,7 +94,7 @@ export default function AnnouncementBanner() {
     return () => clearInterval(interval);
   }, []);
 
-  const banner = config?.banner;
+  const banner = config?.announcement;
   const normalizedMessage =
     banner?.active && typeof banner.message === 'string' ? normalizeBannerText(banner.message) : '';
   const bannerType = banner?.type || 'info';

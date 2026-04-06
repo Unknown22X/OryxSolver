@@ -55,6 +55,25 @@ export default defineConfig(({ mode }) => {
       // Chrome can lock files inside dist while the unpacked extension is loaded.
       // Avoid wiping the whole folder before each build on Windows.
       emptyOutDir: false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            if (id.includes('/react/') || id.includes('/react-dom/')) return 'vendor-react';
+            if (id.includes('/@supabase/')) return 'vendor-supabase';
+            if (
+              id.includes('/react-markdown/') ||
+              id.includes('/remark-') ||
+              id.includes('/rehype-') ||
+              id.includes('/katex/')
+            ) {
+              return 'vendor-markdown';
+            }
+            if (id.includes('/posthog-js/') || id.includes('/@sentry/')) return 'vendor-analytics';
+            return undefined;
+          },
+        },
+      },
     }
   };
 })

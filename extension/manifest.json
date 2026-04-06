@@ -33,6 +33,15 @@
       "matches": [
         "<all_urls>"
       ],
+      "exclude_matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*",
+        "https://oryxsolver.com/*",
+        "https://www.oryxsolver.com/*",
+        "https://*.oryxsolver.com/*"
+      ],
       "js": [
         "src/content/cropOverlay.ts",
         "src/content/domExtractor.ts"
@@ -43,6 +52,15 @@
     {
       "matches": [
         "<all_urls>"
+      ],
+      "exclude_matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*",
+        "https://oryxsolver.com/*",
+        "https://www.oryxsolver.com/*",
+        "https://*.oryxsolver.com/*"
       ],
       "js": [
         "src/content/inlineInjector.ts"

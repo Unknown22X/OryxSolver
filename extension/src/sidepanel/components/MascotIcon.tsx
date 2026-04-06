@@ -50,12 +50,13 @@ export const MascotIcon: React.FC<MascotIconProps> = ({
 }) => {
   const src = MASCOT_MAP[name];
   const dimension = typeof size === 'number' ? `${size}px` : size;
+  const logoClassName = name === 'logo' ? 'oryx-logo-clean' : '';
 
   return (
     <img 
       src={src} 
       alt={alt || `${name} mascot`}
-      className={`object-contain inline-block shrink-0 ${className}`}
+      className={`object-contain inline-block shrink-0 ${logoClassName} ${className}`.trim()}
       style={{ 
         width: dimension, 
         height: dimension,

@@ -330,6 +330,17 @@ function requestAutoCrop(rect: { x: number; y: number; width: number; height: nu
   });
 }
 
+function safeSendMessage(message: unknown, callback?: (response: any) => void) {
+  try {
+    const maybePromise = chrome.runtime.sendMessage(message, callback as any);
+    if (maybePromise && typeof (maybePromise as Promise<any>).catch === 'function') {
+      void (maybePromise as Promise<any>).catch(() => {});
+    }
+  } catch {
+    // Ignore sendMessage failures when the background isn't available.
+  }
+}
+
 function shouldAutoCapture(config: SiteConfig | null, text: string, images: string[], hasVisuals: boolean): boolean {
   if (config?.forceImageCapture) return true;
   if (images.some((src) => /^https?:\/\//i.test(src))) return true;
@@ -819,7 +830,7 @@ function showHighlightButton(x: number, y: number, text: string) {
                     'Context:',
                     contextText || focusInlineQuestionText(sanitizeBulkTextBlock(text.trim())),
                   ].join('\n');
-                  chrome.runtime.sendMessage({ type: MSG_INLINE_EXTRACT_QUESTION, payload: { text: payloadText, images: inlineImages } });
+                  safeSendMessage({ type: MSG_INLINE_EXTRACT_QUESTION, payload: { text: payloadText, images: inlineImages } });
                 });
             }
             selectionButton!.style.transform = 'scale(0.95)'; selectionButton!.innerHTML = '<span>Sent to Oryx!</span>';
@@ -1314,7 +1325,7 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
         }, INLINE_SOLVE_RESULT_TIMEOUT_MS);
         pendingInlineSolveTimeouts.set(injectionId, timeoutId);
 
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           type: MSG_INLINE_SOLVE_AND_INJECT,
           payload: {
             injectionId,
@@ -1457,7 +1468,7 @@ function addExtractAllButton(config: SiteConfig) {
         const allImages: string[] = [];
         entries.forEach((entry) => { entry.images.forEach((src) => { if (!allImages.includes(src)) allImages.push(src); }); });
         if (allText) {
-            chrome.runtime.sendMessage({ 
+            safeSendMessage({ 
               type: MSG_INLINE_EXTRACT_QUESTION, 
               payload: { 
                 text: `I need an answer key for the following questions. Provide a clear, numbered list of ONLY the final answers (e.g., 1. A, 2. 15, 3. True). No steps or reasoning.\n\nQuestions:\n${allText}`, 

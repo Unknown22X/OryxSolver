@@ -37,12 +37,24 @@ const ExtensionAuthPage = lazy(() => import('./pages/ExtensionAuthPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 
-// A simple loading fallback for Suspense
 const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center font-black uppercase tracking-[0.2em]" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-    <div className="flex flex-col items-center gap-4">
-      <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-      <span>Loading...</span>
+  <div className="marketing-loader-shell">
+    <div className="marketing-loader-card">
+      <img
+        src="/app_icons/thinking.png"
+        alt="Oryx loading"
+        className="marketing-loader-mascot"
+      />
+      <p className="marketing-eyebrow mt-6">OryxSolver</p>
+      <h2 className="marketing-heading mt-3 text-3xl text-[color:var(--text-primary)]">
+        Thinking through your study flow.
+      </h2>
+      <p className="mt-3 text-sm leading-7 text-[color:var(--text-secondary)]">
+        Loading your workspace, restoring your session, and getting the next solve ready.
+      </p>
+      <div className="marketing-loader-track mt-8">
+        <div className="marketing-loader-bar" />
+      </div>
     </div>
   </div>
 );
@@ -188,8 +200,8 @@ function App() {
 
   return (
     <OryxPostHogProvider>
-      {config?.maintenanceMode && <MaintenanceOverlay />}
-      {!config?.maintenanceMode && (
+      {config?.maintenance_mode && <MaintenanceOverlay />}
+      {!config?.maintenance_mode && (
         <ServiceStatusBanner
           health={health}
           retryCountdowns={retryCountdowns}

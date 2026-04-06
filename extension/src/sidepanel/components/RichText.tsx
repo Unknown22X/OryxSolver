@@ -9,6 +9,22 @@ type RichTextProps = {
   className?: string;
 };
 
+let katexCssLoaded = false;
+let katexCssPromise: Promise<unknown> | null = null;
+
+function ensureKatexStyles() {
+  if (katexCssLoaded) return;
+  if (!katexCssPromise) {
+    katexCssPromise = import('katex/dist/katex.min.css')
+      .then(() => {
+        katexCssLoaded = true;
+      })
+      .catch(() => {
+        // Non-blocking: markdown still renders if stylesheet load fails.
+      });
+  }
+}
+
 /* -- Error Boundary ---------------------------------- */
 
 type BoundaryProps = { fallback: ReactNode; children: ReactNode };
@@ -112,6 +128,9 @@ function MarkdownRenderer({ text, className }: { text: string; className: string
 export default function RichText({ content, className = '' }: RichTextProps) {
   const text = content?.trim() ?? '';
   if (!text) return null;
+  if ((text.includes('$') || text.includes('\\(') || text.includes('\\[')) && !katexCssLoaded) {
+    ensureKatexStyles();
+  }
 
   const fallback = (
     <p className={`whitespace-pre-wrap text-sm leading-6 text-slate-800 dark:text-slate-100 ${className}`}>

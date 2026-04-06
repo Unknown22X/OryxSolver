@@ -32,10 +32,13 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab.windowId) return;
-    if (isInjectableTab(tab)) {
-      await ensureContentScripts(tab.id);
-    }
     await chrome.sidePanel.open({ windowId: tab.windowId });
+    if (isInjectableTab(tab)) {
+      // Non-blocking: opening the panel should never wait on script injection.
+      void ensureContentScripts(tab.id).catch((error) => {
+        console.warn('Failed to ensure content scripts after side panel open:', error);
+      });
+    }
   } catch (error) {
     console.warn('Failed to open side panel on action click:', error);
   }

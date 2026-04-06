@@ -631,7 +631,7 @@ export default function ChatPage({ user }: { user: User }) {
                           {mode.icon}
                         </div>
                         {mode.label}
-                        {isLocked && <div className={`absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`}><MascotIcon name="bot-avatar" size={14} className="opacity-50" /></div>}
+                        {isLocked && <div className={`absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`}><MascotIcon name="scholar" size={14} className="opacity-50" /></div>}
                       </button>
                     );
                   })}
@@ -717,7 +717,7 @@ export default function ChatPage({ user }: { user: User }) {
                     {msg.response && (
                       <div className="flex justify-start items-start gap-4 group">
                         <div className="shrink-0">
-                          <MascotIcon name="bot-avatar" size={48} className="drop-shadow-lg" />
+                          <MascotIcon name="scholar" size={48} className="drop-shadow-lg" />
                         </div>
 
 

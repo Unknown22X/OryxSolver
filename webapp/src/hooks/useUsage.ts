@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchEdge } from '../lib/edge';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 import {
   USAGE_REFRESH_EVENT,
   USAGE_UPDATED_EVENT,
@@ -111,7 +112,7 @@ export function useUsage(user: User | null): UseUsageReturn {
       setUsage(nextUsage);
     } catch (err) {
       console.error('Error fetching usage:', err);
-      setError((err as Error).message);
+      setError(toPublicErrorMessage(err, 'Usage data is temporarily unavailable.'));
       const fallback = lastKnownUsageRef.current ?? DEFAULT_USAGE;
       setUsage(fallback);
       lastKnownUsageRef.current = fallback;

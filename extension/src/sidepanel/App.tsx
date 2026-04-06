@@ -2,21 +2,23 @@ import { useState, useEffect, useRef } from 'react';
 import * as Sentry from "@sentry/react";
 import MessageComposer from './components/MessageComposer';
 import SidePanelHeader from './components/SidePanelHeader';
-import ResponsePanel from './components/ResponsePanel';
-import HistoryPanel from './components/HistoryPanel';
 import AuthView from './components/AuthView';
 import HeroView from './components/HeroView';
-import ProfileModal from './components/modals/ProfileModal';
-import UpgradeModal from './components/modals/UpgradeModal';
-import Banner from './components/Banner';
-import MaintenanceOverlay from './components/MaintenanceOverlay';
-import ServiceStatusBanner from './components/ServiceStatusBanner';
-
 import { useAuth } from './hooks/useAuth';
 import { useInlineQuestionBridge } from './hooks/useInlineQuestionBridge';
 import { useUsage } from './hooks/useUsage';
 import { useSolve } from './hooks/useSolve';
 import { useTranslation } from 'react-i18next';
+import { Suspense, lazy } from 'react';
+
+import Banner from './components/Banner';
+import MaintenanceOverlay from './components/MaintenanceOverlay';
+import ServiceStatusBanner from './components/ServiceStatusBanner';
+
+const HistoryPanel = lazy(() => import('./components/HistoryPanel'));
+const ProfileModal = lazy(() => import('./components/modals/ProfileModal'));
+const UpgradeModal = lazy(() => import('./components/modals/UpgradeModal'));
+const ResponsePanel = lazy(() => import('./components/ResponsePanel'));
 
 import { getAccessToken } from './auth/supabaseAuthClient';
 import { supabase } from './services/supabaseClient';
@@ -26,11 +28,79 @@ import { fetchExtensionPublicConfig } from './services/appConfig';
 import { captureCroppedAreaToFile } from './services/cameraCapture';
 import { sanitizeExternalUrl } from './services/safeExternalUrl';
 import { identifyUser as identifyAnalyticsUser, initPosthog, resetUser as resetAnalyticsUser } from './services/posthog';
-import type { StyleMode } from './types';
+import type { ChatTurn, StyleMode } from './types';
 import { useServiceHealth } from './hooks/useServiceHealth';
 
 function isStyleMode(value: string | null | undefined): value is StyleMode {
   return value === 'standard' || value === 'exam' || value === 'eli5' || value === 'step_by_step' || value === 'gen_alpha';
+}
+
+const SESSION_STORAGE_MAX_TURNS = 8;
+const SESSION_TEXT_MAX_CHARS = 5000;
+const SESSION_STEPS_MAX = 10;
+const SESSION_STORAGE_MAX_BYTES = 350_000;
+
+function trimText(value: unknown, max = SESSION_TEXT_MAX_CHARS): string {
+  if (typeof value !== 'string') return '';
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+function sanitizeSessionTurn(turn: any): ChatTurn | null {
+  if (!turn || typeof turn !== 'object') return null;
+  const id = typeof turn.id === 'string' ? turn.id : String(Date.now());
+  const question = trimText(turn.question, 2000);
+  const images = Array.isArray(turn.images)
+    ? turn.images.filter((img: unknown): img is string => typeof img === 'string').slice(0, 4)
+    : [];
+
+  const responseRaw = turn.response ?? {};
+  const response = {
+    answer: trimText(responseRaw.answer),
+    explanation: trimText(responseRaw.explanation),
+    steps: Array.isArray(responseRaw.steps)
+      ? responseRaw.steps.filter((s: unknown): s is string => typeof s === 'string').slice(0, SESSION_STEPS_MAX)
+      : undefined,
+    suggestions: [],
+  };
+
+  return {
+    id,
+    question,
+    images,
+    isBulk: turn.isBulk === true,
+    response,
+  };
+}
+
+function sanitizeStoredSession(value: unknown): ChatTurn[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((turn) => sanitizeSessionTurn(turn))
+    .filter((turn): turn is ChatTurn => turn !== null)
+    .slice(-SESSION_STORAGE_MAX_TURNS);
+}
+
+function scheduleIdle(task: () => void) {
+  const withIdle = window as Window & {
+    requestIdleCallback?: (callback: () => void, opts?: { timeout: number }) => number;
+    cancelIdleCallback?: (id: number) => void;
+  };
+
+  if (typeof withIdle.requestIdleCallback === 'function') {
+    return withIdle.requestIdleCallback(task, { timeout: 1200 });
+  }
+  return window.setTimeout(task, 120);
+}
+
+function cancelScheduled(handle: number) {
+  const withIdle = window as Window & {
+    cancelIdleCallback?: (id: number) => void;
+  };
+  if (typeof withIdle.cancelIdleCallback === 'function') {
+    withIdle.cancelIdleCallback(handle);
+    return;
+  }
+  window.clearTimeout(handle);
 }
 
 export default function App() {
@@ -70,10 +140,12 @@ export default function App() {
       health.dependencies.db.status !== 'healthy');
   const cloudHistoryReadOnly = health.readOnly && (health.dependencies.db.status !== 'healthy' || health.dependencies.network.status === 'outage');
   const shouldShowServiceBanner = authUser
-    ? health.overall !== 'healthy'
+    ? health.readOnly
     : health.dependencies.network.status === 'outage' ||
-      health.dependencies.backend.status !== 'healthy' ||
-      health.dependencies.auth.status !== 'healthy';
+      health.dependencies.backend.status === 'outage' ||
+      health.dependencies.auth.status === 'outage' ||
+      health.dependencies.backend.status === 'maintenance' ||
+      health.dependencies.auth.status === 'maintenance';
 
   // --- UI State ---
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -96,7 +168,12 @@ export default function App() {
   const [authCallbackState, setAuthCallbackState] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
 
   useEffect(() => {
-    initPosthog();
+    const handle = scheduleIdle(() => {
+      initPosthog();
+    });
+    return () => {
+      cancelScheduled(handle);
+    };
   }, []);
 
   useEffect(() => {
@@ -130,6 +207,7 @@ export default function App() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [saveHistory, setSaveHistory] = useState(() => localStorage.getItem('oryx_save_history') !== 'false');
+  const [isSessionHydrated, setIsSessionHydrated] = useState(false);
   const [useAnalytics, setUseAnalytics] = useState(() => localStorage.getItem('oryx_analytics') !== 'false');
   const [autoCopy, setAutoCopy] = useState(() => localStorage.getItem('oryx_auto_copy') === 'true');
   const [inlineContextSnippet, setInlineContextSnippet] = useState<string | null>(null);
@@ -224,32 +302,56 @@ export default function App() {
         console.error('Failed to load extension legal versions:', error);
       }
     }
-    void loadLegalVersions();
+    const handle = scheduleIdle(() => {
+      void loadLegalVersions();
+    });
     return () => {
       active = false;
+      cancelScheduled(handle);
     };
   }, []);
 
   useEffect(() => {
+    let active = true;
     if (!saveHistory) {
       localStorage.removeItem('oryx_current_session');
       localStorage.removeItem('oryx_active_conv_id');
+      setIsSessionHydrated(true);
       return;
     }
-    const saved = localStorage.getItem('oryx_current_session');
-    const savedId = localStorage.getItem('oryx_active_conv_id');
-    if (saved) {
-      try { setChatSession(JSON.parse(saved)); } catch (e) { console.error(e); }
-    }
-    if (savedId) setActiveConversationId(savedId);
+    const handle = scheduleIdle(() => {
+      if (!active) return;
+      const saved = localStorage.getItem('oryx_current_session');
+      const savedId = localStorage.getItem('oryx_active_conv_id');
+      if (saved) {
+        try {
+          if (saved.length > SESSION_STORAGE_MAX_BYTES) {
+            console.warn('[session] Stored session too large. Clearing local cache.');
+            localStorage.removeItem('oryx_current_session');
+          } else {
+            const parsed = JSON.parse(saved);
+            if (active) setChatSession(sanitizeStoredSession(parsed));
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if (savedId && active) setActiveConversationId(savedId);
+      if (active) setIsSessionHydrated(true);
+    });
+    return () => {
+      active = false;
+      cancelScheduled(handle);
+    };
   }, [saveHistory, setChatSession, setActiveConversationId]);
 
   useEffect(() => {
-    if (!saveHistory) return;
-    localStorage.setItem('oryx_current_session', JSON.stringify(chatSession));
+    if (!saveHistory || !isSessionHydrated) return;
+    const compactSession = sanitizeStoredSession(chatSession);
+    localStorage.setItem('oryx_current_session', JSON.stringify(compactSession));
     if (activeConversationId) localStorage.setItem('oryx_active_conv_id', activeConversationId);
     else localStorage.removeItem('oryx_active_conv_id');
-  }, [chatSession, activeConversationId, saveHistory]);
+  }, [chatSession, activeConversationId, saveHistory, isSessionHydrated]);
 
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -370,7 +472,12 @@ export default function App() {
 
   // --- Render ---
   return (
-    <div className="oryx-shell-bg relative flex h-screen flex-col overflow-hidden font-sans text-slate-900 transition-colors duration-300 dark:text-slate-100">
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-[#0a0c1b]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+      </div>
+    }>
+      <div className="oryx-shell-bg relative flex h-screen flex-col overflow-hidden font-sans text-slate-900 transition-colors duration-300 dark:text-slate-100">
       {maintenanceMode && <MaintenanceOverlay />}
       {!maintenanceMode && shouldShowServiceBanner && (
         <ServiceStatusBanner
@@ -390,7 +497,6 @@ export default function App() {
       </div>
 
       <SidePanelHeader
-        logoUrl={logoUrl}
         appName="Oryx Solver"
         monthlyUsed={usage.monthlyQuestionsUsed}
         monthlyLimit={usage.monthlyQuestionsLimit}
@@ -667,74 +773,79 @@ export default function App() {
         />
       )}
 
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        authUser={authUser}
-        profileName={profileName}
-        profilePhotoUrl={profilePhotoUrl}
-        onSetProfileName={setProfileName}
-        onSetProfilePhotoUrl={setProfilePhotoUrl}
-        onSaveProfile={handleSaveProfileAction}
-        onSignOut={handleSignOutAction}
-        themeMode={themeMode}
-        onSetThemeMode={setThemeMode}
-        saveHistory={saveHistory}
-        onToggleSaveHistory={setSaveHistory}
-        useAnalytics={useAnalytics}
-        onToggleAnalytics={(val) => {
-          setUseAnalytics(val);
-          localStorage.setItem('oryx_analytics', String(val));
-        }}
-        onClearHistory={handleClearHistoryAction}
-        onDeleteAccount={() => {}}
-        profileMessage={profileMessage}
-        isBusy={isAuthBusy}
-        tier={usage?.subscriptionTier || 'free'}
-        settingsPanel={settingsPanel}
-        onSetSettingsPanel={setSettingsPanel}
-        autoCopy={autoCopy}
-        onToggleAutoCopy={(val) => {
-          setAutoCopy(val);
-          localStorage.setItem('oryx_auto_copy', String(val));
-        }}
-        newPassword={newPassword}
-        confirmNewPassword={confirmNewPassword}
-        onSetNewPassword={setNewPassword}
-        onSetConfirmNewPassword={setConfirmNewPassword}
-        onChangePassword={async () => {
-          setProfileMessage(null);
-          if (!newPassword.trim() || newPassword.length < 8) {
-            setProfileMessage('Password must be at least 8 characters.');
-            return;
-          }
-          if (newPassword !== confirmNewPassword) {
-            setProfileMessage('Passwords do not match.');
-            return;
-          }
-          try {
-            await updatePassword(newPassword);
-            setNewPassword('');
-            setConfirmNewPassword('');
-            setProfileMessage('Password updated.');
-          } catch (e: any) {
-            setProfileMessage(e?.message || 'Password update failed.');
-          }
-        }}
-        monthlyQuestionsLimit={usage.monthlyQuestionsLimit}
-        monthlyQuestionsUsed={usage.monthlyQuestionsUsed}
-        monthlyImagesUsed={usage.monthlyImagesUsed}
-        monthlyImagesLimit={usage.monthlyImagesLimit}
-        supportEmail={supportEmail}
-        webAppBaseUrl={webAppBaseUrl}
-      />
+      {isProfileOpen && (
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          authUser={authUser}
+          profileName={profileName}
+          profilePhotoUrl={profilePhotoUrl}
+          onSetProfileName={setProfileName}
+          onSetProfilePhotoUrl={setProfilePhotoUrl}
+          onSaveProfile={handleSaveProfileAction}
+          onSignOut={handleSignOutAction}
+          themeMode={themeMode}
+          onSetThemeMode={setThemeMode}
+          saveHistory={saveHistory}
+          onToggleSaveHistory={setSaveHistory}
+          useAnalytics={useAnalytics}
+          onToggleAnalytics={(val) => {
+            setUseAnalytics(val);
+            localStorage.setItem('oryx_analytics', String(val));
+          }}
+          onClearHistory={handleClearHistoryAction}
+          onDeleteAccount={() => {}}
+          profileMessage={profileMessage}
+          isBusy={isAuthBusy}
+          tier={usage?.subscriptionTier || 'free'}
+          settingsPanel={settingsPanel}
+          onSetSettingsPanel={setSettingsPanel}
+          autoCopy={autoCopy}
+          onToggleAutoCopy={(val) => {
+            setAutoCopy(val);
+            localStorage.setItem('oryx_auto_copy', String(val));
+          }}
+          newPassword={newPassword}
+          confirmNewPassword={confirmNewPassword}
+          onSetNewPassword={setNewPassword}
+          onSetConfirmNewPassword={setConfirmNewPassword}
+          onChangePassword={async () => {
+            setProfileMessage(null);
+            if (!newPassword.trim() || newPassword.length < 8) {
+              setProfileMessage('Password must be at least 8 characters.');
+              return;
+            }
+            if (newPassword !== confirmNewPassword) {
+              setProfileMessage('Passwords do not match.');
+              return;
+            }
+            try {
+              await updatePassword(newPassword);
+              setNewPassword('');
+              setConfirmNewPassword('');
+              setProfileMessage('Password updated.');
+            } catch (e: any) {
+              setProfileMessage(e?.message || 'Password update failed.');
+            }
+          }}
+          monthlyQuestionsLimit={usage.monthlyQuestionsLimit}
+          monthlyQuestionsUsed={usage.monthlyQuestionsUsed}
+          monthlyImagesUsed={usage.monthlyImagesUsed}
+          monthlyImagesLimit={usage.monthlyImagesLimit}
+          supportEmail={supportEmail}
+          webAppBaseUrl={webAppBaseUrl}
+        />
+      )}
 
-      <UpgradeModal
-        isOpen={isUpgradeModalOpen}
-        onClose={() => setIsUpgradeModalOpen(false)}
-        upgradeMoment={upgradeMoment}
-        upgradeUrl={upgradeUrl}
-      />
-    </div>
+      {isUpgradeModalOpen && (
+        <UpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          upgradeMoment={upgradeMoment}
+          upgradeUrl={upgradeUrl}
+        />
+      )}
+      </div>
+    </Suspense>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { fetchEdge, fetchEdgeStream } from '../lib/edge';
 import { broadcastUsageUpdated } from '../lib/usageEvents';
 import { compressImages } from '../lib/imageCompressor';
+import { toPublicErrorMessage } from '../lib/supabaseAuth';
 import type { User } from '@supabase/supabase-js';
 
 interface SolveRequest {
@@ -457,7 +458,7 @@ export function useSolve(user: User | null): UseSolveReturn {
         return null;
       }
 
-      const errorMessage = (err as Error).message || 'Failed to send message';
+      const errorMessage = toPublicErrorMessage(err, 'Failed to send message');
       setError(errorMessage);
       setChatSession((prev) =>
         prev.map((msg) =>

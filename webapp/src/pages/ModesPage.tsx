@@ -1,34 +1,25 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
-import MarketingLayout from '../components/MarketingLayout';
 import { useTranslation } from 'react-i18next';
-import { MascotIcon } from '../components/MascotIcon';
-import {
-  Shield,
-  Calculator,
-  BookOpen,
-  CheckCircle2,
-} from 'lucide-react';
+import { BookOpen, Calculator, CheckCircle2, Shield, Zap } from 'lucide-react';
+import MarketingLayout from '../components/MarketingLayout';
 
 export default function ModesPage() {
   const { t } = useTranslation();
 
-  const MODES = [
+  const modes = [
     {
       name: t('modes_page.mode_standard_name', { defaultValue: 'Standard' }),
-      icon: <MascotIcon name="sparkle" size={48} />,
-      accent: 'from-amber-500/20 to-orange-500/20 text-amber-200',
+      icon: <CheckCircle2 className="h-8 w-8" />,
       summary: t('modes_page.mode_standard_summary', { defaultValue: 'Balanced clarity and speed for most questions.' }),
       bestFor: t('modes_page.mode_standard_best', { defaultValue: 'Homework checks,Quick understanding,Daily study' }).split(','),
       tone: t('modes_page.mode_standard_tone', { defaultValue: 'Neutral, concise' }),
       depth: t('modes_page.mode_standard_depth', { defaultValue: 'Balanced' }),
       availability: [t('modes_page.plan_free', { defaultValue: 'Free' }), t('modes_page.plan_pro', { defaultValue: 'Pro' }), t('modes_page.plan_premium', { defaultValue: 'Premium' })],
-      example: t('modes_page.mode_standard_example', { defaultValue: 'Q: What is photosynthesis?\nA: Plants use sunlight, water, and CO? to make sugar for energy and release oxygen.' }),
+      example: t('modes_page.mode_standard_example', { defaultValue: 'Q: What is photosynthesis?\nA: Plants use sunlight, water, and CO2 to make sugar for energy and release oxygen.' }),
     },
     {
       name: t('modes_page.mode_exam_name', { defaultValue: 'Exam' }),
-      icon: <MascotIcon name="bot-avatar" size={48} />,
-      accent: 'from-blue-500/20 to-cyan-500/20 text-blue-200',
+      icon: <Shield className="h-8 w-8" />,
       summary: t('modes_page.mode_exam_summary', { defaultValue: 'Formal, structured answers with clear steps.' }),
       bestFor: t('modes_page.mode_exam_best', { defaultValue: 'Test prep,Formal solutions,Structured responses' }).split(','),
       tone: t('modes_page.mode_exam_tone', { defaultValue: 'Formal and structured' }),
@@ -38,8 +29,7 @@ export default function ModesPage() {
     },
     {
       name: t('modes_page.mode_eli5_name', { defaultValue: 'ELI5' }),
-      icon: <MascotIcon name="thinking" size={48} />,
-      accent: 'from-purple-500/20 to-pink-500/20 text-purple-200',
+      icon: <Calculator className="h-8 w-8" />,
       summary: t('modes_page.mode_eli5_summary', { defaultValue: 'Simple explanations with minimal jargon.' }),
       bestFor: t('modes_page.mode_eli5_best', { defaultValue: 'First-time learning,Younger students,Quick intuition' }).split(','),
       tone: t('modes_page.mode_eli5_tone', { defaultValue: 'Simple and friendly' }),
@@ -49,19 +39,17 @@ export default function ModesPage() {
     },
     {
       name: t('modes_page.mode_steps_name', { defaultValue: 'Step-by-step' }),
-      icon: <MascotIcon name="bot-avatar" size={48} />,
-      accent: 'from-emerald-500/20 to-teal-500/20 text-emerald-200',
+      icon: <BookOpen className="h-8 w-8" />,
       summary: t('modes_page.mode_steps_summary', { defaultValue: 'Detailed reasoning for math and STEM problems.' }),
       bestFor: t('modes_page.mode_steps_best', { defaultValue: 'Math,Physics,Chemistry' }).split(','),
       tone: t('modes_page.mode_steps_tone', { defaultValue: 'Clear and instructional' }),
       depth: t('modes_page.mode_steps_depth', { defaultValue: 'Very high' }),
       availability: [t('modes_page.plan_pro', { defaultValue: 'Pro' }), t('modes_page.plan_premium', { defaultValue: 'Premium' })],
-      example: t('modes_page.mode_steps_example', { defaultValue: 'Q: Solve 2(x + 3) = 14.\nStep 1: Divide by 2 ? x + 3 = 7.\nStep 2: Subtract 3 ? x = 4.' }),
+      example: t('modes_page.mode_steps_example', { defaultValue: 'Q: Solve 2(x + 3) = 14.\nStep 1: Divide by 2 -> x + 3 = 7.\nStep 2: Subtract 3 -> x = 4.' }),
     },
     {
       name: t('modes_page.mode_alpha_name', { defaultValue: 'Gen Alpha' }),
-      icon: <MascotIcon name="greeting" size={48} />,
-      accent: 'from-pink-500/20 to-rose-500/20 text-pink-200',
+      icon: <Zap className="h-8 w-8" />,
       summary: t('modes_page.mode_alpha_summary', { defaultValue: 'Short, casual explanations with a modern tone.' }),
       bestFor: t('modes_page.mode_alpha_best', { defaultValue: 'Quick checks,Casual language,Short answers' }).split(','),
       tone: t('modes_page.mode_alpha_tone', { defaultValue: 'Casual and modern' }),
@@ -71,138 +59,133 @@ export default function ModesPage() {
     },
   ];
 
-  const MODE_GUIDE = [
+  const guide = [
     {
-      icon: <MascotIcon name="sparkle" size={24} />,
+      icon: <Zap className="h-5 w-5" />,
       title: t('modes_page.guide_1_title', { defaultValue: 'Want a quick, reliable answer? Start with Standard.' }),
       copy: t('modes_page.guide_1_copy', { defaultValue: 'It is the best default when you are unsure which mode to use.' }),
     },
     {
-      icon: <Shield className="w-5 h-5" />,
+      icon: <Shield className="h-5 w-5" />,
       title: t('modes_page.guide_2_title', { defaultValue: 'Studying for a test? Choose Exam.' }),
       copy: t('modes_page.guide_2_copy', { defaultValue: 'It is structured like a clean solution you can review later.' }),
     },
     {
-      icon: <Calculator className="w-5 h-5" />,
+      icon: <Calculator className="h-5 w-5" />,
       title: t('modes_page.guide_3_title', { defaultValue: 'Need the full reasoning? Go Step-by-step.' }),
       copy: t('modes_page.guide_3_copy', { defaultValue: 'Ideal for STEM problems that need clear working.' }),
     },
   ];
 
   return (
-    <MarketingLayout className="oryx-shell-bg text-[color:var(--text-primary)]" headerVariant="glass" footerVariant="solid">
-      <main className="max-w-6xl mx-auto px-6 py-16">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/70 border border-slate-200 text-indigo-500 text-xs font-semibold uppercase tracking-widest mb-6 dark:bg-white/5 dark:border-white/10 dark:text-indigo-300">
-            <BookOpen className="w-4 h-4" />
-            {t('modes_page.badge', { defaultValue: 'Learning Modes' })}
+    <MarketingLayout className="oryx-shell-bg">
+      <main className="marketing-section">
+        <div className="marketing-container">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <div className="marketing-badge">
+              <BookOpen className="h-4 w-4" />
+              <span>{t('modes_page.badge', { defaultValue: 'Learning Modes' })}</span>
+            </div>
+            <h1 className="marketing-heading marketing-title-xl mt-8 text-[color:var(--text-primary)]">
+              {t('modes_page.title_main', { defaultValue: 'Pick the explanation style that fits your goal' })}
+            </h1>
+            <p className="marketing-copy mx-auto mt-6 max-w-2xl text-lg">
+              {t('modes_page.subtitle', { defaultValue: 'Modes change tone and depth without changing accuracy. You can switch modes any time per question.' })}
+            </p>
           </div>
-          <h1 className="text-4xl md:text-6xl font-black mb-6 text-slate-950 dark:text-white">
-            {t('modes_page.title_main', { defaultValue: 'Pick the explanation style that fits your goal' })}
-          </h1>
-          <p className="text-lg text-slate-600 dark:text-slate-400 font-semibold max-w-2xl mx-auto">
-            {t('modes_page.subtitle', { defaultValue: 'Modes change tone and depth without changing accuracy. You can switch modes any time per question.' })}
-          </p>
-        </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          {MODES.map((mode) => (
-            <div
-              key={mode.name}
-              className="rounded-[28px] oryx-surface-panel overflow-hidden flex flex-col"
-            >
-              <div className={`p-6 bg-gradient-to-br ${mode.accent}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="shrink-0 transition-transform hover:scale-110 duration-300">
-                      {mode.icon}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {modes.map((mode) => (
+              <div key={mode.name} className="marketing-panel overflow-hidden">
+                <div className="border-b border-[color:var(--brand-border)] bg-[color:var(--brand-gradient-soft)] p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="marketing-icon-tile">{mode.icon}</div>
+                      <div>
+                        <h2 className="text-2xl font-black text-[color:var(--text-primary)]">{mode.name}</h2>
+                        <p className="mt-1 text-sm font-semibold text-[color:var(--text-secondary)]">{mode.summary}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-black text-slate-950 dark:text-white">{mode.name}</h2>
-                      <p className="text-sm text-slate-700/80 dark:text-white/70 font-semibold">{mode.summary}</p>
-                    </div>
-                  </div>
-                  <div className="hidden sm:flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-slate-700/60 dark:text-white/60">
-                    {mode.availability.map((plan) => (
-                      <span key={plan} className="px-2 py-1 rounded-full bg-white/50 dark:bg-white/10">
-                        {plan}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 grid gap-4 flex-1">
-                <div className="grid sm:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-xs uppercase tracking-widest text-slate-500 dark:text-slate-400 font-semibold mb-2">{t('modes_page.best_for', { defaultValue: 'Best for' })}</p>
                     <div className="flex flex-wrap gap-2">
-                      {mode.bestFor.map((item) => (
-                        <span key={item} className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold dark:bg-white/5 dark:text-slate-200">
-                          {item}
+                      {mode.availability.map((plan) => (
+                        <span key={plan} className="rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-surface-strong)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--text-soft)]">
+                          {plan}
                         </span>
                       ))}
                     </div>
                   </div>
-                  <div className="grid gap-2">
-                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      {t('modes_page.tone', { defaultValue: 'Tone:' })} {mode.tone}
+                </div>
+
+                <div className="grid gap-4 p-6">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="marketing-eyebrow">{t('modes_page.best_for', { defaultValue: 'Best for' })}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {mode.bestFor.map((item) => (
+                          <span key={item} className="rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-surface-strong)] px-3 py-1 text-xs font-semibold text-[color:var(--text-secondary)]">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      {t('modes_page.depth', { defaultValue: 'Depth:' })} {mode.depth}
+                    <div className="grid gap-2 text-sm text-[color:var(--text-secondary)]">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-[color:var(--state-success)]" />
+                        {t('modes_page.tone', { defaultValue: 'Tone:' })} {mode.tone}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-[color:var(--state-success)]" />
+                        {t('modes_page.depth', { defaultValue: 'Depth:' })} {mode.depth}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 sm:hidden">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      {t('modes_page.availability', { defaultValue: 'Availability:' })} {mode.availability.join(', ')}
+                  </div>
+
+                  <div>
+                    <p className="marketing-eyebrow">{t('modes_page.example_output', { defaultValue: 'Example output' })}</p>
+                    <div className="mt-3 rounded-[20px] border border-[color:var(--brand-border)] bg-[color:var(--brand-panel-dark)] px-4 py-4 font-mono text-sm whitespace-pre-wrap text-white">
+                      {mode.example}
                     </div>
                   </div>
                 </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-slate-500 dark:text-slate-400 font-semibold mb-2">{t('modes_page.example_output', { defaultValue: 'Example output' })}</p>
-                  <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 font-mono text-sm text-slate-700 whitespace-pre-wrap dark:bg-slate-900/60 dark:border-white/5 dark:text-slate-200">
-                    {mode.example}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <section className="mt-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-black mb-3 text-slate-950 dark:text-white">{t('modes_page.guide_headline', { defaultValue: 'Not sure which mode to choose?' })}</h2>
-            <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-              {t('modes_page.guide_sub', { defaultValue: 'Use these quick rules to pick the best option in seconds.' })}
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            {MODE_GUIDE.map((item) => (
-              <div key={item.title} className="p-5 rounded-2xl oryx-surface-panel">
-                <div className="w-10 h-10 rounded-xl bg-white/70 dark:bg-white/10 flex items-center justify-center text-indigo-300 mb-3">
-                  {item.icon}
-                </div>
-                <h3 className="font-bold mb-2 text-slate-950 dark:text-white">{item.title}</h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400">{item.copy}</p>
               </div>
             ))}
           </div>
-        </section>
 
-        <div className="mt-16 text-center">
-          <h2 className="text-3xl font-black mb-6 text-slate-950 dark:text-white">{t('modes_page.try_headline', { defaultValue: 'Try a mode in seconds' })}</h2>
-          <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xl mx-auto">
-            {t('modes_page.try_sub', { defaultValue: 'Free gives you Standard, Exam, and ELI5. Pro and Premium unlock Step-by-step and Gen Alpha.' })}
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/signup" className="gradient-btn px-8 py-4 rounded-2xl font-black">
-              {t('modes_page.start_free', { defaultValue: 'Start Free' })}
-            </Link>
-            <Link to="/pricing" className="px-8 py-4 rounded-2xl border border-slate-200 bg-white/70 text-slate-950 font-black hover:bg-slate-50 transition-colors dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
-              {t('modes_page.view_pricing', { defaultValue: 'View Pricing' })}
-            </Link>
+          <section className="mt-16">
+            <div className="text-center">
+              <h2 className="marketing-heading marketing-title-md text-[color:var(--text-primary)]">
+                {t('modes_page.guide_headline', { defaultValue: 'Not sure which mode to choose?' })}
+              </h2>
+              <p className="marketing-copy mx-auto mt-3 max-w-2xl">
+                {t('modes_page.guide_sub', { defaultValue: 'Use these quick rules to pick the best option in seconds.' })}
+              </p>
+            </div>
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              {guide.map((item) => (
+                <div key={item.title} className="marketing-panel p-5">
+                  <div className="marketing-icon-tile h-10 w-10 rounded-[14px]">{item.icon}</div>
+                  <h3 className="mt-4 text-lg font-black text-[color:var(--text-primary)]">{item.title}</h3>
+                  <p className="marketing-copy mt-2 text-sm">{item.copy}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div className="marketing-panel-strong mt-16 p-10 text-center">
+            <h2 className="marketing-heading marketing-title-md text-[color:var(--text-primary)]">
+              {t('modes_page.try_headline', { defaultValue: 'Try a mode in seconds' })}
+            </h2>
+            <p className="marketing-copy mx-auto mt-4 max-w-xl">
+              {t('modes_page.try_sub', { defaultValue: 'Free gives you Standard, Exam, and ELI5. Pro and Premium unlock Step-by-step and Gen Alpha.' })}
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Link to="/signup" className="gradient-btn rounded-full px-8 py-4 font-black">
+                {t('modes_page.start_free', { defaultValue: 'Start Free' })}
+              </Link>
+              <Link to="/pricing" className="marketing-secondary-btn rounded-full px-8 py-4 font-black">
+                {t('modes_page.view_pricing', { defaultValue: 'View Pricing' })}
+              </Link>
+            </div>
           </div>
         </div>
       </main>

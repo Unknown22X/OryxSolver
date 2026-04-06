@@ -24,9 +24,35 @@ type LegalVersions = {
   privacyVersion: string;
 };
 
+const AUTH_USER_CACHE_KEY = 'oryx_cached_auth_user_v1';
+
+function readCachedAuthUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(AUTH_USER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthUser;
+    if (!parsed?.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAuthUser(user: AuthUser | null) {
+  try {
+    if (!user) {
+      localStorage.removeItem(AUTH_USER_CACHE_KEY);
+      return;
+    }
+    localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(user));
+  } catch {
+    // Ignore cache persistence errors.
+  }
+}
+
 export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions) {
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => readCachedAuthUser());
+  const [isAuthLoading, setIsAuthLoading] = useState(() => readCachedAuthUser() === null);
   const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -49,6 +75,7 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
 
     const unsubscribe = subscribeAuthState((nextUser) => {
       setAuthUser(nextUser);
+      writeCachedAuthUser(nextUser);
       setIsAuthLoading(false);
       if (nextUser && onAuthChange) {
         onAuthChange();
@@ -65,6 +92,7 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
       try {
         const nextUser = await refreshAuthUser();
         setAuthUser(nextUser);
+        writeCachedAuthUser(nextUser);
         if (nextUser && onAuthChange) {
           onAuthChange();
         }
@@ -292,6 +320,7 @@ export function useAuth(onAuthChange?: () => void, legalVersions?: LegalVersions
     try {
       const nextUser = await refreshAuthUser();
       setAuthUser(nextUser);
+      writeCachedAuthUser(nextUser);
       if (nextUser && onAuthChange) {
         onAuthChange();
       }

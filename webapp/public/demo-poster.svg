@@ -1,22 +1,90 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#111827" />
-      <stop offset="100%" stop-color="#0b1220" />
+    <linearGradient id="bg" x1="120" y1="40" x2="1440" y2="980" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171D3A"/>
+      <stop offset="0.48" stop-color="#0F1730"/>
+      <stop offset="1" stop-color="#09101F"/>
     </linearGradient>
+    <linearGradient id="frame" x1="264" y1="220" x2="1318" y2="796" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A2348"/>
+      <stop offset="1" stop-color="#0D1328"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="820" y1="292" x2="1195" y2="638" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5BD3FF"/>
+      <stop offset="0.52" stop-color="#6F7CFF"/>
+      <stop offset="1" stop-color="#37D5B9"/>
+    </linearGradient>
+    <linearGradient id="cardGlow" x1="318" y1="278" x2="690" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17234A"/>
+      <stop offset="1" stop-color="#101936"/>
+    </linearGradient>
+    <filter id="softGlow" x="0" y="0" width="1600" height="1000" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="72"/>
+    </filter>
   </defs>
-  <rect width="1200" height="675" fill="url(#bg)" />
-  <rect x="80" y="80" width="1040" height="515" rx="28" fill="#0f172a" stroke="#1f2937" stroke-width="2" />
-  <circle cx="130" cy="120" r="8" fill="#ef4444" />
-  <circle cx="160" cy="120" r="8" fill="#f59e0b" />
-  <circle cx="190" cy="120" r="8" fill="#22c55e" />
-  <text x="120" y="220" fill="#e2e8f0" font-family="Work Sans, Arial, sans-serif" font-size="40" font-weight="700">
-    Drop your demo.mp4 here
-  </text>
-  <text x="120" y="280" fill="#94a3b8" font-family="Work Sans, Arial, sans-serif" font-size="24">
-    public/demo.mp4
-  </text>
-  <text x="120" y="360" fill="#64748b" font-family="Work Sans, Arial, sans-serif" font-size="20">
-    The landing page will render the video player automatically.
-  </text>
+
+  <rect width="1600" height="1000" rx="44" fill="url(#bg)"/>
+
+  <g filter="url(#softGlow)" opacity="0.55">
+    <circle cx="250" cy="160" r="150" fill="#5ED4FF"/>
+    <circle cx="1310" cy="220" r="190" fill="#7582FF"/>
+    <circle cx="1170" cy="810" r="185" fill="#3BD3BD"/>
+  </g>
+
+  <rect x="170" y="118" width="1260" height="764" rx="42" fill="#091121" stroke="#2B3768" stroke-width="2"/>
+  <rect x="214" y="162" width="1172" height="676" rx="30" fill="url(#frame)"/>
+
+  <rect x="252" y="198" width="1096" height="68" rx="22" fill="#0E1730" stroke="#27335F"/>
+  <circle cx="302" cy="232" r="8" fill="#FF6C81"/>
+  <circle cx="334" cy="232" r="8" fill="#FFC161"/>
+  <circle cx="366" cy="232" r="8" fill="#3CD7B9"/>
+  <rect x="430" y="214" width="276" height="34" rx="17" fill="#152043"/>
+  <text x="462" y="236" fill="#DDE5FF" font-family="Sora, Arial, sans-serif" font-size="18" font-weight="700">OryxSolver walkthrough</text>
+
+  <rect x="294" y="298" width="404" height="404" rx="30" fill="url(#cardGlow)" stroke="#2B396A"/>
+  <text x="332" y="366" fill="#F7F9FF" font-family="Sora, Arial, sans-serif" font-size="48" font-weight="800">Watch the</text>
+  <text x="332" y="420" fill="#7FE4DB" font-family="Sora, Arial, sans-serif" font-size="48" font-weight="800">real capture flow</text>
+  <text x="332" y="478" fill="#AAB5DA" font-family="Sora, Arial, sans-serif" font-size="22" font-weight="500">See how a question moves from</text>
+  <text x="332" y="510" fill="#AAB5DA" font-family="Sora, Arial, sans-serif" font-size="22" font-weight="500">Chrome into a structured answer.</text>
+
+  <rect x="332" y="554" width="132" height="40" rx="20" fill="#18264E" stroke="#30407C"/>
+  <text x="364" y="579" fill="#DCE4FF" font-family="Sora, Arial, sans-serif" font-size="16" font-weight="700">Step 1</text>
+  <text x="332" y="634" fill="#F7F9FF" font-family="Sora, Arial, sans-serif" font-size="26" font-weight="700">Capture on the page</text>
+  <rect x="332" y="654" width="300" height="12" rx="6" fill="#263766"/>
+  <rect x="332" y="678" width="238" height="12" rx="6" fill="#1E2D56"/>
+
+  <rect x="746" y="298" width="560" height="404" rx="32" fill="#091121" stroke="#30407C"/>
+  <rect x="782" y="334" width="488" height="250" rx="24" fill="url(#accent)"/>
+  <rect x="812" y="364" width="428" height="190" rx="22" fill="#0E1630" fill-opacity="0.92"/>
+  <rect x="844" y="394" width="120" height="18" rx="9" fill="#24345E"/>
+  <rect x="980" y="394" width="112" height="18" rx="9" fill="#1B294C"/>
+  <rect x="844" y="430" width="248" height="15" rx="7.5" fill="#253762"/>
+  <rect x="844" y="458" width="326" height="15" rx="7.5" fill="#223259"/>
+  <rect x="844" y="486" width="278" height="15" rx="7.5" fill="#223259"/>
+  <rect x="1112" y="430" width="96" height="71" rx="18" fill="#162243"/>
+  <rect x="1128" y="446" width="64" height="12" rx="6" fill="#5BD3FF"/>
+  <rect x="1128" y="468" width="46" height="10" rx="5" fill="#7AE1D9"/>
+  <rect x="1128" y="486" width="54" height="10" rx="5" fill="#6D79FF"/>
+
+  <circle cx="1026" cy="459" r="68" fill="#F4F7FF" fill-opacity="0.16"/>
+  <circle cx="1026" cy="459" r="50" fill="#F4F7FF" fill-opacity="0.24"/>
+  <path d="M1008 428.5C1008 424.027 1012.84 421.158 1016.82 423.395L1067.44 451.895C1071.59 454.229 1071.59 460.201 1067.44 462.535L1016.82 491.035C1012.84 493.272 1008 490.403 1008 485.93V428.5Z" fill="white"/>
+
+  <rect x="782" y="610" width="154" height="40" rx="20" fill="#131E3E" stroke="#30407C"/>
+  <text x="816" y="635" fill="#DCE4FF" font-family="Sora, Arial, sans-serif" font-size="16" font-weight="700">Step 2</text>
+  <text x="782" y="688" fill="#F7F9FF" font-family="Sora, Arial, sans-serif" font-size="26" font-weight="700">Choose a learning mode</text>
+
+  <rect x="1174" y="610" width="96" height="36" rx="18" fill="#12213D" stroke="#2D3E77"/>
+  <text x="1195" y="633" fill="#89DAD0" font-family="Sora, Arial, sans-serif" font-size="14" font-weight="700">Exam</text>
+  <rect x="1066" y="610" width="96" height="36" rx="18" fill="#12213D" stroke="#2D3E77"/>
+  <text x="1086" y="633" fill="#7ECFFF" font-family="Sora, Arial, sans-serif" font-size="14" font-weight="700">ELI5</text>
+  <rect x="958" y="610" width="96" height="36" rx="18" fill="#12213D" stroke="#2D3E77"/>
+  <text x="974" y="633" fill="#B9C5FF" font-family="Sora, Arial, sans-serif" font-size="14" font-weight="700">Steps</text>
+
+  <rect x="746" y="736" width="560" height="64" rx="24" fill="#0C152D" stroke="#273764"/>
+  <circle cx="792" cy="768" r="16" fill="#34D7B9"/>
+  <rect x="824" y="752" width="206" height="14" rx="7" fill="#E8EEFF" fill-opacity="0.92"/>
+  <rect x="824" y="774" width="304" height="12" rx="6" fill="#2A3A69"/>
+  <rect x="1172" y="748" width="96" height="40" rx="20" fill="#F4F7FF"/>
+  <text x="1198" y="773" fill="#131B31" font-family="Sora, Arial, sans-serif" font-size="16" font-weight="800">Send</text>
 </svg>

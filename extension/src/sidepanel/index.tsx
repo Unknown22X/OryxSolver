@@ -1,11 +1,13 @@
 import "../instrument";
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../index.css';
-import 'katex/dist/katex.min.css';
 import App from './App.tsx';
 import * as Sentry from "@sentry/react";
 import '../i18n';
+
+const panelBootStart = performance.now();
+let loaderRemoved = false;
+let loaderFallbackTimer: number | null = null;
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -33,8 +35,23 @@ const root = createRoot(rootElement, {
   onRecoverableError: Sentry.reactErrorHandler(),
 });
 
+function removeInitialLoader() {
+  if (loaderRemoved) return;
+  loaderRemoved = true;
+  if (loaderFallbackTimer !== null) {
+    window.clearTimeout(loaderFallbackTimer);
+    loaderFallbackTimer = null;
+  }
+  document.getElementById('oryx-initial-loader')?.remove();
+  const bootMs = Math.round(performance.now() - panelBootStart);
+  console.info(`[panel-perf] First render ready in ${bootMs}ms`);
+}
+
 root.render(
-  <StrictMode>
-    <SentryApp />
-  </StrictMode>,
+  <SentryApp />,
 );
+
+requestAnimationFrame(() => {
+  requestAnimationFrame(removeInitialLoader);
+});
+loaderFallbackTimer = window.setTimeout(removeInitialLoader, 2500);

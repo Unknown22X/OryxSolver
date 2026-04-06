@@ -141,7 +141,7 @@ export default function UserDashboard({ user }: { user: User }) {
       { id: 'first_solve', name: t('dashboard.achv_first_solve_name'), description: t('dashboard.achv_first_solve_desc'), icon: 'sparkle' as const, unlocked: totalSolves >= 1 },
       { id: 'hot_streak', name: t('dashboard.achv_hot_streak_name'), description: t('dashboard.achv_hot_streak_desc'), icon: 'sparkle' as const, unlocked: currentStreak >= 3 },
       { id: 'learner', name: t('dashboard.achv_learner_name'), description: t('dashboard.achv_learner_desc'), icon: 'sparkle' as const, unlocked: totalSolves >= 10 },
-      { id: 'night_owl', name: t('dashboard.achv_night_owl_name'), description: t('dashboard.achv_night_owl_desc'), icon: 'bot-avatar' as const, unlocked: nightOwl },
+      { id: 'night_owl', name: t('dashboard.achv_night_owl_name'), description: t('dashboard.achv_night_owl_desc'), icon: 'scholar' as const, unlocked: nightOwl },
     ];
   }, [totalSolves, currentStreak, history, t]);
 
@@ -440,7 +440,7 @@ export default function UserDashboard({ user }: { user: User }) {
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
                       {usage?.monthlyQuestionsUsed ?? 0} <span className="text-xs font-bold text-slate-500 italic">/ {usage?.monthlyQuestionsLimit ?? 15}</span>
                     </p>
-                    <MascotIcon name="bot-avatar" size={18} className={isOverLimit ? "opacity-100" : "opacity-70"} />
+                    <MascotIcon name="scholar" size={18} className={isOverLimit ? "opacity-100" : "opacity-70"} />
                  </div>
                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden mb-2">
                    <div 

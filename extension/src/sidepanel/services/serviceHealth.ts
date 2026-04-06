@@ -1,5 +1,3 @@
-import { getApiUrl } from './apiConfig';
-
 export type ServiceDependency = 'network' | 'backend' | 'auth' | 'db' | 'ai';
 export type DependencyCondition = 'healthy' | 'degraded' | 'outage' | 'maintenance';
 export type ServiceOverall = 'healthy' | 'degraded' | 'outage' | 'maintenance';
@@ -44,10 +42,14 @@ type ResilientFetchOptions = {
 };
 
 const STORAGE_KEY = 'oryx_extension_service_health_snapshot';
+const HEALTHY_SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const UNHEALTHY_SNAPSHOT_MAX_AGE_MS = 15 * 60 * 1000;
 const DEPENDENCIES: ServiceDependency[] = ['network', 'backend', 'auth', 'db', 'ai'];
 const listeners = new Set<Listener>();
 const circuitState = new Map<ServiceDependency, { failures: number; openUntil: number | null }>();
 const HEALTHY_MESSAGE = 'All services are operational.';
+let healthEndpointDisabledUntil = 0;
+const explicitHealthEndpointUrl = String(import.meta.env.VITE_HEALTH_PUBLIC_API_URL ?? '').trim();
 
 function nowIso() {
   return new Date().toISOString();
@@ -84,10 +86,40 @@ function createDefaultSnapshot(): ServiceHealthSnapshot {
   };
 }
 
+function clearStoredSnapshot() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore persistence failures.
+  }
+}
+
+function hasUnhealthyDependency(snapshot: ServiceHealthSnapshot) {
+  return DEPENDENCIES.some((dependency) => snapshot.dependencies[dependency]?.status !== 'healthy');
+}
+
+function isSnapshotExpired(snapshot: ServiceHealthSnapshot) {
+  const updatedAtMs = new Date(snapshot.updatedAt).getTime();
+  if (!Number.isFinite(updatedAtMs)) return true;
+  const ageMs = Date.now() - updatedAtMs;
+  if (ageMs < 0) return false;
+  const maxAgeMs =
+    snapshot.overall === 'healthy' && !hasUnhealthyDependency(snapshot)
+      ? HEALTHY_SNAPSHOT_MAX_AGE_MS
+      : UNHEALTHY_SNAPSHOT_MAX_AGE_MS;
+  return ageMs > maxAgeMs;
+}
+
 function readStoredSnapshot() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as ServiceHealthSnapshot) : null;
+    if (!raw) return null;
+    const parsed = sanitizeSnapshotMessages(JSON.parse(raw) as ServiceHealthSnapshot);
+    if (isSnapshotExpired(parsed)) {
+      clearStoredSnapshot();
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -137,7 +169,9 @@ function recomputeSnapshot(snapshot: ServiceHealthSnapshot): ServiceHealthSnapsh
     message = summarizeIncident('outage', 'Service outage');
   } else if (DEPENDENCIES.some((dependency) => snapshot.dependencies[dependency].status === 'degraded')) {
     overall = 'degraded';
-    readOnly = true;
+    // Degraded should warn users but not force the whole app into read-only mode.
+    // Circuit breakers still pause specific failing dependencies when needed.
+    readOnly = false;
     message = summarizeIncident('degraded', 'Service degradation');
   }
 
@@ -245,6 +279,36 @@ function dependencyFromErrorCode(code?: string): Exclude<ServiceDependency, 'net
   return 'backend';
 }
 
+function sanitizeHealthMessage(message: string, dependency: ServiceDependency) {
+  const normalized = message.toLowerCase();
+  const isSupabase = normalized.includes('supabase.co');
+  const isFetch = normalized.includes('failed to fetch') || normalized.includes('networkerror');
+  if (dependency === 'network') return 'You appear to be offline.';
+  if (isSupabase || isFetch) return 'Service is temporarily unavailable. Please try again.';
+  return message;
+}
+
+function sanitizeSnapshotMessages(snapshot: ServiceHealthSnapshot): ServiceHealthSnapshot {
+  const sanitizedDependencies = Object.fromEntries(
+    DEPENDENCIES.map((dependency) => [
+      dependency,
+      {
+        ...snapshot.dependencies[dependency],
+        message: sanitizeHealthMessage(
+          snapshot.dependencies[dependency].message || 'Service is temporarily unavailable. Please try again.',
+          dependency,
+        ),
+      },
+    ]),
+  ) as ServiceHealthSnapshot['dependencies'];
+
+  return {
+    ...snapshot,
+    message: sanitizeHealthMessage(snapshot.message || 'Service is temporarily unavailable. Please try again.', 'backend'),
+    dependencies: sanitizedDependencies,
+  };
+}
+
 export function subscribeServiceHealth(listener: Listener) {
   listeners.add(listener);
   listener(currentSnapshot);
@@ -259,6 +323,11 @@ export function getServiceHealthSnapshot() {
 
 export function setServiceHealthSnapshot(snapshot: ServiceHealthSnapshot) {
   saveSnapshot(recomputeSnapshot(snapshot));
+}
+
+export function resetServiceHealthSnapshot() {
+  clearStoredSnapshot();
+  saveSnapshot(createDefaultSnapshot());
 }
 
 export function markOnline() {
@@ -278,8 +347,17 @@ export function applyServiceHealthError(error: unknown, fallbackDependency: Excl
     return;
   }
   const retryAfterSec = resilientError?.retryAfterSec;
-  const message = resilientError?.message || 'Service is temporarily unavailable.';
+  const rawMessage = resilientError?.message || 'Service is temporarily unavailable.';
+  const message = sanitizeHealthMessage(rawMessage, dependency);
   const status = resilientError?.status ?? 0;
+
+  // Don't report user-level auth errors as service-wide health issues.
+  // These are handled by the UI (Login screen) rather than a global notice banner.
+  if (status === 401 || status === 403 || message.includes('No active auth session')) {
+    console.info(`[health] Ignoring user-level error for ${dependency}:`, message);
+    return;
+  }
+
   const condition: DependencyCondition =
     code === 'RATE_LIMITED'
       ? 'degraded'
@@ -315,8 +393,25 @@ export function getDependencyRetryCountdown(
 }
 
 export async function fetchPublicServiceHealth() {
-  const url = getApiUrl('/health-public');
+  // Only poll public health when explicitly configured for this environment.
+  // Deriving it from the generic API base causes 404 noise in environments
+  // where /health-public is not deployed.
+  const url = explicitHealthEndpointUrl || '';
+  if (!url) {
+    return { health: currentSnapshot };
+  }
+  if (healthEndpointDisabledUntil > Date.now()) {
+    return { health: currentSnapshot };
+  }
+
   const response = await fetch(url, { method: 'GET' });
+  if (response.status === 404) {
+    // Endpoint not deployed in this environment; avoid repeated failed calls.
+    healthEndpointDisabledUntil = Date.now() + 30 * 60 * 1000;
+    console.warn(`[service-health] ${url} returned 404. Health polling paused for 30 minutes.`);
+    return { health: currentSnapshot };
+  }
+
   if (!response.ok) {
     throw createResilientError(`Health request failed: ${response.status}`, {
       code: response.status >= 500 ? 'BACKEND_UNREACHABLE' : 'SERVICE_DEGRADED',

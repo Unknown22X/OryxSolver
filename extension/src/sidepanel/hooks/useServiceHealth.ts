@@ -10,6 +10,29 @@ import {
   type ServiceHealthSnapshot,
 } from '../services/serviceHealth';
 
+function scheduleIdle(task: () => void) {
+  const withIdle = window as Window & {
+    requestIdleCallback?: (callback: () => void, opts?: { timeout: number }) => number;
+    cancelIdleCallback?: (id: number) => void;
+  };
+
+  if (typeof withIdle.requestIdleCallback === 'function') {
+    return withIdle.requestIdleCallback(task, { timeout: 1200 });
+  }
+  return window.setTimeout(task, 120);
+}
+
+function cancelScheduled(handle: number) {
+  const withIdle = window as Window & {
+    cancelIdleCallback?: (id: number) => void;
+  };
+  if (typeof withIdle.cancelIdleCallback === 'function') {
+    withIdle.cancelIdleCallback(handle);
+    return;
+  }
+  window.clearTimeout(handle);
+}
+
 export function useServiceHealth() {
   const [snapshot, setSnapshot] = useState<ServiceHealthSnapshot>(() => getServiceHealthSnapshot());
 
@@ -43,12 +66,15 @@ export function useServiceHealth() {
       }
     };
 
-    void refresh();
+    const handle = scheduleIdle(() => {
+      void refresh();
+    });
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh();
     }, 60000);
     return () => {
       cancelled = true;
+      cancelScheduled(handle);
       window.clearInterval(interval);
     };
   }, []);

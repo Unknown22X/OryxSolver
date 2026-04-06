@@ -16,8 +16,8 @@ export default function ExtensionAuthPage() {
 
       <div className="w-full max-w-xl relative z-10 animate-in fade-in zoom-in-95 duration-700">
         <div className="oryx-surface-panel-strong relative overflow-hidden rounded-[36px] p-10 text-center">
-          <div className="mx-auto mb-6 h-16 w-16 flex items-center justify-center">
-            <img src="/app_icons/logo.png" alt="Oryx" className="w-full h-full object-contain" />
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center overflow-hidden rounded-[24%]">
+            <img src="/app_icons/logo.png" alt="Oryx" className="oryx-logo-clean h-full w-full object-contain" />
           </div>
           <p className="text-xs font-black uppercase tracking-[0.25em] text-indigo-400">Extension sign-in</p>
           <h1 className="mt-4 text-4xl font-black tracking-tight">Finish sign in on the web</h1>

@@ -90,11 +90,23 @@ export async function getAccessToken(): Promise<string> {
   }
   try {
     const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
+    if (error) {
+      applyServiceHealthError(error, 'auth');
+      throw error;
+    }
     const token = data.session?.access_token;
-    if (!token) throw new Error('No active auth session. Please sign in again.');
+    if (!token) {
+      // Don't report missing session as a service health failure.
+      throw new Error('No active auth session. Please sign in again.');
+    }
     return token;
   } catch (error) {
+    // Already reported above if it was a Supabase API error.
+    // If it was the manual missing token error, we don't report it.
+    if ((error as Error).message.includes('No active auth session')) {
+      throw error;
+    }
+    // For any other unexpected errors, report to health system.
     applyServiceHealthError(error, 'auth');
     throw error;
   }
@@ -138,6 +150,7 @@ export async function signInWithGoogle(): Promise<void> {
 
   // Supabase automatically generates and stores the PKCE code_challenge and code_verifier 
   // behind the scenes when flowType is 'pkce'.
+  const start = performance.now();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -145,11 +158,16 @@ export async function signInWithGoogle(): Promise<void> {
       skipBrowserRedirect: true,
     },
   });
+  const oauthUrlReadyMs = Math.round(performance.now() - start);
+  console.info(`[auth-perf] Google OAuth URL ready in ${oauthUrlReadyMs}ms`);
   if (error) throw error;
   if (!data?.url) {
     throw new Error('Google sign-in could not be started.');
   }
+  const tabCreateStart = performance.now();
   await chrome.tabs.create({ url: data.url });
+  const tabCreateMs = Math.round(performance.now() - tabCreateStart);
+  console.info(`[auth-perf] OAuth tab created in ${tabCreateMs}ms`);
 }
 
 type SignUpMetadata = {

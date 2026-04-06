@@ -88,4 +88,11 @@
     backdrop-filter: blur(20px);
     box-shadow: var(--oryx-shadow-soft);
   }
+
+  .oryx-logo-clean {
+    display: block;
+    border-radius: 24%;
+    transform: scale(1.015);
+    transform-origin: center;
+  }
 }
