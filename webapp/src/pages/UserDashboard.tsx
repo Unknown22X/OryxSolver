@@ -3,14 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { User } from '@supabase/supabase-js';
 import {
   ArrowRight,
-  BookOpen,
   CheckCircle2,
-  Flame,
   Loader2,
   MessageSquareWarning,
-  Sparkles,
   Target,
-  Zap,
   LayoutDashboard,
   TrendingUp,
   CreditCard,
@@ -18,7 +14,6 @@ import {
   ChevronUp,
   Download,
   Trophy,
-  History as HistoryIcon,
   Shapes,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -31,6 +26,7 @@ import { useUsage } from '../hooks/useUsage';
 import { getOnboardingPreferences } from '../lib/onboarding';
 import { toPublicErrorMessage } from '../lib/supabaseAuth';
 import { useTranslation } from 'react-i18next';
+import { MascotIcon } from '../components/MascotIcon';
 
 type AnswerFeedbackDraft = {
   status?: 'correct' | 'incorrect';
@@ -142,10 +138,10 @@ export default function UserDashboard({ user }: { user: User }) {
     });
 
     return [
-      { id: 'first_solve', name: t('dashboard.achv_first_solve_name'), description: t('dashboard.achv_first_solve_desc'), icon: Sparkles, unlocked: totalSolves >= 1 },
-      { id: 'hot_streak', name: t('dashboard.achv_hot_streak_name'), description: t('dashboard.achv_hot_streak_desc'), icon: Flame, unlocked: currentStreak >= 3 },
-      { id: 'learner', name: t('dashboard.achv_learner_name'), description: t('dashboard.achv_learner_desc'), icon: BookOpen, unlocked: totalSolves >= 10 },
-      { id: 'night_owl', name: t('dashboard.achv_night_owl_name'), description: t('dashboard.achv_night_owl_desc'), icon: Zap, unlocked: nightOwl },
+      { id: 'first_solve', name: t('dashboard.achv_first_solve_name'), description: t('dashboard.achv_first_solve_desc'), icon: 'sparkle' as const, unlocked: totalSolves >= 1 },
+      { id: 'hot_streak', name: t('dashboard.achv_hot_streak_name'), description: t('dashboard.achv_hot_streak_desc'), icon: 'sparkle' as const, unlocked: currentStreak >= 3 },
+      { id: 'learner', name: t('dashboard.achv_learner_name'), description: t('dashboard.achv_learner_desc'), icon: 'sparkle' as const, unlocked: totalSolves >= 10 },
+      { id: 'night_owl', name: t('dashboard.achv_night_owl_name'), description: t('dashboard.achv_night_owl_desc'), icon: 'bot-avatar' as const, unlocked: nightOwl },
     ];
   }, [totalSolves, currentStreak, history, t]);
 
@@ -286,12 +282,15 @@ export default function UserDashboard({ user }: { user: User }) {
            <div className="absolute -left-24 -top-24 w-96 h-96 bg-violet-600/10 rounded-full blur-[120px] pointer-events-none" />
            <div className="relative">
               <p className="text-xs font-black uppercase tracking-[0.3em] text-violet-500 mb-4 px-1">{t('dashboard.overview')}</p>
-              <h1 className="mb-3 text-2xl font-black leading-tight tracking-tight text-slate-900 dark:text-white sm:text-3xl lg:text-4xl xl:text-[3.25rem]">
-                {t('dashboard.welcome_back')}{' '}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-500">
-                  {profile?.displayName?.split(' ')[0] ?? t('nav.user')}
-                </span>
-              </h1>
+              <div className="flex items-end gap-4 mb-3">
+                <MascotIcon name="greeting" size={64} />
+                <h1 className="text-2xl font-black leading-tight tracking-tight text-slate-900 dark:text-white sm:text-3xl lg:text-4xl xl:text-[3.25rem]">
+                  {t('dashboard.welcome_back')}{' '}
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-500">
+                    {profile?.displayName?.split(' ')[0] ?? t('nav.user')}
+                  </span>
+                </h1>
+              </div>
               <p className="mb-6 max-w-2xl text-[15px] font-medium leading-relaxed text-slate-600 dark:text-slate-400 lg:text-base">
                 {coachingSubtitle}
               </p>
@@ -320,7 +319,7 @@ export default function UserDashboard({ user }: { user: User }) {
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-violet-400 via-indigo-500 to-violet-600 animate-gradient-x" />
                   <div className="relative flex items-center justify-center gap-3 rounded-[27px] bg-violet-600 px-8 py-4 text-white transition-colors group-hover:bg-transparent">
-                    <Sparkles size={22} className="text-violet-200 group-hover:text-white" />
+                    <MascotIcon name="sparkle" size={22} className="group-hover:opacity-100 opacity-80" />
                     <span className="px-2 text-base font-black uppercase tracking-widest lg:text-lg">{t('dashboard.open_solver')}</span>
                     <ArrowRight size={22} className={`${isRtl ? 'rotate-180 group-hover:-translate-x-1' : 'group-hover:translate-x-1'} transition-transform`} />
                   </div>
@@ -441,7 +440,7 @@ export default function UserDashboard({ user }: { user: User }) {
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
                       {usage?.monthlyQuestionsUsed ?? 0} <span className="text-xs font-bold text-slate-500 italic">/ {usage?.monthlyQuestionsLimit ?? 15}</span>
                     </p>
-                    <Zap className={isOverLimit ? "text-amber-500" : "text-violet-500"} size={18} />
+                    <MascotIcon name="bot-avatar" size={18} className={isOverLimit ? "opacity-100" : "opacity-70"} />
                  </div>
                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden mb-2">
                    <div 
@@ -526,7 +525,7 @@ export default function UserDashboard({ user }: { user: User }) {
                            {currentStreak >= 7 ? t('dashboard.champion_status') : t('dashboard.more_days_to_streak', { count: 7 - currentStreak })}
                         </p>
                     </div>
-                    <Flame className={currentStreak > 0 ? "text-orange-500 animate-pulse" : "text-slate-700"} size={22} />
+                    <MascotIcon name="sparkle" size={22} className={currentStreak > 0 ? "animate-pulse" : "opacity-30"} />
                  </div>
                </div>
             </div>
@@ -569,7 +568,7 @@ export default function UserDashboard({ user }: { user: User }) {
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
                       {usage?.paygoCreditsRemaining ?? 0} <span className="text-xs font-bold text-slate-500 italic">{t('dashboard.credits')}</span>
                     </p>
-                    <Sparkles className="text-emerald-500 border border-emerald-500/10 p-0.5 rounded-md" size={18} />
+                    <MascotIcon name="sparkle" size={18} />
                  </div>
                  <div className="pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
                     <p className="text-[10px] font-bold text-slate-500 italic">{t('dashboard.extra_backup')}</p>
@@ -588,7 +587,7 @@ export default function UserDashboard({ user }: { user: User }) {
             <div className="relative p-6 rounded-[32px] bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-600 dark:to-indigo-600 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl shadow-violet-500/20">
               <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
                 <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
-                  <Sparkles className="text-white" size={24} />
+                  <MascotIcon name="sparkle" size={24} />
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-white">{t('dashboard.unlock_unlimited')}</h3>
@@ -615,14 +614,18 @@ export default function UserDashboard({ user }: { user: User }) {
 
          <div className="mb-16 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
            {[
-             { label: t('dashboard.total_solves'), value: totalSolves, icon: HistoryIcon, color: 'text-violet-500 dark:text-violet-400', bg: 'bg-violet-500/10 dark:bg-violet-400/10' },
-             { label: t('dashboard.day_streak'), value: t('dashboard.days', { count: currentStreak }), icon: Flame, color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-500/10 dark:bg-orange-400/10' },
+             { label: t('dashboard.total_solves'), value: totalSolves, icon: 'historian', color: 'text-violet-500 dark:text-violet-400', bg: 'bg-violet-500/10 dark:bg-violet-400/10' },
+             { label: t('dashboard.day_streak'), value: t('dashboard.days', { count: currentStreak }), icon: 'sparkle', color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-500/10 dark:bg-orange-400/10' },
              { label: t('dashboard.avg_per_day'), value: (totalSolves / 30).toFixed(1), icon: TrendingUp, color: 'text-emerald-500 dark:text-emerald-400', bg: 'bg-emerald-500/10 dark:bg-emerald-400/10' },
              { label: t('dashboard.subjects'), value: subjectStats.uniqueCount, icon: Shapes, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-500/10 dark:bg-blue-400/10' },
            ].map((stat, i) => (
              <div key={i} className="flex items-center gap-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50 transition-all group hover:border-indigo-500/30 dark:border-white/5 dark:bg-[#111118] dark:hover:border-white/10">
                 <div className={`w-12 h-12 rounded-2xl ${stat.bg} flex items-center justify-center transition-transform group-hover:scale-110`}>
-                   <stat.icon size={20} className={stat.color} />
+                   {typeof stat.icon === 'string' ? (
+                      <MascotIcon name={stat.icon as any} size={20} />
+                   ) : (
+                      <stat.icon size={20} className={stat.color} />
+                   )}
                 </div>
                 <div>
                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{stat.label}</p>
@@ -669,8 +672,8 @@ export default function UserDashboard({ user }: { user: User }) {
              </div>
            ) : history.length === 0 ? (
              <div className="flex flex-col items-center justify-center py-20 px-6 rounded-[40px] border border-dashed border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02]">
-                <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-6">
-                   <BookOpen size={24} className="text-slate-400 dark:text-slate-500" />
+                <div className="w-24 h-24 flex items-center justify-center mb-6">
+                   <MascotIcon name="historian" size={96} />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{t('dashboard.no_solves_yet')}</h3>
                 <p className="text-slate-500 text-center max-w-sm font-medium mb-8">
@@ -779,7 +782,6 @@ export default function UserDashboard({ user }: { user: User }) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
              {achievements.map((achievement) => {
-               const Icon = achievement.icon;
                return (
                   <div 
                     key={achievement.id}
@@ -799,7 +801,7 @@ export default function UserDashboard({ user }: { user: User }) {
                     <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-700 ${
                       achievement.unlocked ? 'rotate-0 bg-gradient-to-br from-amber-400 to-orange-500 text-black' : '-rotate-6 bg-white/70 text-slate-600 dark:bg-white/5'
                     } group-hover:scale-110 group-hover:rotate-0`}>
-                       <Icon size={24} />
+                       <MascotIcon name={achievement.icon} size={24} />
                     </div>
                     <h3 className={`mb-1 text-lg font-black ${achievement.unlocked ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-500'}`}>{achievement.name}</h3>
                    <p className="text-xs font-bold text-slate-500 leading-relaxed">{achievement.description}</p>

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Mail, Menu, Moon, Sparkles, Sun, X } from 'lucide-react';
+import { ArrowRight, Mail, Menu, Moon, Sun, X } from 'lucide-react';
 import { usePublicAppConfig } from '../hooks/usePublicAppConfig';
 import { supabase } from '../lib/supabase';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
+import { MascotIcon } from './MascotIcon';
 
 type MarketingLayoutProps = {
   children: React.ReactNode;
@@ -129,8 +130,12 @@ export default function MarketingLayout({
       <header className="fixed inset-x-0 top-0 z-[100] border-b border-slate-200/70 bg-white/72 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#06101d]/78">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 shadow-sm dark:border-white/10 dark:bg-white/6">
-              <Sparkles className="h-5 w-5 text-sky-600 dark:text-teal-300" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 shadow-sm dark:border-white/10 dark:bg-white/6 overflow-hidden">
+              <MascotIcon 
+                name="logo" 
+                size="100%" 
+                className="rounded-2xl transition-transform hover:scale-125 scale-110" 
+              />
             </div>
             <div>
               <span className="text-xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
@@ -272,8 +277,12 @@ export default function MarketingLayout({
             <div className="mb-12 grid gap-12 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
               <div className={isRtl ? 'text-right' : 'text-left'}>
                 <Link to="/" className="mb-5 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/85 shadow-sm dark:border-white/10 dark:bg-white/6">
-                    <Sparkles className="h-5 w-5 text-sky-600 dark:text-teal-300" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/85 shadow-sm dark:border-white/10 dark:bg-white/6 overflow-hidden">
+                    <MascotIcon 
+                      name="logo" 
+                      size="100%" 
+                      className="rounded-xl scale-110" 
+                    />
                   </div>
                   <span className="text-xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">OryxSolver</span>
                 </Link>

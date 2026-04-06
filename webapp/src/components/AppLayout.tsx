@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  Sparkles, Zap, History, Settings, LogOut, Menu, ChevronRight, BookOpen, Layers2,
+  Zap, History, Settings, LogOut, Menu, ChevronRight, BookOpen, Layers2,
   Loader2, CreditCard, Plus, Bug
 } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
@@ -13,6 +13,7 @@ import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@supabase/supabase-js';
 import { submitFeatureRequest } from '../lib/feedbackApi';
+import { MascotIcon } from './MascotIcon';
 
 type SubscriptionTier = 'free' | 'pro' | 'premium';
 
@@ -166,7 +167,7 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
   };
 
   const navItems: NavItem[] = [
-    { id: 'chat', label: t('nav.chat'), icon: Sparkles, href: '/chat' },
+    { id: 'chat', label: t('nav.chat'), icon: Zap, href: '/chat' },
     { id: 'history', label: t('nav.history'), icon: History, href: '/history' },
     { id: 'dashboard', label: t('nav.dashboard'), icon: Zap, href: '/dashboard' },
     { id: 'subscription', label: t('nav.subscription'), icon: CreditCard, href: '/subscription' },
@@ -237,9 +238,12 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
           <div className={`${isChatLayout ? 'p-4' : 'p-4 xl:p-5'} border-b`} style={{ borderColor: 'var(--border-color)' }}>
             <div className="flex items-center justify-between">
               <Link to="/dashboard" className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 sm:h-10 sm:w-10">
-                  <Sparkles size={20} className="text-white" />
-                </div>
+                <MascotIcon 
+                  name="logo" 
+                  size={44} 
+                  className="hover:scale-110 transition-transform duration-300" 
+                />
+
                 <span className="text-lg font-black sm:text-xl">Oryx<span className="text-indigo-500">.</span></span>
               </Link>
               <NotificationCenter align={isRtl ? 'right' : 'left'} />
@@ -375,7 +379,7 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 via-blue-500 to-indigo-600 animate-gradient-x" />
                   <div className="relative flex items-center justify-center gap-2 rounded-[15px] bg-slate-900 px-3 py-2 text-white transition-colors group-hover:bg-transparent">
-                    <Sparkles size={15} className="text-indigo-400 group-hover:text-white" />
+                    <MascotIcon name="sparkle" size={15} />
                     <span className="text-[10px] font-black uppercase tracking-[0.14em]">{t('nav.upgrade_pro')}</span>
                   </div>
                 </Link>
@@ -408,9 +412,12 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
             <Menu size={24} />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-lg flex items-center justify-center">
-              <Sparkles size={16} className="text-white" />
-            </div>
+            <MascotIcon 
+              name="logo" 
+              size={40} 
+              className="hover:scale-110 transition-transform duration-300" 
+            />
+
             <span className="font-black">Oryx</span>
           </div>
           <div className="flex items-center gap-3">

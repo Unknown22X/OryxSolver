@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { fetchPublicAppConfig, FALLBACK_PUBLIC_CONFIG } from '../lib/appConfig';
 import {
   buildLegalConsentMetadata,
@@ -242,8 +242,8 @@ export default function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
           <div className="p-10 pb-8">
             {/* Header Content */}
             <div className="text-center mb-8">
-              <Link to="/" className="inline-flex mx-auto mb-6 h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900 transition-all hover:scale-105 active:scale-95">
-                <Sparkles size={24} className="text-white dark:text-slate-900" />
+              <Link to="/" className="inline-flex mx-auto mb-6 h-16 w-16 items-center justify-center transition-all hover:scale-105 active:scale-95">
+                <img src="/app_icons/logo.png" alt="Oryx" className="w-full h-full object-contain" />
               </Link>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                 {isForgotPassword ? t('auth.reset_heading') : mode === 'signin' ? t('auth.welcome_back') : t('auth.sign_up_heading')}

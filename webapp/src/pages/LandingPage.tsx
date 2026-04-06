@@ -191,10 +191,14 @@ export default function LandingPage() {
                   <button
                     type="button"
                     onClick={() => handleInstallClick('hero_demo')}
-                    className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-white/14 text-white shadow-[0_18px_40px_-24px_rgba(255,255,255,0.45)] transition hover:scale-[1.03] hover:bg-white/18"
+                    className="group/hero relative flex h-full w-full items-center justify-center transition-all bg-transparent"
                     aria-label="Open demo placeholder"
                   >
-                    <CirclePlay className="h-10 w-10 fill-white/90 stroke-[1.8]" />
+                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-indigo-500/20 to-transparent opacity-0 group-hover/hero:opacity-100 transition-opacity" />
+                    <img src="/app_icons/greeting.png" alt="Oryx Mascot" className="relative z-10 w-48 h-48 sm:w-64 sm:h-64 object-contain animate-float" />
+                    <div className="absolute bottom-10 flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-md shadow-xl transition-all group-hover/hero:scale-110 group-hover/hero:bg-white/20">
+                      <CirclePlay className="h-7 w-7 fill-white/90 stroke-[1.8]" />
+                    </div>
                   </button>
                 </div>
               </div>

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, ArrowRight, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { MascotIcon } from '../components/MascotIcon';
 import { useTranslation } from 'react-i18next';
 import { toPublicErrorMessage } from '../lib/supabaseAuth';
 
@@ -59,7 +60,7 @@ export default function ResetPasswordPage() {
           <div className="p-10 pb-8">
             <div className="text-center mb-8">
               <Link to="/" className="inline-flex mx-auto mb-6 h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900 transition-all hover:scale-105 active:scale-95">
-                <Sparkles size={24} className="text-white dark:text-slate-900" />
+                <MascotIcon name="sparkle" size={24} className="text-white dark:text-slate-900" />
               </Link>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                 {t('auth.set_new_password', { defaultValue: 'Set new password' })}

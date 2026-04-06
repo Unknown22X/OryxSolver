@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@supabase/supabase-js';
-import {
   ArrowRight,
   BookOpen,
   Check,
@@ -12,10 +11,10 @@ import {
   Loader2,
   Moon,
   ShieldCheck,
-  Sparkles,
   Sun,
   Zap,
 } from 'lucide-react';
+import { MascotIcon } from '../components/MascotIcon';
 import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edge';
 import { trackEvent } from '../lib/analyticsClient';
@@ -42,7 +41,7 @@ const GOAL_OPTIONS: Array<{
   },
   {
     value: 'learn_faster',
-    icon: <Sparkles size={18} />,
+    icon: <MascotIcon name="sparkle" size={18} />,
   },
   {
     value: 'bulk_revision',
@@ -190,8 +189,8 @@ export default function OnboardingPage({ user }: { user: User }) {
                     {t('onboarding.heading')}
                   </h1>
                 </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-slate-950">
-                  <Sparkles size={22} />
+                <div className="flex h-16 w-16 items-center justify-center">
+                  <img src="/app_icons/greeting.png" alt="Greeting" className="w-full h-full object-contain" />
                 </div>
               </div>
 

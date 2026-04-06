@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AppLayout from '../components/AppLayout';
+import { MascotIcon } from '../components/MascotIcon';
+
 import {
-  Sparkles, Search, Trash2, ChevronRight, Loader2, 
+  Search, Trash2, ChevronRight, Loader2, 
   Clock, Bot, MessageSquare, BookOpen, Calculator, Zap,
   History
 } from 'lucide-react';
@@ -188,9 +190,10 @@ export default function HistoryPage({ user }: { user: User }) {
 
         {filteredHistory.length === 0 ? (
           <div className="text-center py-24 bg-slate-50 dark:bg-white/[0.01] rounded-[48px] border-2 border-dashed border-slate-200 dark:border-white/5">
-            <div className="w-24 h-24 rounded-3xl bg-slate-100 dark:bg-white/5 flex items-center justify-center mx-auto mb-8 shadow-inner shadow-black/5">
-              <Sparkles size={48} className="text-slate-300 dark:text-slate-700" />
+            <div className="w-32 h-32 flex items-center justify-center mx-auto mb-8 transition-transform hover:scale-110 duration-500">
+              <MascotIcon name="historian" size={128} />
             </div>
+
             <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-3">
               {searchQuery ? t('history.no_results') : t('history.empty_state_title')}
             </h3>

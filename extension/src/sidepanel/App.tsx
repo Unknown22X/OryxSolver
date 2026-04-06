@@ -69,6 +69,11 @@ export default function App() {
       health.dependencies.ai.status !== 'healthy' ||
       health.dependencies.db.status !== 'healthy');
   const cloudHistoryReadOnly = health.readOnly && (health.dependencies.db.status !== 'healthy' || health.dependencies.network.status === 'outage');
+  const shouldShowServiceBanner = authUser
+    ? health.overall !== 'healthy'
+    : health.dependencies.network.status === 'outage' ||
+      health.dependencies.backend.status !== 'healthy' ||
+      health.dependencies.auth.status !== 'healthy';
 
   // --- UI State ---
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -132,7 +137,7 @@ export default function App() {
 
   const isDarkMode = themeMode === 'dark' || (themeMode === 'system' && systemPrefersDark);
   const latestResponse = chatSession.length > 0 ? chatSession[chatSession.length - 1].response : null;
-  const logoUrl = chrome.runtime.getURL('icons/128.png?v=3');
+  const logoUrl = '/app_icons/logo.png';
   const webAppBaseUrl = (() => {
     const explicit = sanitizeExternalUrl(String(import.meta.env.VITE_WEBAPP_URL ?? '').trim(), [
       'oryxsolver.com',
@@ -367,7 +372,7 @@ export default function App() {
   return (
     <div className="oryx-shell-bg relative flex h-screen flex-col overflow-hidden font-sans text-slate-900 transition-colors duration-300 dark:text-slate-100">
       {maintenanceMode && <MaintenanceOverlay />}
-      {!maintenanceMode && (
+      {!maintenanceMode && shouldShowServiceBanner && (
         <ServiceStatusBanner
           health={health}
           retryCountdowns={retryCountdowns}

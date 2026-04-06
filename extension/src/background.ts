@@ -4,7 +4,7 @@ import {
   MSG_CAPTURE_VISIBLE_TAB, MSG_START_CROP_CAPTURE, MSG_SHOW_CROP_OVERLAY,
   MSG_CROP_RECT_SELECTED, MSG_CROP_SELECTION_CANCELLED, MSG_CROP_CAPTURE_READY,
   MSG_CROP_CAPTURE_ERROR, MSG_EXTRACT_PAGE_CONTEXT,
-  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT
+  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT, MSG_INLINE_QUESTION_READY
 } from './shared/messageTypes';
 import {
   sanitizePendingInlineQuestion,
@@ -264,6 +264,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
         await savePendingInlineQuestion(pendingQuestion);
+        // Notify an already-open sidepanel so it can read from storage.
+        // This is fire-and-forget — the sidepanel may not be listening yet
+        // (fresh open), in which case it reads from storage on mount instead.
+        try {
+          await chrome.runtime.sendMessage({ type: MSG_INLINE_QUESTION_READY });
+        } catch {
+          // Sidepanel not listening yet — it will pick up from storage on mount.
+        }
         // We still send response and let the content script continue
         sendResponse({ ok: true });
         return;

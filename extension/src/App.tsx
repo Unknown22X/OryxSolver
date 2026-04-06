@@ -5,6 +5,11 @@ function App() {
 
   return (
     <main className="popup-shell">
+      <div className="flex justify-center mb-6">
+        <div className="w-24 h-24 flex items-center justify-center">
+          <img src="/app_icons/greeting.png" alt="Oryx" className="w-full h-full object-contain" />
+        </div>
+      </div>
       <p className="brand-kicker">OryxSolver</p>
       <h1 className="popup-title">First-run setup</h1>
 

@@ -63,8 +63,8 @@ export default function AuthView({
           
           <div className="p-8 pb-6">
             {/* Logo */}
-            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900">
-              <img src={logoUrl} alt="Logo" className="h-8 w-8 object-contain" />
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center transition-all hover:scale-105 active:scale-95">
+              <img src={logoUrl} alt="Logo" className="h-full w-full object-contain" />
             </div>
 
             {/* Header Texts */}

@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
     status TEXT NOT NULL, -- 'active', 'trialing', 'past_due', 'canceled', 'unpaid'
     tier TEXT DEFAULT 'free', -- 'free', 'pro'
-    provider TEXT, -- 'lemon_squeezy', 'polar', 'stripe'
+    provider TEXT, -- 'lemon_squeezy', 'stripe'
     provider_subscription_id TEXT,
     provider_customer_id TEXT,
     current_period_end TIMESTAMPTZ,

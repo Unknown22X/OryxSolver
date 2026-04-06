@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Sparkles, Lightbulb, ListOrdered } from 'lucide-react';
+import { Lightbulb, ListOrdered } from 'lucide-react';
 import AnswerHeroCard from './AnswerHeroCard';
 import StepTimeline from './StepTimeline';
 import RichText from './RichText';
@@ -168,7 +168,7 @@ export default function ResponsePanel({ response, question = '', onQuoteStep, co
       <div className="mt-8 relative overflow-hidden rounded-[2.5rem] border border-white/40 bg-white/60 p-10 text-center shadow-xl backdrop-blur-2xl transition-all hover:shadow-2xl">
         <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-indigo-500/10 blur-2xl" />
         <div className="relative z-10">
-          <Sparkles size={48} className="mx-auto text-indigo-600 mb-6" />
+          <img src="/app_icons/bot-avatar.png" alt="Bot" className="w-12 h-12 mx-auto mb-6 object-contain" />
           <h2 className="text-2xl font-bold text-slate-900">Start Solving</h2>
           <p className="mt-3 text-sm text-slate-500">Pick any question on your screen to get an instant solution.</p>
         </div>
@@ -181,7 +181,7 @@ export default function ResponsePanel({ response, question = '', onQuoteStep, co
       {presentation.layout === 'chat' ? (
         <section className="animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-[30px] border border-white/70 bg-white/55 p-6 shadow-sm backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-800/40">
           <div className="mb-3 flex items-center gap-2">
-            <Sparkles size={14} className="text-indigo-500 dark:text-indigo-300" />
+            <img src="/app_icons/sparkle.png" alt="Sparkles" className="w-3.5 h-3.5 object-contain" />
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{presentation.title}</p>
           </div>
           <RichText content={response.answer} className="text-[16px] font-medium leading-relaxed text-slate-800 dark:text-slate-100" />

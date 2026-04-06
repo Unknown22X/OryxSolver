@@ -9,10 +9,9 @@ import {
   Bolt,
   Check,
   Coins,
-  Crown,
-  Sparkles,
   Zap,
 } from 'lucide-react';
+import { MascotIcon } from '../components/MascotIcon';
 import type { User } from '@supabase/supabase-js';
 
 const PLANS = [
@@ -22,7 +21,7 @@ const PLANS = [
     price: '0',
     period: 'month',
     description: 'Perfect for trying OryxSolver with real homework.',
-    icon: <Zap size={22} className="text-amber-500 dark:text-amber-300" />,
+    icon: <MascotIcon name="logo" size={22} />,
     cta: 'Get Started',
     features: [
       '15 questions per month',
@@ -61,7 +60,7 @@ const PLANS = [
     price: '9.99',
     period: 'month',
     description: 'Higher limits for power users.',
-    icon: <Crown size={22} className="text-fuchsia-600 dark:text-pink-300" />,
+    icon: <img src="/app_icons/champion.png" alt="Premium" className="w-6 h-6 object-contain" />,
     cta: 'Go Premium',
     features: [
       '500 questions per month',
@@ -175,7 +174,7 @@ export default function PricingPage() {
         <div className="relative z-10 mx-auto max-w-7xl px-6">
           <section className="mx-auto mb-16 max-w-3xl text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-              <Sparkles className="h-4 w-4 text-sky-600 dark:text-teal-300" />
+              <MascotIcon name="sparkle" size={16} />
               {t('pricing.heading_badge', { defaultValue: 'Pick your study setup' })}
             </div>
             <h1 className="marketing-heading mt-8 text-[3.3rem] font-extrabold text-slate-950 dark:text-white sm:text-[4.1rem] md:text-[5.1rem] md:leading-[0.98]">

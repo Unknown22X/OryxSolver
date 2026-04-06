@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { CreditCard, ArrowRight, Sun, Moon, Menu } from 'lucide-react';
+import { MascotIcon } from './MascotIcon';
 
 type SidePanelHeaderProps = {
   logoUrl: string;
@@ -59,7 +60,11 @@ export default function SidePanelHeader({
           </button>
         )}
         <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-white shadow-xl shadow-indigo-100 ring-1 ring-slate-100 transition-transform duration-300 hover:scale-105 dark:bg-slate-800 dark:shadow-none dark:ring-slate-700">
-          <img src={logoUrl} alt={appName} className="h-full w-full object-cover p-1 rounded-lg" />
+          <MascotIcon 
+            name="logo" 
+            size="100%" 
+            className="p-1 rounded-lg" 
+          />
         </div>
         <div>
           <h1 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100">{appName}</h1>

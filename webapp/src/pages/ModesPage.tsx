@@ -1,16 +1,13 @@
+import React from 'react';
 import { Link } from 'react-router-dom';
 import MarketingLayout from '../components/MarketingLayout';
 import { useTranslation } from 'react-i18next';
+import { MascotIcon } from '../components/MascotIcon';
 import {
-  Sparkles,
   Shield,
-  Lightbulb,
   Calculator,
-  MessageSquare,
   BookOpen,
   CheckCircle2,
-  Zap,
-  FileText,
 } from 'lucide-react';
 
 export default function ModesPage() {
@@ -19,7 +16,7 @@ export default function ModesPage() {
   const MODES = [
     {
       name: t('modes_page.mode_standard_name', { defaultValue: 'Standard' }),
-      icon: <Zap className="w-5 h-5" />,
+      icon: <MascotIcon name="sparkle" size={48} />,
       accent: 'from-amber-500/20 to-orange-500/20 text-amber-200',
       summary: t('modes_page.mode_standard_summary', { defaultValue: 'Balanced clarity and speed for most questions.' }),
       bestFor: t('modes_page.mode_standard_best', { defaultValue: 'Homework checks,Quick understanding,Daily study' }).split(','),
@@ -30,7 +27,7 @@ export default function ModesPage() {
     },
     {
       name: t('modes_page.mode_exam_name', { defaultValue: 'Exam' }),
-      icon: <FileText className="w-5 h-5" />,
+      icon: <MascotIcon name="bot-avatar" size={48} />,
       accent: 'from-blue-500/20 to-cyan-500/20 text-blue-200',
       summary: t('modes_page.mode_exam_summary', { defaultValue: 'Formal, structured answers with clear steps.' }),
       bestFor: t('modes_page.mode_exam_best', { defaultValue: 'Test prep,Formal solutions,Structured responses' }).split(','),
@@ -41,7 +38,7 @@ export default function ModesPage() {
     },
     {
       name: t('modes_page.mode_eli5_name', { defaultValue: 'ELI5' }),
-      icon: <Lightbulb className="w-5 h-5" />,
+      icon: <MascotIcon name="thinking" size={48} />,
       accent: 'from-purple-500/20 to-pink-500/20 text-purple-200',
       summary: t('modes_page.mode_eli5_summary', { defaultValue: 'Simple explanations with minimal jargon.' }),
       bestFor: t('modes_page.mode_eli5_best', { defaultValue: 'First-time learning,Younger students,Quick intuition' }).split(','),
@@ -52,7 +49,7 @@ export default function ModesPage() {
     },
     {
       name: t('modes_page.mode_steps_name', { defaultValue: 'Step-by-step' }),
-      icon: <Calculator className="w-5 h-5" />,
+      icon: <MascotIcon name="bot-avatar" size={48} />,
       accent: 'from-emerald-500/20 to-teal-500/20 text-emerald-200',
       summary: t('modes_page.mode_steps_summary', { defaultValue: 'Detailed reasoning for math and STEM problems.' }),
       bestFor: t('modes_page.mode_steps_best', { defaultValue: 'Math,Physics,Chemistry' }).split(','),
@@ -63,7 +60,7 @@ export default function ModesPage() {
     },
     {
       name: t('modes_page.mode_alpha_name', { defaultValue: 'Gen Alpha' }),
-      icon: <MessageSquare className="w-5 h-5" />,
+      icon: <MascotIcon name="greeting" size={48} />,
       accent: 'from-pink-500/20 to-rose-500/20 text-pink-200',
       summary: t('modes_page.mode_alpha_summary', { defaultValue: 'Short, casual explanations with a modern tone.' }),
       bestFor: t('modes_page.mode_alpha_best', { defaultValue: 'Quick checks,Casual language,Short answers' }).split(','),
@@ -76,7 +73,7 @@ export default function ModesPage() {
 
   const MODE_GUIDE = [
     {
-      icon: <Sparkles className="w-5 h-5" />,
+      icon: <MascotIcon name="sparkle" size={24} />,
       title: t('modes_page.guide_1_title', { defaultValue: 'Want a quick, reliable answer? Start with Standard.' }),
       copy: t('modes_page.guide_1_copy', { defaultValue: 'It is the best default when you are unsure which mode to use.' }),
     },
@@ -112,12 +109,12 @@ export default function ModesPage() {
           {MODES.map((mode) => (
             <div
               key={mode.name}
-              className="rounded-[28px] oryx-surface-panel overflow-hidden"
+              className="rounded-[28px] oryx-surface-panel overflow-hidden flex flex-col"
             >
               <div className={`p-6 bg-gradient-to-br ${mode.accent}`}>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/60 dark:bg-white/10 flex items-center justify-center">
+                  <div className="flex items-center gap-4">
+                    <div className="shrink-0 transition-transform hover:scale-110 duration-300">
                       {mode.icon}
                     </div>
                     <div>
@@ -135,7 +132,7 @@ export default function ModesPage() {
                 </div>
               </div>
 
-              <div className="p-6 grid gap-4">
+              <div className="p-6 grid gap-4 flex-1">
                 <div className="grid sm:grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-xs uppercase tracking-widest text-slate-500 dark:text-slate-400 font-semibold mb-2">{t('modes_page.best_for', { defaultValue: 'Best for' })}</p>

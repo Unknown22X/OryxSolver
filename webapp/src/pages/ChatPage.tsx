@@ -4,7 +4,7 @@ import AppLayout from '../components/AppLayout';
 import {
   Sparkles, Send, Paperclip, X, Copy, Check,
   Zap, Loader2, MessageSquare, Lightbulb, 
-  BookOpen, Calculator, Bot, Menu, Plus, History, Search, ChevronRight,
+  BookOpen, Calculator, Menu, Plus, History, Search, ChevronRight,
   Flame, Trophy, ArrowRight, Play, ThumbsDown, ThumbsUp
 } from 'lucide-react';
 import { useSolve } from '../hooks/useSolve';
@@ -19,6 +19,7 @@ import { useServiceHealth } from '../hooks/useServiceHealth';
 import { submitFeedback } from '../lib/feedbackApi';
 import { computeCurrentStreak } from '../lib/studyMetrics';
 import { getOnboardingPreferences } from '../lib/onboarding';
+import { MascotIcon } from '../components/MascotIcon';
 
 type StyleMode = 'standard' | 'exam' | 'eli5' | 'step_by_step' | 'gen_alpha';
 type SolveStreamPhase = 'auth' | 'preparing' | 'cache' | 'calling_ai' | 'refining' | 'finalizing';
@@ -502,8 +503,8 @@ export default function ChatPage({ user }: { user: User }) {
                 ))
               ) : (
                 <div className="text-center py-12 px-6">
-                  <div className="oryx-surface-soft mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                    <History size={20} className="text-slate-300" />
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+                    <img src="/app_icons/historian.png" alt="No History" className="w-full h-full object-contain" />
                   </div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('chat.no_history')}</p>
                 </div>
@@ -525,9 +526,8 @@ export default function ChatPage({ user }: { user: User }) {
                 <Menu size={20} className={isRtl ? 'rotate-180' : ''} />
               </button>
               <h1 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-200">
-                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center shadow-sm">
-                  <Sparkles size={12} className="text-white" />
-                </div>
+                <MascotIcon name="logo" size={28} className="hover:scale-110 transition-transform" />
+
                 Oryx Solver
               </h1>
             </div>
@@ -631,7 +631,7 @@ export default function ChatPage({ user }: { user: User }) {
                           {mode.icon}
                         </div>
                         {mode.label}
-                        {isLocked && <div className={`absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`}><Bot size={10} className="opacity-50" /></div>}
+                        {isLocked && <div className={`absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`}><MascotIcon name="bot-avatar" size={14} className="opacity-50" /></div>}
                       </button>
                     );
                   })}
@@ -716,9 +716,11 @@ export default function ChatPage({ user }: { user: User }) {
                     {/* AI Message */}
                     {msg.response && (
                       <div className="flex justify-start items-start gap-4 group">
-                        <div className="oryx-avatar-container">
-                          <Bot size={20} className="text-indigo-600 dark:text-indigo-400" />
+                        <div className="shrink-0">
+                          <MascotIcon name="bot-avatar" size={48} className="drop-shadow-lg" />
                         </div>
+
+
                         <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[90%]">
                           <div className="oryx-bubble-ai relative max-w-none overflow-hidden pb-5">
                             {msg.error && (
@@ -729,7 +731,7 @@ export default function ChatPage({ user }: { user: User }) {
                             )}
                             <div className="mb-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                               <span className="inline-flex items-center gap-2 rounded-full border border-indigo-200/80 bg-indigo-50/80 px-3 py-1 text-indigo-600 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200">
-                                <Sparkles size={12} />
+                                <MascotIcon name="sparkle" size={14} />
                                 Oryx
                               </span>
                               {responseStyleMode && (
@@ -746,11 +748,9 @@ export default function ChatPage({ user }: { user: User }) {
 
                             {isThinking ? (
                               <div className="flex items-center gap-3 py-2 text-slate-600 dark:text-slate-300">
-                                <div className="flex gap-1.5">
-                                  <div className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.3s]" />
-                                  <div className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]" />
-                                  <div className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" />
-                                </div>
+                                <MascotIcon name="thinking" size={40} className="animate-pulse drop-shadow-md" />
+
+
                                 <span className="text-sm font-medium">{t('chat.analyzing')}</span>
                               </div>
                             ) : (

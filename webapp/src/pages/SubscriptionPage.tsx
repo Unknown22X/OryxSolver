@@ -9,10 +9,10 @@ import {
   Loader2,
   Receipt,
   ShieldCheck,
-  Sparkles,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
+import { MascotIcon } from '../components/MascotIcon';
 import AppLayout from '../components/AppLayout';
 import { useUsage } from '../hooks/useUsage';
 import { useSubscription } from '../hooks/useSubscription';
@@ -450,7 +450,7 @@ export default function SubscriptionPage({ user }: { user: User }) {
                 >
                   {isCurrent && (
                     <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-sky-700 dark:text-teal-300">
-                      <Sparkles className="h-3.5 w-3.5" />
+                      <MascotIcon name="sparkle" size={14} />
                       {t('subscription_page.current_plan')}
                     </div>
                   )}
@@ -463,7 +463,10 @@ export default function SubscriptionPage({ user }: { user: User }) {
                   <ul className="mt-6 space-y-3 text-sm">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-slate-700 dark:text-slate-200">
-                        <span className="mt-1 h-2 w-2 rounded-full bg-sky-500 dark:bg-teal-300" />
+                          <MascotIcon 
+                            name={plan.id === 'free' ? "sparkle" : "champion"} 
+                            size={16} 
+                          />
                         <span>{feature}</span>
                       </li>
                     ))}

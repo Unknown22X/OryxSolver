@@ -2,9 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AppLayout from '../components/AppLayout';
 import { 
-  Mail, Calendar, Zap, Target,
-  Loader2, CreditCard, Sparkles, Crown
+  Mail, Calendar, Target, Zap,
+  Loader2, CreditCard, Crown,
 } from 'lucide-react';
+import { MascotIcon } from '../components/MascotIcon';
 import { useUsage } from '../hooks/useUsage';
 import { useProfile } from '../hooks/useProfile';
 import type { User } from '@supabase/supabase-js';
@@ -18,12 +19,12 @@ export default function ProfilePage({ user }: { user: User }) {
   const getTierBadge = () => {
     const tier = usage?.subscriptionTier || 'free';
     if (tier === 'premium') {
-      return { label: t('profile.tier_premium'), icon: <Crown size={14} />, class: 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/20' };
+      return { label: t('profile.tier_premium'), icon: <MascotIcon name="champion" size={14} />, class: 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/20' };
     }
     if (tier === 'pro') {
-      return { label: t('profile.tier_pro'), icon: <Sparkles size={14} />, class: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' };
+      return { label: t('profile.tier_pro'), icon: <MascotIcon name="sparkle" size={14} />, class: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' };
     }
-    return { label: t('profile.tier_free'), icon: <Zap size={14} />, class: 'bg-slate-500/10 text-slate-400 border border-slate-500/20' };
+    return { label: t('profile.tier_free'), icon: <MascotIcon name="logo" size={14} />, class: 'bg-slate-500/10 text-slate-400 border border-slate-500/20' };
   };
 
   const formatDate = (dateStr: string) => {
@@ -207,7 +208,7 @@ export default function ProfilePage({ user }: { user: User }) {
             
             <div className="group rounded-[20px] border border-transparent bg-slate-50 p-5 text-center transition-all hover:border-slate-200 hover:bg-white hover:shadow-xl hover:shadow-black/5 dark:bg-white/[0.03] dark:hover:border-white/10 dark:hover:bg-white/10">
               <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                <Sparkles size={24} className="text-orange-500" />
+                <MascotIcon name="sparkle" size={24} className="text-orange-500" />
               </div>
               <p className="text-3xl font-black text-slate-900 dark:text-white mb-1">{usage?.paygoCreditsRemaining ?? 0}</p>
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('profile.extra_credits')}</p>

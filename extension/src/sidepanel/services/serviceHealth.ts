@@ -47,6 +47,7 @@ const STORAGE_KEY = 'oryx_extension_service_health_snapshot';
 const DEPENDENCIES: ServiceDependency[] = ['network', 'backend', 'auth', 'db', 'ai'];
 const listeners = new Set<Listener>();
 const circuitState = new Map<ServiceDependency, { failures: number; openUntil: number | null }>();
+const HEALTHY_MESSAGE = 'All services are operational.';
 
 function nowIso() {
   return new Date().toISOString();
@@ -67,7 +68,7 @@ function createDefaultSnapshot(): ServiceHealthSnapshot {
   return {
     overall: 'healthy',
     readOnly: false,
-    message: 'All services are operational.',
+    message: HEALTHY_MESSAGE,
     updatedAt: nowIso(),
     dependencies: {
       network: createDependencyHealth(),
@@ -105,25 +106,47 @@ function saveSnapshot(snapshot: ServiceHealthSnapshot) {
 }
 
 function recomputeSnapshot(snapshot: ServiceHealthSnapshot): ServiceHealthSnapshot {
-  const dependencyStates = DEPENDENCIES.map((dependency) => snapshot.dependencies[dependency].status);
+  const retryAfterSec = DEPENDENCIES.reduce<number | undefined>((maxValue, dependency) => {
+    const current = snapshot.dependencies[dependency].retryAfterSec;
+    if (typeof current !== 'number') return maxValue;
+    return typeof maxValue === 'number' ? Math.max(maxValue, current) : current;
+  }, undefined);
+
+  const summarizeIncident = (status: Exclude<DependencyCondition, 'healthy'>, label: string) => {
+    const affected = DEPENDENCIES.filter((dependency) => snapshot.dependencies[dependency].status === status);
+    const firstMessage = affected
+      .map((dependency) => snapshot.dependencies[dependency].message?.trim())
+      .find((message) => Boolean(message) && message !== 'Operational');
+
+    if (affected.length === 1 && firstMessage) return firstMessage;
+    if (affected.length > 0) return `${label} affecting ${affected.join(', ')}.`;
+    return '';
+  };
+
   let overall: ServiceOverall = 'healthy';
   let readOnly = false;
+  let message = HEALTHY_MESSAGE;
 
-  if (dependencyStates.includes('maintenance')) {
+  if (DEPENDENCIES.some((dependency) => snapshot.dependencies[dependency].status === 'maintenance')) {
     overall = 'maintenance';
     readOnly = true;
-  } else if (dependencyStates.includes('outage')) {
+    message = summarizeIncident('maintenance', 'Maintenance mode') || 'The platform is in maintenance mode.';
+  } else if (DEPENDENCIES.some((dependency) => snapshot.dependencies[dependency].status === 'outage')) {
     overall = 'outage';
     readOnly = true;
-  } else if (dependencyStates.includes('degraded')) {
+    message = summarizeIncident('outage', 'Service outage');
+  } else if (DEPENDENCIES.some((dependency) => snapshot.dependencies[dependency].status === 'degraded')) {
     overall = 'degraded';
     readOnly = true;
+    message = summarizeIncident('degraded', 'Service degradation');
   }
 
   return {
     ...snapshot,
     overall,
     readOnly,
+    message,
+    retryAfterSec,
     updatedAt: nowIso(),
   };
 }
@@ -157,7 +180,6 @@ export function markSuccess(dependency: ServiceDependency, message = 'Operationa
   circuitState.set(dependency, { failures: 0, openUntil: null });
   updateSnapshot((snapshot) => ({
     ...snapshot,
-    message: 'All services are operational.',
     dependencies: {
       ...snapshot.dependencies,
       [dependency]: {

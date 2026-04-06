@@ -8,7 +8,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
-  HelpCircle,
+  
   Keyboard,
   Loader2,
   LogOut,
@@ -624,7 +624,7 @@ export default function SettingsPage({ user }: { user: User }) {
           <section className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10">
-                <HelpCircle size={20} className="text-sky-500" />
+                <img src="/app_icons/Engineer.png" alt="Help" className="w-6 h-6 object-contain" />
               </div>
               <div>
                 <h2 className="text-xl font-black">{t('settings.help_support')}</h2>

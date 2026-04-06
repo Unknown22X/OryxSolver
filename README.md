@@ -10,7 +10,7 @@ OryxSolver is a modern Chrome Extension designed to seamlessly assist students w
 - **Backend & Database**: Supabase (PostgreSQL)
 - **Edge Logic**: Deno-based Supabase Edge Functions
 - **AI Model**: Google Gemini 2.0 Flash-Lite
-- **Payments**: Polar.sh
+- **Payments**: Lemon Squeezy
 - **Caching**: `pgvector` for semantic similarity matching
 
 ## 📁 Project Structure
@@ -30,7 +30,7 @@ OryxSolver/
 ├── supabase/                 # The Backend
 │   ├── functions/            # Edge Functions (Deno)
 │   │   ├── ai-proxy/         # Handles AI requests & caching
-│   │   └── polar-webhook/    # Handles payment events
+│   │   └── lemon-squeezy-webhook/  # Handles payment events
 │   └── migrations/           # SQL database schema
 │
 └── ARCHITECTURE.md           # Detailed technical documentation

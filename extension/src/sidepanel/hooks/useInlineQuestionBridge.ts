@@ -9,6 +9,7 @@ import {
   MSG_INLINE_EXTRACT_QUESTION,
   MSG_INLINE_SOLVE_AND_INJECT,
   MSG_INLINE_SOLVE_RESULT,
+  MSG_INLINE_QUESTION_READY,
 } from '../../shared/messageTypes';
 import type { StyleMode } from '../types';
 
@@ -24,8 +25,14 @@ type UseInlineQuestionBridgeOptions = {
   setInlineContextSnippet: Dispatch<SetStateAction<string | null>>;
 };
 
+const MAX_PENDING_INLINE_AGE_MS = 2 * 60 * 1000;
+
 function isOwnContentScriptSender(sender: chrome.runtime.MessageSender) {
   return (!sender.id || sender.id === chrome.runtime.id) && typeof sender.tab?.id === 'number';
+}
+
+function isOwnExtensionSender(sender: chrome.runtime.MessageSender) {
+  return !sender.id || sender.id === chrome.runtime.id;
 }
 
 function dataUrlToFile(dataUrl: string, filename = 'capture.png'): File | null {
@@ -45,13 +52,54 @@ function dataUrlToFile(dataUrl: string, filename = 'capture.png'): File | null {
   }
 }
 
-async function normalizeInlineImages(urls: string[] = []) {
-  return urls.map((url, idx) => {
-    if (typeof url === 'string' && url.startsWith('data:image/')) {
-      return dataUrlToFile(url, `inline-capture-${idx + 1}.png`) || { url };
-    }
+/**
+ * Tries to fetch an https:// image URL and convert it to a File so the
+ * backend can receive it as a direct upload instead of a remote URL fetch.
+ * This avoids CORS/403 failures for images hosted on LMS platforms.
+ * Falls back to { url } if the fetch fails (e.g. timed out, not an image).
+ */
+async function fetchUrlToFile(url: string, idx: number): Promise<File | { url: string }> {
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!resp.ok) return { url };
+    const contentType = resp.headers.get('content-type') || '';
+    if (!contentType.startsWith('image/')) return { url };
+    const blob = await resp.blob();
+    if (blob.size > 5 * 1024 * 1024) return { url }; // skip if > 5 MB
+    return new File([blob], `page-image-${idx + 1}.${blob.type.split('/')[1] || 'png'}`, {
+      type: blob.type || 'image/png',
+    });
+  } catch {
     return { url };
-  });
+  }
+}
+
+/**
+ * Normalizes image strings from the inline store into the (File | {url}) format
+ * expected by handleSend / useSolve.
+ *
+ * - data: URLs → File (direct base64 upload, avoids URL round-trip)
+ * - https:// URLs → attempted client-side fetch → File; falls back to {url}
+ *   Fetching here works because the extension sidepanel has cross-origin access.
+ */
+async function normalizeInlineImages(urls: string[] = []): Promise<(File | { url: string })[]> {
+  const results = await Promise.all(
+    urls.map(async (url, idx) => {
+      if (!url || typeof url !== 'string') return null;
+
+      if (url.startsWith('data:image/')) {
+        return dataUrlToFile(url, `inline-capture-${idx + 1}.png`) || { url };
+      }
+
+      if (/^https?:\/\//i.test(url)) {
+        return fetchUrlToFile(url, idx);
+      }
+
+      return null;
+    }),
+  );
+
+  return results.filter((item): item is File | { url: string } => item !== null);
 }
 
 async function relayInlineSolveResult(
@@ -70,25 +118,42 @@ async function relayInlineSolveResult(
   });
 }
 
+async function relayInlineSolveFailure(tabId: number, injectionId: string, explanation: string) {
+  await chrome.tabs.sendMessage(tabId, {
+    type: MSG_INLINE_SOLVE_RESULT,
+    payload: {
+      injectionId,
+      answer: 'Solve Failed',
+      explanation,
+      steps: [],
+    },
+  });
+}
+
 export function useInlineQuestionBridge({
   handleSend,
   setInlineContextSnippet,
 }: UseInlineQuestionBridgeOptions) {
   const lastHandledRef = useRef<string | null>(null);
+  // Keep a stable ref to avoid stale closures inside the message listener.
+  const handleSendRef = useRef(handleSend);
+  const setSnippetRef = useRef(setInlineContextSnippet);
+  useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
+  useEffect(() => { setSnippetRef.current = setInlineContextSnippet; }, [setInlineContextSnippet]);
 
   useEffect(() => {
     const processPendingQuestion = async (pending: PendingInlineQuestion | null) => {
       if (!pending) return;
-      if (Date.now() - pending.timestamp >= 4000) return;
+      if (Date.now() - pending.timestamp >= MAX_PENDING_INLINE_AGE_MS) return;
 
       const intentId = pending.injectionId || String(pending.timestamp);
       if (lastHandledRef.current === intentId) return;
       lastHandledRef.current = intentId;
 
-      setInlineContextSnippet(pending.text.slice(0, 160));
+      setSnippetRef.current(pending.text.slice(0, 160));
 
       const normalizedImages = await normalizeInlineImages(pending.images);
-      const result = await handleSend({
+      const result = await handleSendRef.current({
         text: pending.text,
         images: normalizedImages,
         styleMode: 'standard',
@@ -97,15 +162,25 @@ export function useInlineQuestionBridge({
 
       if (
         pending.type === MSG_INLINE_SOLVE_AND_INJECT &&
-        result?.answer &&
         pending.injectionId
       ) {
-        await relayInlineSolveResult(pending.tabId, pending.injectionId, result).catch((error) => {
-          console.warn('Failed to relay inline solve result:', error);
-        });
+        if (result?.answer) {
+          await relayInlineSolveResult(pending.tabId, pending.injectionId, result).catch((error) => {
+            console.warn('Failed to relay inline solve result:', error);
+          });
+        } else {
+          await relayInlineSolveFailure(
+            pending.tabId,
+            pending.injectionId,
+            'Could not start or complete this solve. Please try again.',
+          ).catch((error) => {
+            console.warn('Failed to relay inline solve failure:', error);
+          });
+        }
       }
     };
 
+    // On mount: consume any question saved to storage before this panel opened.
     void takePendingInlineQuestion()
       .then(processPendingQuestion)
       .catch((error) => {
@@ -113,7 +188,7 @@ export function useInlineQuestionBridge({
       });
 
     const handleMessage = (message: unknown, sender: chrome.runtime.MessageSender) => {
-      const payload =
+      const msg =
         typeof message === 'object' && message !== null
           ? (message as {
               type?: string;
@@ -127,30 +202,40 @@ export function useInlineQuestionBridge({
             })
           : null;
 
-      if (!payload || !isOwnContentScriptSender(sender) || !sender.tab?.id) {
+      if (!msg) return;
+
+      // ── Path A: Background notified us that a new question is in storage ──
+      // (fires when the sidepanel is already open and a new inline solve comes in)
+      if (msg.type === MSG_INLINE_QUESTION_READY && isOwnExtensionSender(sender) && !sender.tab) {
+        void takePendingInlineQuestion()
+          .then(processPendingQuestion)
+          .catch((error) => {
+            console.warn('Failed to load pending inline question on notify:', error);
+          });
         return;
       }
 
+      // ── Path B: Direct message from a content script ──
+      // (rare race path — normally background intercepts first)
       if (
-        payload.type !== MSG_INLINE_EXTRACT_QUESTION &&
-        payload.type !== MSG_INLINE_SOLVE_AND_INJECT
+        !isOwnContentScriptSender(sender) ||
+        !sender.tab?.id ||
+        (msg.type !== MSG_INLINE_EXTRACT_QUESTION && msg.type !== MSG_INLINE_SOLVE_AND_INJECT)
       ) {
         return;
       }
 
       const pending = sanitizePendingInlineQuestion({
-        type: payload.type,
-        text: payload.payload?.text as string | undefined,
-        images: payload.payload?.images as string[] | undefined,
-        injectionId: payload.payload?.injectionId as string | undefined,
-        isBulk: payload.payload?.isBulk === true,
-        timestamp: Number(payload.payload?.timestamp ?? Date.now()),
+        type: msg.type,
+        text: msg.payload?.text as string | undefined,
+        images: msg.payload?.images as string[] | undefined,
+        injectionId: msg.payload?.injectionId as string | undefined,
+        isBulk: msg.payload?.isBulk === true,
+        timestamp: Number(msg.payload?.timestamp ?? Date.now()),
         tabId: sender.tab.id,
       });
 
-      if (!pending) {
-        return;
-      }
+      if (!pending) return;
 
       void processPendingQuestion(pending);
       void clearPendingInlineQuestion().catch(() => {});
@@ -158,5 +243,6 @@ export function useInlineQuestionBridge({
 
     chrome.runtime.onMessage.addListener(handleMessage);
     return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, [handleSend, setInlineContextSnippet]);
+  // Only re-run on mount/unmount — refs keep handleSend/setSnippet current.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }

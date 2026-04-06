@@ -37,6 +37,7 @@ interface SiteConfig {
 
 // Minimum confidence score (0-1) for treating an element as a real question container
 const MIN_QUESTION_SCORE = 0.45;
+const INLINE_SOLVE_RESULT_TIMEOUT_MS = 90_000;
 
 function ensureKatexStyles(shadowRoot?: ShadowRoot | null) {
     if (!shadowRoot) return;
@@ -147,6 +148,7 @@ function normalizeInlineMath(input: string): string {
 let pendingAutoCrop:
   | { resolve: (value: string | null) => void; timeoutId: number }
   | null = null;
+const pendingInlineSolveTimeouts = new Map<string, number>();
 
 function getFrameOffset(): { x: number; y: number } {
   let x = 0;
@@ -673,7 +675,7 @@ const SUPPORTED_SITES: SiteConfig[] = [
   { name: 'Madrasti', hostRegex: /madrasti\./i, questionSelector: '.card.mb-4.question-item, .question-card, .view-question-container, .question-text-container, [class*="question" i], [id*="question" i]', titleSelector: '.card-header, .question-title, .question-text', minScore: 0.4, forceOverflowVisible: true, forceImageCapture: true },
   { name: '1600.lol', hostRegex: /1600\.lol/i, questionSelector: '.question-bank-item, [class*="QuestionDisplay"], [class*="QuestionWrapper"], [data-testid*="question" i], [class*="question" i], [id*="question" i]', minScore: 0.4, forceOverflowVisible: true, forceImageCapture: true },
   { name: 'OnePrep', hostRegex: /oneprep\.(xyz|com|io|app)/i, questionSelector: '.question-module, [class*="QuestionModule"], .question-container, [class*="QuestionWrapper"], [data-testid*="question" i], [class*="question" i], [id*="question" i]', minScore: 0.4, forceOverflowVisible: true, forceImageCapture: true },
-  { name: 'Generic Educational', hostRegex: /.*/, questionSelector: '.question, .quiz-question, .problem, .exercise, [class*="question-item" i], [class*="question-container" i], [class*="question-wrapper" i], div[id*="question" i], .assessment-question, .form-group.p-3' }
+  { name: 'Generic Educational', hostRegex: /.*/, questionSelector: '.question, .quiz-question, .problem, .exercise, [class*="question-item" i], [class*="question-container" i], [class*="question-wrapper" i], div[id*="question" i], .assessment-question, .form-group.p-3, [data-testid*="question" i], [data-test*="question" i], fieldset, [role="radiogroup"], [role="group"][aria-labelledby]' }
 ];
 
 function looksLikeQuestionPage(): boolean {
@@ -721,6 +723,30 @@ function querySelectorAllDeep(selector: string): HTMLElement[] {
     while (current) { const shadow = (current as HTMLElement).shadowRoot; if (shadow) traverse(shadow); current = walker.nextNode() as Element | null; }
   };
   traverse(document); return results;
+}
+
+function findFallbackQuestionContainers(): HTMLElement[] {
+  const selectors = 'input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"], textarea, input[type="text"], input:not([type]), [role="textbox"]';
+  const controls = Array.from(document.querySelectorAll(selectors)) as HTMLElement[];
+  const candidates = new Set<HTMLElement>();
+  const controlSelector = 'input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]';
+
+  controls.forEach((control) => {
+    let current: HTMLElement | null = control.closest('fieldset, [role="radiogroup"], [role="group"], [class*="question" i], [data-testid*="question" i], [data-test*="question" i], .card, section, article, li, div') as HTMLElement | null;
+    let depth = 0;
+    while (current && depth < 6) {
+      const optionCount = current.querySelectorAll(controlSelector).length;
+      const textLength = sanitizeBulkTextBlock(getCleanVisibleText(current)).length;
+      if ((optionCount >= 2 || current.querySelectorAll('textarea, input[type="text"], input:not([type]), [role="textbox"]').length > 0) && textLength >= 20 && textLength <= 2600) {
+        candidates.add(current);
+        break;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+  });
+
+  return Array.from(candidates);
 }
 
 function scoreQuestionContainer(el: HTMLElement, config: SiteConfig | null): number {
@@ -807,6 +833,36 @@ function hideHighlightButton() { if (selectionButton) selectionButton.style.disp
 
 interface QuestionFields { textFields: (HTMLInputElement | HTMLTextAreaElement)[]; options: { label: string; input: HTMLInputElement; container: HTMLElement }[]; }
 
+function getInlineSolveButtonIdleHtml() {
+  return `${getOryxInlineIcon(20)}<span style="font-size: 11px; font-weight: 800; margin-left: 6px; color: #475569; font-family: system-ui, sans-serif;">Solve</span>`;
+}
+
+function setInlineButtonIdle(button: HTMLButtonElement | null) {
+  if (!button) return;
+  button.disabled = false;
+  button.style.opacity = '1';
+  button.style.cursor = 'pointer';
+  button.innerHTML = getInlineSolveButtonIdleHtml();
+}
+
+function setInlineButtonLoading(button: HTMLButtonElement | null) {
+  if (!button) return;
+  button.disabled = true;
+  button.style.opacity = '0.85';
+  button.style.cursor = 'wait';
+  button.innerHTML = '<div class="oryx-thinking-spinner" style="width:16px; height:16px; border:2px solid #6366f1; border-top-color:transparent; border-radius:50%; animation: oryx-spin 0.8s linear infinite;"></div><style>@keyframes oryx-spin { to { transform: rotate(360deg); } }</style><span style="font-size: 11px; font-weight: 800; margin-left: 6px; color: #6366f1;">Thinking...</span>';
+}
+
+function showInlineAnalyzingState(answerBox: HTMLElement) {
+  answerBox.style.display = 'block';
+  answerBox.innerHTML = '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 13px;"><div style="width: 12px; height: 12px; border: 2px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: oryx-spin 0.8s linear infinite;"></div> Analyzing question...</div>';
+}
+
+function showInlineSendError(answerBox: HTMLElement, message: string) {
+  answerBox.style.display = 'block';
+  answerBox.innerHTML = `<div style="color: #ef4444; font-weight: 700; font-size: 14px; margin-bottom: 4px;">- Solve Failed</div><div style="font-size: 12px; color: #64748b;">${escapeHtml(message || 'Unable to send this question right now.')}</div>`;
+}
+
 function findQuestionContainer(el: HTMLElement | null): HTMLElement | null {
     if (!el) return null;
     const config = getCurrentSiteConfig();
@@ -864,7 +920,10 @@ function buildInlineImages(primaryCapture: string | null, images: string[], conf
     const deduped = images.filter((src, index) => src && images.indexOf(src) === index);
     if (!primaryCapture) return deduped.slice(0, max);
     if (config?.forceImageCapture) return [primaryCapture];
-    if (deduped.some((src) => /^https?:\/\//i.test(src))) return [primaryCapture];
+    // When we have a screenshot AND remote URLs, include both:
+    // the capture gives the AI layout/math context; the original URLs give
+    // full-resolution image content. The bridge will try to fetch URLs
+    // client-side and convert them to Files to avoid backend CORS issues.
     return [primaryCapture, ...deduped.filter((src) => src !== primaryCapture)].slice(0, max);
 }
 
@@ -893,6 +952,292 @@ function findFieldsInContainer(container: HTMLElement): QuestionFields {
   return fields;
 }
 
+// ── Answer Injection ──────────────────────────────────────────────────
+
+type FieldSnapshot = {
+  element: HTMLInputElement | HTMLTextAreaElement;
+  previousValue: string;
+  previousChecked: boolean;
+};
+
+/**
+ * Extract a choice letter (A-D) from the AI answer string.
+ * Handles formats like "A", "A)", "A.", "**A**", "Option A", "Choice A",
+ * "The answer is A", etc.
+ */
+function extractAnswerChoice(answer: string): string | null {
+  const cleaned = answer
+    .replace(/\*\*/g, '')  // strip markdown bold
+    .replace(/`/g, '')     // strip code ticks
+    .trim();
+
+  // Direct letter at start: "A", "A)", "A.", "A:"
+  const directMatch = cleaned.match(/^([A-Da-d])\s*[).:\-]?\s/);
+  if (directMatch) return directMatch[1].toUpperCase();
+
+  // "The answer is A" / "Answer: A" / "Correct answer is B"
+  const answerIsMatch = cleaned.match(/(?:the\s+)?(?:correct\s+)?answer\s*(?:is|:)\s*\(?([A-Da-d])\)?/i);
+  if (answerIsMatch) return answerIsMatch[1].toUpperCase();
+
+  // "Option A" / "Choice B"
+  const optionMatch = cleaned.match(/(?:option|choice)\s+([A-Da-d])\b/i);
+  if (optionMatch) return optionMatch[1].toUpperCase();
+
+  // Just a single letter by itself (possibly with punctuation)
+  const singleLetterMatch = cleaned.match(/^[(\[]?([A-Da-d])[)\].]?$/);
+  if (singleLetterMatch) return singleLetterMatch[1].toUpperCase();
+
+  return null;
+}
+
+/**
+ * Apply the AI answer to form fields within a question container.
+ * Returns an array of field snapshots for undo, or null if nothing was applied.
+ */
+function applyAnswerToFields(
+  container: HTMLElement,
+  answer: string,
+): FieldSnapshot[] | null {
+  const fields = findFieldsInContainer(container);
+  const snapshots: FieldSnapshot[] = [];
+
+  // ── Try MCQ first ──
+  if (fields.options.length >= 2) {
+    const choiceLetter = extractAnswerChoice(answer);
+    if (choiceLetter) {
+      const letterIndex = choiceLetter.charCodeAt(0) - 65; // A=0, B=1, …
+
+      // Strategy 1: Match by position (A→first, B→second, etc.)
+      let matched = false;
+      if (letterIndex >= 0 && letterIndex < fields.options.length) {
+        const opt = fields.options[letterIndex];
+        snapshots.push({
+          element: opt.input,
+          previousValue: opt.input.value,
+          previousChecked: opt.input.checked,
+        });
+        opt.input.checked = true;
+        opt.input.dispatchEvent(new Event('change', { bubbles: true }));
+        opt.input.dispatchEvent(new Event('input', { bubbles: true }));
+        // Some frameworks listen for click
+        opt.input.click();
+        matched = true;
+      }
+
+      // Strategy 2: If position didn't work, try label text matching
+      if (!matched) {
+        for (const opt of fields.options) {
+          const labelStart = opt.label.trim();
+          // Check if label starts with the letter: "A) something" or "A. something"
+          if (/^[A-Da-d]\s*[).:\-]/i.test(labelStart) &&
+              labelStart[0].toUpperCase() === choiceLetter) {
+            snapshots.push({
+              element: opt.input,
+              previousValue: opt.input.value,
+              previousChecked: opt.input.checked,
+            });
+            opt.input.checked = true;
+            opt.input.dispatchEvent(new Event('change', { bubbles: true }));
+            opt.input.dispatchEvent(new Event('input', { bubbles: true }));
+            opt.input.click();
+            matched = true;
+            break;
+          }
+        }
+      }
+
+      if (matched) {
+        // Highlight the selected option briefly
+        for (const snap of snapshots) {
+          const optEntry = fields.options.find(o => o.input === snap.element);
+          if (optEntry?.container) {
+            optEntry.container.style.transition = 'background-color 0.3s, outline 0.3s';
+            optEntry.container.style.outline = '2px solid #6366f1';
+            optEntry.container.style.outlineOffset = '2px';
+            optEntry.container.style.backgroundColor = 'rgba(99, 102, 241, 0.08)';
+          }
+        }
+        return snapshots;
+      }
+    }
+
+    // Strategy 3: Match by answer text content against option labels
+    const answerLower = answer.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    if (answerLower.length > 2) {
+      for (const opt of fields.options) {
+        const labelLower = opt.label.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+        if (labelLower && (answerLower.includes(labelLower) || labelLower.includes(answerLower))) {
+          snapshots.push({
+            element: opt.input,
+            previousValue: opt.input.value,
+            previousChecked: opt.input.checked,
+          });
+          opt.input.checked = true;
+          opt.input.dispatchEvent(new Event('change', { bubbles: true }));
+          opt.input.dispatchEvent(new Event('input', { bubbles: true }));
+          opt.input.click();
+          const optEntry = fields.options.find(o => o.input === opt.input);
+          if (optEntry?.container) {
+            optEntry.container.style.transition = 'background-color 0.3s, outline 0.3s';
+            optEntry.container.style.outline = '2px solid #6366f1';
+            optEntry.container.style.outlineOffset = '2px';
+            optEntry.container.style.backgroundColor = 'rgba(99, 102, 241, 0.08)';
+          }
+          return snapshots;
+        }
+      }
+    }
+  }
+
+  // ── Try text fields ──
+  if (fields.textFields.length > 0) {
+    // Clean the answer to just the core value (strip "The answer is..." prefix)
+    let cleanAnswer = answer
+      .replace(/\*\*/g, '')
+      .replace(/^(?:the\s+)?(?:correct\s+)?answer\s*(?:is|:)\s*/i, '')
+      .trim();
+    // If answer is very long (explanation mixed in), take first line only
+    if (cleanAnswer.length > 200) {
+      cleanAnswer = cleanAnswer.split('\n')[0].trim();
+    }
+
+    const field = fields.textFields[0];
+    snapshots.push({
+      element: field,
+      previousValue: field.value,
+      previousChecked: false,
+    });
+    // Use native setter to trigger React/Vue/Angular change detection
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+      'value'
+    )?.set;
+    if (nativeSetter) {
+      nativeSetter.call(field, cleanAnswer);
+    } else {
+      field.value = cleanAnswer;
+    }
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+    field.style.transition = 'outline 0.3s, background-color 0.3s';
+    field.style.outline = '2px solid #6366f1';
+    field.style.outlineOffset = '1px';
+    field.style.backgroundColor = 'rgba(99, 102, 241, 0.06)';
+    return snapshots;
+  }
+
+  return null;
+}
+
+/**
+ * Undo previously applied answer changes.
+ */
+function undoAppliedAnswer(snapshots: FieldSnapshot[]) {
+  for (const snap of snapshots) {
+    if (snap.element instanceof HTMLInputElement && (snap.element.type === 'radio' || snap.element.type === 'checkbox')) {
+      snap.element.checked = snap.previousChecked;
+      snap.element.dispatchEvent(new Event('change', { bubbles: true }));
+      // Remove highlight from parent container
+      const container = snap.element.closest('div, li, .choice-container') as HTMLElement | null;
+      if (container) {
+        container.style.outline = '';
+        container.style.outlineOffset = '';
+        container.style.backgroundColor = '';
+      }
+    } else {
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        snap.element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      if (nativeSetter) {
+        nativeSetter.call(snap.element, snap.previousValue);
+      } else {
+        snap.element.value = snap.previousValue;
+      }
+      snap.element.dispatchEvent(new Event('input', { bubbles: true }));
+      snap.element.dispatchEvent(new Event('change', { bubbles: true }));
+      snap.element.style.outline = '';
+      snap.element.style.outlineOffset = '';
+      snap.element.style.backgroundColor = '';
+    }
+  }
+}
+
+/**
+ * Build the Apply / Applied+Undo bar for the inline answer card.
+ */
+function buildApplyUndoBar(
+  container: HTMLElement,
+  answer: string,
+): HTMLElement {
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0;';
+
+  const applyBtn = document.createElement('button');
+  applyBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    <span style="margin-left: 5px;">Apply Answer</span>
+  `;
+  applyBtn.style.cssText = 'display: flex; align-items: center; background: #6366f1; color: white; border: none; border-radius: 8px; padding: 6px 14px; font-size: 11px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);';
+  applyBtn.addEventListener('mouseenter', () => { applyBtn.style.background = '#4f46e5'; applyBtn.style.transform = 'translateY(-1px)'; });
+  applyBtn.addEventListener('mouseleave', () => { applyBtn.style.background = '#6366f1'; applyBtn.style.transform = 'translateY(0)'; });
+
+  let appliedSnapshots: FieldSnapshot[] | null = null;
+
+  applyBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const snapshots = applyAnswerToFields(container, answer);
+    if (snapshots && snapshots.length > 0) {
+      appliedSnapshots = snapshots;
+      applyBtn.style.display = 'none';
+      appliedIndicator.style.display = 'flex';
+      undoBtn.style.display = 'flex';
+    } else {
+      applyBtn.innerHTML = '<span style="font-size: 11px; font-weight: 800;">No fields found</span>';
+      applyBtn.style.background = '#94a3b8';
+      applyBtn.style.cursor = 'default';
+      setTimeout(() => {
+        applyBtn.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          <span style="margin-left: 5px;">Apply Answer</span>
+        `;
+        applyBtn.style.background = '#6366f1';
+        applyBtn.style.cursor = 'pointer';
+      }, 2000);
+    }
+  });
+
+  const appliedIndicator = document.createElement('div');
+  appliedIndicator.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    <span style="margin-left: 4px;">Applied</span>
+  `;
+  appliedIndicator.style.cssText = 'display: none; align-items: center; background: #10b981; color: white; border-radius: 8px; padding: 6px 14px; font-size: 11px; font-weight: 800;';
+
+  const undoBtn = document.createElement('button');
+  undoBtn.textContent = 'Undo';
+  undoBtn.style.cssText = 'display: none; align-items: center; background: transparent; color: #64748b; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s;';
+  undoBtn.addEventListener('mouseenter', () => { undoBtn.style.borderColor = '#ef4444'; undoBtn.style.color = '#ef4444'; });
+  undoBtn.addEventListener('mouseleave', () => { undoBtn.style.borderColor = '#e2e8f0'; undoBtn.style.color = '#64748b'; });
+  undoBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (appliedSnapshots) {
+      undoAppliedAnswer(appliedSnapshots);
+      appliedSnapshots = null;
+    }
+    appliedIndicator.style.display = 'none';
+    undoBtn.style.display = 'none';
+    applyBtn.style.display = 'flex';
+  });
+
+  bar.appendChild(applyBtn);
+  bar.appendChild(appliedIndicator);
+  bar.appendChild(undoBtn);
+  return bar;
+}
+
 function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
   if (element.dataset.oryxInjected === "true") return;
   element.dataset.oryxInjected = "true";
@@ -903,81 +1248,118 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
   element.dataset.oryxInjectedId = injectionId;
   const shadowHost = document.createElement('div');
   shadowHost.className = 'oryx-inline-injector';
-  shadowHost.style.cssText = 'position: relative; display: flex; flex-direction: column; align-items: flex-end; margin-top: 12px; width: 100%; z-index: 2147483647;';
+  shadowHost.style.cssText = 'position: absolute; bottom: 10px; right: 10px; inset-inline-end: 10px; display: flex; flex-direction: column; align-items: flex-end; width: auto; max-width: min(620px, calc(100vw - 24px)); z-index: 2147483647; pointer-events: none;';
   const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
   const button = document.createElement('button');
-  button.innerHTML = `${getOryxInlineIcon(20)}<span style="font-size: 11px; font-weight: 800; margin-left: 6px; display: none; font-family: system-ui, sans-serif;">Solve Inline</span>`;
-  button.style.cssText = 'display: flex; align-items: center; justify-content: center; background: white; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: all 0.2s; color: #475569;';
+  button.innerHTML = getInlineSolveButtonIdleHtml();
+  button.style.cssText = 'display: flex; align-items: center; justify-content: center; background: white; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: all 0.2s; color: #475569; pointer-events: auto;';
   const answerBox = document.createElement('div');
   answerBox.id = 'answer-' + injectionId;
-  answerBox.style.cssText = 'display: none; width: 100%; max-width: 600px; margin-top: 12px; background: #f8fafc; border: 2px solid #e0e7ff; border-radius: 12px; padding: 16px; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1); font-family: system-ui, sans-serif; text-align: left;';
+  answerBox.style.cssText = 'display: none; position: absolute; bottom: calc(100% + 8px); right: 0; inset-inline-end: 0; width: min(600px, 72vw); background: #f8fafc; border: 2px solid #e0e7ff; border-radius: 12px; padding: 16px; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1); font-family: system-ui, sans-serif; text-align: left; pointer-events: auto;';
   
   button.addEventListener('mouseenter', () => {
+    if (button.disabled) return;
     button.style.borderColor = '#6366f1'; button.style.backgroundColor = '#f5f7ff'; button.style.transform = 'translateY(-2px)';
-    const span = button.querySelector('span'); if (span) { span.style.display = 'inline'; span.style.color = '#6366f1'; }
+    const span = button.querySelector('span'); if (span) span.style.color = '#6366f1';
   });
   button.addEventListener('mouseleave', () => {
     button.style.borderColor = '#e2e8f0'; button.style.backgroundColor = 'white'; button.style.transform = 'translateY(0)';
-    const span = button.querySelector('span'); if (span) span.style.display = 'none';
+    const span = button.querySelector('span'); if (span) span.style.color = '#475569';
   });
   
   button.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
+    if (button.disabled) return;
     const runSolve = async () => {
-      const currentConfig = getCurrentSiteConfig();
-      const contextElements = findContextElements(element, currentConfig);
-      const extractedFields = findFieldsInContainer(element);
-      const questionTextRaw = dedupeBulkLines(
-        contextElements.flatMap((node) => sanitizeBulkTextBlock(getCleanVisibleText(node as HTMLElement)).split(/\n+/))
-      ).join('\n');
-      let questionText = focusInlineQuestionText(questionTextRaw);
-      if (extractedFields.options.length > 0) {
-        const choiceLines = extractedFields.options.map((opt, idx) => {
-            const label = (opt.label || '').trim();
-            return label ? `${String.fromCharCode(65 + idx)}) ${label}` : null;
-          }).filter(Boolean).join('\n');
-        if (choiceLines && !questionText.includes(choiceLines.slice(0, 20))) questionText += `\n\nChoices:\n${choiceLines}`;
-      }
-      const questionImages: string[] = [];
-      contextElements.forEach(node => { getImagesInContainer(node as HTMLElement, 2).forEach(src => { if (!questionImages.includes(src)) questionImages.push(src); }); });
-      getImagesInContainer(element, 6).forEach(src => { if (!questionImages.includes(src)) questionImages.push(src); });
-      
-      button.innerHTML = `<div class="oryx-thinking-spinner" style="width:16px; height:16px; border:2px solid #6366f1; border-top-color:transparent; border-radius:50%; animation: oryx-spin 0.8s linear infinite;"></div><style>@keyframes oryx-spin { to { transform: rotate(360deg); } }</style><span style="font-size: 11px; font-weight: 800; margin-left: 6px; color: #6366f1;">Thinking...</span>`;
-      answerBox.style.display = 'block';
-      answerBox.innerHTML = '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 13px;"><div style="width: 12px; height: 12px; border: 2px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: oryx-spin 0.8s linear infinite;"></div> Analyzing question...</div>';
-      
-      const brevityNote = "Be brief: return the final answer and a short explanation (1-2 sentences).";
-      const imageNote = questionImages.length > 0 ? "Use attached images if needed." : "";
-      
-      let finalMathImage: string | null = null;
-      if (shouldAutoCapture(currentConfig, questionText, questionImages, element.contains(element.querySelector('svg, mjx-container, .katex')))) {
-          const rect = getElementViewportRect(element, currentConfig);
-          finalMathImage = await requestAutoCrop(rect);
-      }
-      const inlineImages = buildInlineImages(finalMathImage, questionImages, currentConfig, 4);
-      
-      chrome.runtime.sendMessage({
-        type: MSG_INLINE_SOLVE_AND_INJECT,
-        payload: {
-          injectionId,
-          text: [
-            'Solve this question.',
-            brevityNote,
-            'If this is multiple choice, return the exact choice letter and text.',
-            'Use the passage/context if present.',
-            imageNote,
-            '',
-            'Question:',
-            focusInlineQuestionText(questionText.trim()),
-          ].filter(Boolean).join('\n'),
-          images: inlineImages,
+      try {
+        const currentConfig = getCurrentSiteConfig();
+        const contextElements = findContextElements(element, currentConfig);
+        const extractedFields = findFieldsInContainer(element);
+        const questionTextRaw = dedupeBulkLines(
+          contextElements.flatMap((node) => sanitizeBulkTextBlock(getCleanVisibleText(node as HTMLElement)).split(/\n+/))
+        ).join('\n');
+        let questionText = focusInlineQuestionText(questionTextRaw);
+        if (extractedFields.options.length > 0) {
+          const choiceLines = extractedFields.options.map((opt, idx) => {
+              const label = (opt.label || '').trim();
+              return label ? `${String.fromCharCode(65 + idx)}) ${label}` : null;
+            }).filter(Boolean).join('\n');
+          if (choiceLines && !questionText.includes(choiceLines.slice(0, 20))) questionText += `\n\nChoices:\n${choiceLines}`;
         }
-      });
+        const questionImages: string[] = [];
+        contextElements.forEach(node => { getImagesInContainer(node as HTMLElement, 2).forEach(src => { if (!questionImages.includes(src)) questionImages.push(src); }); });
+        getImagesInContainer(element, 6).forEach(src => { if (!questionImages.includes(src)) questionImages.push(src); });
+
+        setInlineButtonLoading(button);
+        showInlineAnalyzingState(answerBox);
+
+        const brevityNote = "Be brief: return the final answer and a short explanation (1-2 sentences).";
+        const imageNote = questionImages.length > 0 ? "Use attached images if needed." : "";
+
+        let finalMathImage: string | null = null;
+        if (shouldAutoCapture(currentConfig, questionText, questionImages, element.contains(element.querySelector('svg, mjx-container, .katex')))) {
+            const rect = getElementViewportRect(element, currentConfig);
+            finalMathImage = await requestAutoCrop(rect);
+        }
+        const inlineImages = buildInlineImages(finalMathImage, questionImages, currentConfig, 4);
+
+        const staleTimeout = pendingInlineSolveTimeouts.get(injectionId);
+        if (typeof staleTimeout === 'number') {
+          window.clearTimeout(staleTimeout);
+        }
+        const timeoutId = window.setTimeout(() => {
+          pendingInlineSolveTimeouts.delete(injectionId);
+          setInlineButtonIdle(button);
+          showInlineSendError(answerBox, 'Timed out waiting for a response. Please try again.');
+        }, INLINE_SOLVE_RESULT_TIMEOUT_MS);
+        pendingInlineSolveTimeouts.set(injectionId, timeoutId);
+
+        chrome.runtime.sendMessage({
+          type: MSG_INLINE_SOLVE_AND_INJECT,
+          payload: {
+            injectionId,
+            text: [
+              'Solve this question.',
+              brevityNote,
+              'If this is multiple choice, return the exact choice letter and text.',
+              'Use the passage/context if present.',
+              imageNote,
+              '',
+              'Question:',
+              focusInlineQuestionText(questionText.trim()),
+            ].filter(Boolean).join('\n'),
+            images: inlineImages,
+          }
+        }, (response?: { ok?: boolean; error?: string }) => {
+          const runtimeError = chrome.runtime.lastError;
+          if (!runtimeError && response?.ok) return;
+
+          const activeTimeout = pendingInlineSolveTimeouts.get(injectionId);
+          if (typeof activeTimeout === 'number') {
+            window.clearTimeout(activeTimeout);
+            pendingInlineSolveTimeouts.delete(injectionId);
+          }
+          setInlineButtonIdle(button);
+          showInlineSendError(
+            answerBox,
+            runtimeError?.message || response?.error || 'Could not send this question to the extension.',
+          );
+        });
+      } catch (error) {
+        const activeTimeout = pendingInlineSolveTimeouts.get(injectionId);
+        if (typeof activeTimeout === 'number') {
+          window.clearTimeout(activeTimeout);
+          pendingInlineSolveTimeouts.delete(injectionId);
+        }
+        setInlineButtonIdle(button);
+        const errorMessage = error instanceof Error ? error.message : 'Unable to prepare this question.';
+        showInlineSendError(answerBox, errorMessage);
+      }
     };
-    runSolve();
+    void runSolve();
   });
   shadowRoot.appendChild(button); shadowRoot.appendChild(answerBox);
-  if (element.firstChild) element.insertBefore(shadowHost, element.firstChild); else element.appendChild(shadowHost);
+  element.appendChild(shadowHost);
 }
 
 function getFinalistQuestions(allPotential: HTMLElement[], config: SiteConfig): HTMLElement[] {
@@ -1099,7 +1481,13 @@ function initInjector() {
   if (config) {
     const scanAndInject = () => {
         const currentConfig = getCurrentSiteConfig(); if (!currentConfig) return;
-        const allPotential = querySelectorAllDeep(currentConfig.questionSelector);
+        let allPotential = querySelectorAllDeep(currentConfig.questionSelector);
+        if (allPotential.length === 0) {
+          allPotential = querySelectorAllDeep('[data-testid*="question" i], [data-test*="question" i], [class*="question" i], [id*="question" i], [class*="problem" i], [class*="exercise" i], fieldset, [role="radiogroup"]');
+        }
+        if (allPotential.length === 0) {
+          allPotential = findFallbackQuestionContainers();
+        }
         const deduplicatedFinalists = getFinalistQuestions(allPotential, currentConfig);
         if (deduplicatedFinalists.length > 0 && !document.getElementById('oryx-extract-all-container')) {
           addExtractAllButton(currentConfig);
@@ -1134,11 +1522,16 @@ if (!inlineInjectorWindow.__oryxInlineInjectorReady) {
     }
     if (message.type === MSG_INLINE_SOLVE_RESULT) {
       const { injectionId, answer, explanation, steps } = message.payload;
+      const timeoutId = pendingInlineSolveTimeouts.get(injectionId);
+      if (typeof timeoutId === 'number') {
+        window.clearTimeout(timeoutId);
+        pendingInlineSolveTimeouts.delete(injectionId);
+      }
       const host = Array.from(document.querySelectorAll('.oryx-inline-injector')).find(h => (h as HTMLElement).parentElement?.dataset.oryxInjectedId === injectionId) as HTMLElement;
       if (host && host.shadowRoot) {
           const answerBox = host.shadowRoot.getElementById('answer-' + injectionId);
           const btn = host.shadowRoot.querySelector('button');
-          if (btn) btn.innerHTML = `${getOryxInlineIcon(20)}`;
+          setInlineButtonIdle(btn as HTMLButtonElement | null);
           if (answerBox) {
             if (answer === 'Solve Failed') {
                 answerBox.innerHTML = `<div style="color: #ef4444; font-weight: 700; font-size: 14px; margin-bottom: 4px;">- Solve Failed</div><div style="font-size: 12px; color: #64748b;">${escapeHtml(explanation || 'Unknown error occurred')}</div>`;
@@ -1174,6 +1567,11 @@ if (!inlineInjectorWindow.__oryxInlineInjectorReady) {
                   <div style="font-size: 13px; color: #475569; line-height: 1.6; padding: 0 4px; font-weight: 500;">${explanationHtml || escapeHtml(explanation || '')}</div>
                   ${stepsHtml}
                 `;
+                // Append Apply/Undo bar — the question container is the shadow host's parent
+                const questionContainer = host.parentElement;
+                if (questionContainer) {
+                  answerBox.appendChild(buildApplyUndoBar(questionContainer, answer));
+                }
             }
           }
       }

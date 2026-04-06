@@ -7,7 +7,7 @@ create table public.profiles (
   email text,
   subscription_tier text default 'free', -- 'free' or 'pro'
   subscription_status text default 'inactive', -- 'active', 'canceled', etc.
-  paddle_customer_id text, -- To link with Polar.sh
+  paddle_customer_id text, -- To link with Paddle
   questions_asked_today int default 0,
   credits_balance int default 0,
   last_question_date date default CURRENT_DATE,
@@ -81,7 +81,7 @@ $$;
 create table public.subscriptions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references public.profiles(id) not null,
-  polar_subscription_id text not null,
+  provider_subscription_id text not null,
   status text,
   current_period_end timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null

@@ -1,23 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import MarketingLayout from '../components/MarketingLayout';
+import { MascotIcon } from '../components/MascotIcon';
 import {
   ArrowRight,
-  Calculator,
-  Camera,
   CheckCircle2,
-  FolderKanban,
   Globe,
-  Lightbulb,
-  MessageSquare,
-  Monitor,
   MousePointerClick,
-  Scan,
-  Smartphone,
-  Sparkles,
-  Wand2,
-  Zap,
 } from 'lucide-react';
+
 
 export default function HowItWorksPage() {
   const { t } = useTranslation();
@@ -27,7 +18,7 @@ export default function HowItWorksPage() {
       num: '01',
       title: t('how_it_works.stepper_1_title', { defaultValue: 'Install the Extension' }),
       description: t('how_it_works.stepper_1_desc', { defaultValue: 'Add OryxSolver to Chrome and pin it so capture is one click away when a question is already on the page.' }),
-      icon: <Monitor className="h-7 w-7" />,
+      icon: <MascotIcon name="engineer" size={64} />,
       notes: [
         t('how_it_works.stepper_1_n1', { defaultValue: 'Open the Chrome Web Store' }),
         t('how_it_works.stepper_1_n2', { defaultValue: 'Click Add to Chrome' }),
@@ -42,7 +33,7 @@ export default function HowItWorksPage() {
       num: '02',
       title: t('how_it_works.stepper_2_title', { defaultValue: 'Capture the Question' }),
       description: t('how_it_works.stepper_2_desc', { defaultValue: 'Grab the visible problem, upload a screenshot, or paste the text without rebuilding the task in another app.' }),
-      icon: <Camera className="h-7 w-7" />,
+      icon: <MascotIcon name="scan_homework" size={64} />,
       notes: [
         t('how_it_works.stepper_2_n1', { defaultValue: 'Screenshot or upload' }),
         t('how_it_works.stepper_2_n2', { defaultValue: 'Paste raw question text' }),
@@ -57,7 +48,7 @@ export default function HowItWorksPage() {
       num: '03',
       title: t('how_it_works.stepper_3_title', { defaultValue: 'Choose the Mode' }),
       description: t('how_it_works.stepper_3_desc', { defaultValue: 'Pick the explanation style once at the start so the thread stays consistent as you keep asking follow-ups.' }),
-      icon: <Lightbulb className="h-7 w-7" />,
+      icon: <MascotIcon name="thinking" size={64} />,
       notes: [
         t('how_it_works.stepper_3_n1', { defaultValue: 'Standard for balance' }),
         t('how_it_works.stepper_3_n2', { defaultValue: 'Exam for formal structure' }),
@@ -72,7 +63,7 @@ export default function HowItWorksPage() {
       num: '04',
       title: t('how_it_works.stepper_4_title', { defaultValue: 'Keep Learning in One Thread' }),
       description: t('how_it_works.stepper_4_desc', { defaultValue: 'Get the answer, review the steps, then keep follow-ups attached to the same solve instead of starting over.' }),
-      icon: <Zap className="h-7 w-7" />,
+      icon: <MascotIcon name="sparkle" size={64} />,
       notes: [
         t('how_it_works.stepper_4_n1', { defaultValue: 'Clear final answer first' }),
         t('how_it_works.stepper_4_n2', { defaultValue: 'Steps after that' }),
@@ -85,45 +76,6 @@ export default function HowItWorksPage() {
     },
   ];
 
-  const FUTURE_FEATURES = [
-    {
-      title: t('how_it_works.future_1_title', { defaultValue: 'LMS Integration' }),
-      description: t('how_it_works.future_1_desc', { defaultValue: 'Placeholder: future support for launching Oryx closer to school platforms and assignment flows.' }),
-      icon: <Scan className="h-5 w-5" />,
-      accent: 'from-indigo-500 to-blue-500',
-    },
-    {
-      title: t('how_it_works.future_2_title', { defaultValue: 'Mobile Sync' }),
-      description: t('how_it_works.future_2_desc', { defaultValue: 'Placeholder: review history, saved solves, and progress across devices from the same account.' }),
-      icon: <Smartphone className="h-5 w-5" />,
-      accent: 'from-sky-500 to-cyan-400',
-    },
-    {
-      title: t('how_it_works.future_3_title', { defaultValue: 'Smart Extraction' }),
-      description: t('how_it_works.future_3_desc', { defaultValue: 'Placeholder: stronger OCR and cleaner math/text extraction from rough screenshots and handwriting.' }),
-      icon: <Wand2 className="h-5 w-5" />,
-      accent: 'from-violet-500 to-fuchsia-400',
-    },
-    {
-      title: t('how_it_works.future_4_title', { defaultValue: 'STEM Optimized' }),
-      description: t('how_it_works.future_4_desc', { defaultValue: 'Placeholder: deeper flows for subjects like calculus, chemistry, and physics.' }),
-      icon: <Calculator className="h-5 w-5" />,
-      accent: 'from-orange-500 to-amber-400',
-    },
-    {
-      title: t('how_it_works.future_5_title', { defaultValue: 'Contextual Chat' }),
-      description: t('how_it_works.future_5_desc', { defaultValue: 'Placeholder: richer clarification threads that stay tied to the exact problem and explanation.' }),
-      icon: <MessageSquare className="h-5 w-5" />,
-      accent: 'from-emerald-500 to-teal-400',
-    },
-    {
-      title: t('how_it_works.future_6_title', { defaultValue: 'Study Library' }),
-      description: t('how_it_works.future_6_desc', { defaultValue: 'Placeholder: organize solves into reusable collections for review and later practice.' }),
-      icon: <FolderKanban className="h-5 w-5" />,
-      accent: 'from-blue-500 to-indigo-400',
-    },
-  ];
-
   return (
     <MarketingLayout className="oryx-shell-bg text-[color:var(--text-primary)]" headerVariant="glass" footerVariant="solid">
       <main className="relative overflow-hidden pb-20 pt-32">
@@ -132,7 +84,7 @@ export default function HowItWorksPage() {
         <section className="relative px-4 py-12 sm:px-6">
           <div className="mx-auto max-w-5xl text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-              <Sparkles className="h-4 w-4 text-sky-600 dark:text-teal-300" />
+              <MascotIcon name="sparkle" size={16} />
               {t('how_it_works.title_badge', { defaultValue: 'How it works' })}
             </div>
             <h1 className="marketing-heading mt-8 text-[3.3rem] font-extrabold text-slate-950 dark:text-white sm:text-[4.1rem] md:text-[5.1rem] md:leading-[0.98]">
@@ -162,27 +114,23 @@ export default function HowItWorksPage() {
 
         <section className="px-4 py-16 sm:px-6">
           <div className="mx-auto max-w-6xl">
-            <div className="space-y-10">
+            <div className="space-y-20">
               {STEPS.map((step, index) => (
-                <div key={step.num} className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+                <div key={step.num} className="grid gap-12 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
                   <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
                     <div
-                      className="relative overflow-hidden rounded-[36px] border border-slate-200/80 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.1),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,255,0.92))] p-6 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] dark:border-white/10 dark:bg-[linear-gradient(180deg,#0b1220,#090f1b)] sm:p-8"
+                      className="relative overflow-hidden rounded-[36px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] dark:border-white/10 dark:bg-[#0b1220] sm:p-8"
                       style={{ boxShadow: `0 30px 90px -48px ${step.glow}` }}
                     >
-                      <div className="absolute inset-0 opacity-80" style={{ background: step.wash }} />
-                      <div className="relative flex min-h-[300px] items-center justify-center rounded-[28px] border border-slate-200/80 bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/8 dark:bg-[#0b1020] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                        <span className="absolute left-6 top-6 text-6xl font-black tracking-[-0.05em] text-white/6 sm:text-7xl">
+                      <div className="relative flex min-h-[320px] items-center justify-center rounded-[28px] border border-slate-200/80 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/8 dark:bg-[#0b1020] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                        <span className="absolute left-6 top-6 text-6xl font-black tracking-[-0.05em] text-slate-100/30 dark:text-white/5 sm:text-7xl">
                           {step.num}
                         </span>
                         <div className="flex flex-col items-center text-center">
-                          <div
-                            className={`flex h-28 w-28 items-center justify-center rounded-[30px] bg-gradient-to-br ${step.accent} text-white`}
-                            style={{ boxShadow: `0 30px 60px -30px ${step.glow}` }}
-                          >
+                          <div className="transition-transform hover:scale-110 duration-500">
                             {step.icon}
                           </div>
-                          <p className="mt-6 text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
+                          <p className="mt-8 text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
                             {step.mediaLabel}
                           </p>
                         </div>
@@ -230,14 +178,14 @@ export default function HowItWorksPage() {
               </p>
               <div className="mt-8 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[24px] border border-slate-200/80 bg-white/86 p-5 dark:border-white/10 dark:bg-white/[0.04]">
-                  <div className="oryx-marketing-icon h-11 w-11">
+                  <div className="h-11 w-11 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
                     <Globe className="h-5 w-5" />
                   </div>
                   <p className="mt-4 text-lg font-black text-slate-950 dark:text-white">{t('how_it_works.webapp_title', { defaultValue: 'Web app' })}</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t('how_it_works.webapp_desc', { defaultValue: 'Review history, plan usage, settings, and longer threads.' })}</p>
                 </div>
                 <div className="rounded-[24px] border border-slate-200/80 bg-white/86 p-5 dark:border-white/10 dark:bg-white/[0.04]">
-                  <div className="oryx-marketing-icon h-11 w-11">
+                  <div className="h-11 w-11 flex items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
                     <MousePointerClick className="h-5 w-5" />
                   </div>
                   <p className="mt-4 text-lg font-black text-slate-950 dark:text-white">{t('how_it_works.extension_title', { defaultValue: 'Extension' })}</p>
@@ -249,58 +197,13 @@ export default function HowItWorksPage() {
             <div className="rounded-[34px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.3)] backdrop-blur dark:border-white/10 dark:bg-[#08111d]/82">
               <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/80 p-5 dark:border-white/10 dark:bg-white/[0.03]">
                 <div className="flex items-center gap-3">
-                  <div className="oryx-marketing-icon h-11 w-11">
-                    <Scan className="h-5 w-5" />
-                  </div>
+                  <MascotIcon name="scan_homework" size={44} />
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('how_it_works.placeholder_badge', { defaultValue: 'Placeholder preview' })}</p>
                     <p className="text-lg font-black text-slate-950 dark:text-white">{t('how_it_works.placeholder_title', { defaultValue: 'Future visual walkthrough slot' })}</p>
                   </div>
                 </div>
-                <div className="mt-5 flex h-56 items-center justify-center rounded-[24px] border border-dashed border-slate-300/80 bg-white/80 dark:border-white/10 dark:bg-white/[0.03]">
-                  <div className="text-center">
-                    <FolderKanban className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
-                    <p className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400">{t('how_it_works.placeholder_slot', { defaultValue: 'Image, GIF, or guided demo can live here later.' })}</p>
-                  </div>
-                </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="border-y border-slate-200/70 bg-white/60 px-4 py-20 sm:px-6 dark:border-white/5 dark:bg-black/10">
-          <div className="mx-auto max-w-6xl">
-            <div className="mx-auto max-w-3xl text-center">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('how_it_works.premium_badge', { defaultValue: 'Future placeholders' })}</p>
-              <h2 className="marketing-heading mt-4 text-4xl font-extrabold text-slate-950 dark:text-white sm:text-5xl">
-                {t('how_it_works.premium_title', { defaultValue: 'Premium features for' })}
-                <span className="block gradient-text-animated">{t('how_it_works.premium_gradient', { defaultValue: 'faster learning.' })}</span>
-              </h2>
-              <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                {t('how_it_works.premium_desc', { defaultValue: 'These are intentionally placeholders for future expansion. The layout is ready now, and the product detail can be replaced later when each area becomes real.' })}
-              </p>
-            </div>
-
-            <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {FUTURE_FEATURES.map((feature) => (
-                <div
-                  key={feature.title}
-                  className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(246,249,255,0.9))] p-8 shadow-[0_28px_80px_-54px_rgba(15,23,42,0.28)] dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(12,17,30,0.96),rgba(9,13,24,0.9))]"
-                >
-                  <div className={`flex h-14 w-14 items-center justify-center rounded-[18px] bg-gradient-to-br ${feature.accent} text-white shadow-[0_18px_40px_-20px_rgba(15,23,42,0.38)]`}>
-                    {feature.icon}
-                  </div>
-                  <h3 className="mt-6 text-2xl font-black tracking-[-0.02em] text-slate-950 dark:text-white">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-3 text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                    {feature.description}
-                  </p>
-                  <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                    {t('how_it_works.placeholder_label', { defaultValue: 'Placeholder' })}
-                  </p>
-                </div>
-              ))}
             </div>
           </div>
         </section>

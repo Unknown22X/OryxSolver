@@ -6,6 +6,7 @@ import { mergeUsageSnapshot, buildUsageSnapshot } from '../utils/usageHelpers';
 import { getAccessToken } from '../auth/supabaseAuthClient';
 import { compressImages } from '../utils/imageCompressor';
 import { analytics } from '../services/analyticsService';
+import { executeBulkSolveChunked } from '../utils/bulkSolve';
 import type { SolveStreamEvent } from '../services/contracts';
 
 export function useSolve(
@@ -130,52 +131,30 @@ export function useSolve(
         ]);
 
       if (payload.isBulk) {
-        const questionBlocks = payload.text.split(/QUESTION\s+\d+:/i).filter(b => b.trim().length > 5);
-        if (questionBlocks.length > 5) {
-          let combinedAnswer = ''; let combinedExplanation = '';
-          const chunkSize = 5;
-          for (let i = 0; i < questionBlocks.length; i += chunkSize) {
-            const chunk = questionBlocks.slice(i, i + chunkSize);
-            const chunkText = `I need an answer key for the following questions. Provide a clear, numbered list of ONLY the final answers. No steps or reasoning.\n\nQuestions:\n${chunk.map((q, idx) => `QUESTION ${i + idx + 1}:\n${q.trim()}`).join('\n\n')}`;
-            
+        const { answer: combinedAnswer, explanation: combinedExplanation } = await executeBulkSolveChunked({
+          text: payload.text,
+          images: compressedImages,
+          styleMode: payload.styleMode,
+          language: effectiveLanguage || 'en',
+          token,
+          signal: abortControllerRef.current?.signal,
+          onProgress: (progressText: string) => {
             setChatSession(prev => prev.map(entry => entry.id === pendingTurnId ? {
-              ...entry, response: { ...entry.response, answer: `Solving Questions ${i+1}-${Math.min(i+chunkSize, questionBlocks.length)}...` }
+              ...entry, response: { ...entry.response, answer: progressText }
             } : entry));
-
-            try {
-              const chunkResponse = await postSolveRequest(token, {
-                question: chunkText,
-                styleMode: payload.styleMode,
-                images: compressedImages,
-                language: effectiveLanguage,
-                history: [], 
-                isBulk: true
-              }, { signal: abortControllerRef.current?.signal });
-              
-              combinedAnswer += (combinedAnswer ? '\n' : '') + (chunkResponse.answer || '');
-              combinedExplanation += (combinedExplanation ? '\n\n' : '') + (chunkResponse.explanation || '');
-            } catch (chunkError: any) {
-              console.warn(`Bulk chunk ${i/chunkSize} failed:`, chunkError);
-              combinedAnswer += (combinedAnswer ? '\n' : '') + `[Failed to solve questions ${i+1}-${Math.min(i+chunkSize, questionBlocks.length)}]`;
-            }
-
-            // Add a small delay between chunks to stay within server rate limits
-            if (i + chunkSize < questionBlocks.length) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
           }
-          
-          const turn: ChatTurn = {
-            id: Date.now().toString(),
-            question: pendingQuestion,
-            images: previewImages,
-            isBulk: true,
-            response: { answer: combinedAnswer, explanation: combinedExplanation, steps: [], suggestions: [] }
-          };
-          setChatSession(prev => prev.map((entry) => (entry.id === pendingTurnId ? turn : entry)));
-          setIsSending(false); setLastSendTime(Date.now());
-          return { answer: combinedAnswer, explanation: combinedExplanation };
-        }
+        });
+
+        const turn: ChatTurn = {
+          id: Date.now().toString(),
+          question: pendingQuestion,
+          images: previewImages,
+          isBulk: true,
+          response: { answer: combinedAnswer, explanation: combinedExplanation, steps: [], suggestions: [] }
+        };
+        setChatSession(prev => prev.map((entry) => (entry.id === pendingTurnId ? turn : entry)));
+        setIsSending(false); setLastSendTime(Date.now());
+        return { answer: combinedAnswer, explanation: combinedExplanation };
       }
 
       const streamedRequest = !payload.isBulk;
