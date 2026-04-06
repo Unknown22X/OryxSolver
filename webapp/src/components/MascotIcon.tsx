@@ -29,10 +29,11 @@ const MASCOT_MAP: Record<MascotName, string> = {
   'thinking': '/app_icons/thinking.png',
   'greeting': '/app_icons/greeting.png',
   'historian': '/app_icons/historian.png',
-  'engineer': '/app_icons/engineer.png',
+  'engineer': '/app_icons/Engineer.png',
   'champion': '/app_icons/champion.png',
-  'success': '/app_icons/success.png',
+  'success': '/app_icons/Success.png',
   'error': '/app_icons/error.png',
+
   'scan_homework': '/app_icons/scan_homework.png',
   'scan_homework2': '/app_icons/scan_homework2.png',
 };
