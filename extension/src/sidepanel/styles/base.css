@@ -91,8 +91,9 @@
 
   .oryx-logo-clean {
     display: block;
-    border-radius: 24%;
-    transform: scale(1.015);
+    border-radius: 24.3%;
+    clip-path: inset(0.5px round 24.3%);
     transform-origin: center;
+    object-fit: cover;
   }
 }

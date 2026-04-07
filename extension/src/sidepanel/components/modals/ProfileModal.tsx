@@ -2,6 +2,7 @@ import { X, User, Shield, ChevronRight, Key, LogOut, Trash2, Sparkles, HelpCircl
 import { useTranslation } from 'react-i18next';
 import type { AuthUser } from '../../auth/supabaseAuthClient';
 import LanguageSwitcher from '../../../i18n/LanguageSwitcher';
+import { getPlanUsageMetric } from '../../utils/usagePresentation';
 
 type ProfileModalProps = {
   isOpen: boolean;
@@ -90,8 +91,16 @@ export default function ProfileModal({
     }
   };
   
-  const creditUsagePercent = monthlyQuestionsLimit > 0 ? (monthlyQuestionsUsed / monthlyQuestionsLimit) * 100 : 0;
-  const imageUsagePercent = monthlyImagesLimit > 0 ? (monthlyImagesUsed / monthlyImagesLimit) * 100 : 0;
+  const questionMetric = getPlanUsageMetric(
+    monthlyQuestionsUsed,
+    monthlyQuestionsLimit,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
+  const imageMetric = getPlanUsageMetric(
+    monthlyImagesUsed,
+    monthlyImagesLimit,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
 
   const PANEL_TITLES: Record<string, string> = {
     menu: t('profile.title'),
@@ -340,19 +349,19 @@ export default function ProfileModal({
                   <div>
                     <div className="mb-2 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-400">
                       <span>{t('profile.questions')}</span>
-                      <span>{monthlyQuestionsLimit === -1 ? t('profile.high_limit') : `${Math.max(monthlyQuestionsLimit - monthlyQuestionsUsed, 0)} ${t('profile.left')}`}</span>
+                      <span>{questionMetric.isUnlimited ? t('profile.high_limit') : questionMetric.percentLabel}</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${Math.min(creditUsagePercent, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: questionMetric.progressWidth }} />
                     </div>
                   </div>
                   <div>
                     <div className="mb-2 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-400">
                       <span>{t('profile.images')}</span>
-                      <span>{monthlyImagesUsed}/{monthlyImagesLimit}</span>
+                      <span>{imageMetric.isUnlimited ? t('profile.high_limit') : imageMetric.percentLabel}</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500" style={{ width: `${Math.min(imageUsagePercent, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500" style={{ width: imageMetric.progressWidth }} />
                     </div>
                   </div>
                 </div>

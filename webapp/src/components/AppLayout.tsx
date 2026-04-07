@@ -9,6 +9,7 @@ import NotificationCenter from './NotificationCenter';
 import AnnouncementBanner from './AnnouncementBanner';
 import { useUsage } from '../hooks/useUsage';
 import { useProfile } from '../hooks/useProfile';
+import { getUsageSummary } from '../lib/usagePresentation';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@supabase/supabase-js';
@@ -189,10 +190,12 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
     );
   }
 
-  const planQuestionsRemaining = usage?.monthlyQuestionsRemaining ?? 0;
-  const planQuestionsLimit = usage?.monthlyQuestionsLimit ?? 0;
   const extraCreditsRemaining = usage?.paygoCreditsRemaining ?? 0;
-  const planReached = !usageLoading && usage && planQuestionsLimit !== -1 && planQuestionsRemaining <= 0;
+  const planMetric = getUsageSummary(
+    usage,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
+  const planReached = !usageLoading && usage && planMetric.isExhausted;
   const isChatLayout = currentPage === 'chat';
   const useCompactDesktopSidebar = currentPage !== 'admin';
 
@@ -329,7 +332,7 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
               <div className="mb-3 rounded-[22px] border border-slate-200/80 bg-white/60 p-3 shadow-sm dark:border-white/5 dark:bg-white/[0.02]">
                 <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                   <span>{t('nav.plan')}</span>
-                  <span>{usageLoading ? '...' : planQuestionsLimit === -1 ? t('nav.unlimited') : `${planQuestionsRemaining}/${planQuestionsLimit}`}</span>
+                  <span>{usageLoading ? '...' : planMetric.isUnlimited ? t('nav.unlimited') : planMetric.percentLabel}</span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                   <span>{t('nav.credits')}</span>
@@ -360,7 +363,7 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
                 <div className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-slate-200/70 bg-white/55 px-3 py-2 shadow-sm dark:border-white/5 dark:bg-white/[0.03]">
                   <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{t('nav.plan')}</span>
                   <span className={`text-[10px] font-black ${planReached ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
-                    {usageLoading ? '...' : planQuestionsLimit === -1 ? '∞' : `${planQuestionsRemaining}/${planQuestionsLimit}`}
+                    {usageLoading ? '...' : planMetric.isUnlimited ? t('nav.unlimited') : planMetric.percentLabel}
                   </span>
                 </div>
 

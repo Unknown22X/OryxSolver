@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowRight,
@@ -15,11 +15,7 @@ import MarketingLayout from '../components/MarketingLayout';
 import { trackEvent } from '../lib/analyticsClient';
 import { LANDING_FEATURES, LANDING_REVIEWS } from '../content/landingFeatures';
 
-const PRICING_PREVIEW = [
-  { name: 'Free', price: '$0', href: '/signup' },
-  { name: 'Oryx Pro', price: '$3.99', href: '/pricing', featured: true },
-  { name: 'Premium', price: '$9.99', href: '/pricing' },
-];
+
 
 const HERO_SUPPORT_ITEMS = [
   'landing.questions_free',
@@ -61,6 +57,7 @@ export default function LandingPage() {
   const isRtl = i18n.language === 'ar';
   const navigate = useNavigate();
   const extensionUrl = String(import.meta.env.VITE_CHROME_EXTENSION_URL ?? '').trim();
+
 
   const handleCreateAccountClick = (location: string) => {
     trackEvent('cta_click', { location, action: 'signup' });
@@ -142,7 +139,6 @@ export default function LandingPage() {
                     controls
                     playsInline
                     preload="metadata"
-                    poster="/demo-poster.svg"
                   >
                     <source src="/betademo.mp4" type="video/mp4" />
                   </video>
@@ -251,53 +247,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="marketing-section">
-        <div className="marketing-container">
-          <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="max-w-2xl">
-              <p className="marketing-eyebrow">{t('landing.pricing_preview_eyebrow')}</p>
-              <h2 className="marketing-heading marketing-title-lg mt-4 text-[color:var(--text-primary)]">
-                {t('landing.pricing_preview_title')}
-              </h2>
-            </div>
-            <Link to="/pricing" className="text-sm font-bold text-[color:var(--brand-accent)]">
-              {t('landing.full_pricing')}
-            </Link>
-          </div>
-
-          <div className="grid gap-5 lg:grid-cols-3">
-            {PRICING_PREVIEW.map((plan) => (
-              <div key={plan.name} className={`marketing-panel p-7 ${plan.featured ? 'border-[color:var(--brand-border-strong)]' : ''}`}>
-                {plan.featured && (
-                  <div className="marketing-badge mb-5">
-                    <span>{t('landing.most_popular', { defaultValue: 'Most popular' })}</span>
-                  </div>
-                )}
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[color:var(--text-soft)]">
-                  {t(`landing.pricing_preview.${plan.name.replace(/\s+/g, '_').toLowerCase()}.name`)}
-                </p>
-                <div className="mt-4 flex items-end gap-2">
-                  <span className="text-lg font-bold text-[color:var(--text-muted)]">$</span>
-                  <span className="text-5xl font-black tracking-[-0.04em] text-[color:var(--text-primary)]">
-                    {plan.price.replace('$', '')}
-                  </span>
-                  <span className="pb-2 text-sm font-bold text-[color:var(--text-muted)]">{t('landing.per_month', { defaultValue: '/ month' })}</span>
-                </div>
-                <p className="marketing-copy mt-3 text-sm">
-                  {t(`landing.pricing_preview.${plan.name.replace(/\s+/g, '_').toLowerCase()}.detail`)}
-                </p>
-                <Link
-                  to={plan.href}
-                  className={`${plan.featured ? 'gradient-btn' : 'marketing-secondary-btn'} mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm`}
-                >
-                  {t(`landing.pricing_preview.${plan.name.replace(/\s+/g, '_').toLowerCase()}.cta`)}
-                  <ArrowRight size={16} className={isRtl ? 'rotate-180' : ''} />
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       <section className="marketing-section pt-0">
         <div className="marketing-container">

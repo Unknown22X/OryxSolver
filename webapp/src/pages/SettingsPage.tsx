@@ -30,6 +30,7 @@ import AppLayout from '../components/AppLayout';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
 import { usePublicAppConfig } from '../hooks/usePublicAppConfig';
 import { useUsage } from '../hooks/useUsage';
+import { getUsageSummary } from '../lib/usagePresentation';
 import { fetchEdge } from '../lib/edge';
 import { deleteHistory } from '../lib/historyApi';
 import { submitBugReport, submitFeedback } from '../lib/feedbackApi';
@@ -43,6 +44,10 @@ export default function SettingsPage({ user }: { user: User }) {
   const location = useLocation();
   const { config } = usePublicAppConfig();
   const { usage } = useUsage(user);
+  const planMetric = getUsageSummary(
+    usage,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -443,9 +448,8 @@ export default function SettingsPage({ user }: { user: User }) {
                 {t('settings.current_plan', { tier: usage?.subscriptionTier === 'premium' ? t('pricing.premium') : usage?.subscriptionTier === 'pro' ? t('pricing.pro') : t('pricing.free') })}
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                {t('settings.monthly_questions', { 
-                  used: usage?.monthlyQuestionsUsed ?? 0, 
-                  limit: usage?.monthlyQuestionsLimit === -1 ? t('settings.unlimited') : (usage?.monthlyQuestionsLimit ?? 15) 
+                {t('settings.monthly_questions_percent', {
+                  percent: planMetric.isUnlimited ? t('settings.unlimited') : planMetric.percentLabel,
                 })}
               </p>
               <p className="mt-1 text-sm text-slate-500">

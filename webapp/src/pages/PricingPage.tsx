@@ -15,12 +15,12 @@ const PLANS = [
     description: 'Perfect for trying OryxSolver with real homework.',
     titleClass: 'pricing-title-free',
     features: [
-      '15 questions per month',
-      '5 image uploads',
-      '3 bulk solves',
-      'Standard, Exam, and ELI5',
-      'Basic history',
-      'Community support',
+      'pricing.free_usage',
+      'pricing.free_img',
+      'pricing.free_bulk',
+      'pricing.free_modes',
+      'pricing.free_hist',
+      'pricing.free_support',
     ],
     featured: false,
   },
@@ -31,12 +31,12 @@ const PLANS = [
     description: 'The standard for serious students.',
     titleClass: 'pricing-title-pro',
     features: [
-      '100 questions per month',
-      '50 image uploads',
-      '15 bulk solves',
-      'All 5 AI modes',
-      'Priority processing',
-      'Cloud history sync',
+      'pricing.pro_usage',
+      'pricing.pro_img',
+      'pricing.pro_bulk',
+      'pricing.pro_modes',
+      'pricing.pro_processing',
+      'pricing.pro_sync',
     ],
     featured: true,
   },
@@ -47,12 +47,12 @@ const PLANS = [
     description: 'Higher limits for power users.',
     titleClass: 'pricing-title-premium',
     features: [
-      '500 questions per month',
-      '200 image uploads',
-      '30 bulk solves',
-      'All 5 AI modes',
-      'Unlimited history',
-      'Premium support',
+      'pricing.premium_usage',
+      'pricing.premium_img',
+      'pricing.premium_bulk',
+      'pricing.premium_modes',
+      'pricing.premium_hist',
+      'pricing.premium_support',
     ],
     featured: false,
   },
@@ -70,11 +70,11 @@ const CREDIT_PACKAGES = [
 const FAQS = [
   {
     q: 'What counts as a question?',
-    a: 'A new top-level solve uses a monthly question. Follow-ups stay in the same thread and keep context.',
+    a: 'Each solve or follow-up uses your monthly plan quota first. If that quota is finished, Oryx uses your extra credits.',
   },
   {
     q: 'When do extra credits help?',
-    a: 'Use them when you want more solves without changing your plan. They work as extra usage on top of the monthly setup.',
+    a: 'Extra credits help after your monthly plan quota is fully used. They keep the app working without changing your subscription.',
   },
   {
     q: 'Can I switch plans later?',
@@ -131,7 +131,7 @@ export default function PricingPage() {
             </h1>
 
             <p className="marketing-copy mt-6 text-lg sm:text-xl">
-              {t('pricing.heading_desc', { defaultValue: 'Start free, compare higher-limit options, and choose the setup that matches your workload. Paid upgrades open soon.' })}
+              {t('pricing.heading_desc', { defaultValue: 'Start free, compare higher-limit options, and choose the setup that matches your workload.' })}
             </p>
 
             <div className="mt-10 inline-flex rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-surface)] p-1.5">
@@ -163,6 +163,9 @@ export default function PricingPage() {
                   <div className={`${plan.featured ? 'mt-4' : ''}`}>
                     <p className={`text-4xl font-bold tracking-[-0.05em] ${plan.titleClass}`}>{t(`pricing.${plan.id}_name`, { defaultValue: plan.name })}</p>
                     <p className="marketing-copy mt-3 text-base">{t(`pricing.${plan.id}_desc`, { defaultValue: plan.description })}</p>
+                    <div className="mt-5 inline-flex rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-surface)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[color:var(--brand-accent)]">
+                      {t(`pricing.${plan.id}_usage_badge`)}
+                    </div>
                   </div>
 
                   <div className="mt-10 flex items-end gap-2">
@@ -177,14 +180,11 @@ export default function PricingPage() {
                         <div className="mt-0.5 rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-accent-soft)] p-1 text-[color:var(--brand-accent)]">
                           <Check size={12} />
                         </div>
-                        <span>{feature}</span>
+                        <span>{t(feature)}</span>
                       </li>
                     ))}
                   </ul>
 
-                  <div className="mt-8 rounded-[24px] border border-[color:var(--brand-border)] bg-[color:var(--brand-surface-strong)] px-4 py-3 text-sm font-medium text-[color:var(--text-secondary)]">
-                    {t('pricing.plan_notice', { defaultValue: 'See the full plan structure now. Paid upgrades will open as soon as checkout is ready.' })}
-                  </div>
 
                   <button
                     onClick={() => handleUpgrade(plan.id)}

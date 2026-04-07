@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import MessageComposer from './MessageComposer';
 import type { StyleMode, UsageSnapshot } from '../types';
+import { getPlanUsageMetric } from '../utils/usagePresentation';
 
 type HeroViewProps = {
   logoUrl: string;
@@ -27,15 +28,18 @@ export default function HeroView({
 }: HeroViewProps) {
   const { t } = useTranslation();
   const isPro = usage?.subscriptionTier !== 'free';
-  const remainingQuestions = usage?.monthlyQuestionsLimit === -1 ? -1 : Math.max((usage?.monthlyQuestionsLimit || 0) - (usage?.monthlyQuestionsUsed || 0), 0) + (usage?.paygoCreditsRemaining || 0);
-  const questionUsagePercent = usage?.monthlyQuestionsLimit > 0 ? (usage.monthlyQuestionsUsed / usage.monthlyQuestionsLimit) * 100 : 0;
+  const planMetric = getPlanUsageMetric(
+    usage?.monthlyQuestionsUsed ?? 0,
+    usage?.monthlyQuestionsLimit ?? 0,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
   const disabledModes: StyleMode[] = usage?.subscriptionTier === 'free' ? ['gen_alpha', 'step_by_step'] : [];
 
   return (
     <div className="flex h-full w-full flex-col items-center overflow-y-auto custom-scrollbar pb-4 pt-4">
       <div className="mb-4 flex flex-col items-center px-6 text-center">
-        <div className="mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-[24%] bg-transparent transition-all animate-float">
-          <img src={logoUrl} alt="Oryx" className="oryx-logo-clean h-full w-full object-contain" />
+        <div className="mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-[24.3%] bg-[#4338ca] transition-all animate-float isolate">
+          <img src={logoUrl} alt="Oryx" className="oryx-logo-clean h-full w-full" />
         </div>
 
         <h2 className="mb-2 text-[32px] font-black leading-[1] tracking-tighter text-slate-900 drop-shadow-sm dark:text-white">
@@ -54,8 +58,7 @@ export default function HeroView({
               <div>
                 <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{t('hero.plan_allowance')}</p>
                 <p className="text-xl font-black leading-none text-slate-900 dark:text-white">
-                  {remainingQuestions === -1 ? t('header.high_limit') : remainingQuestions}{' '}
-                  <span className="text-sm font-bold text-slate-700 dark:text-white">{t('response.steps')}</span>
+                  {planMetric.isUnlimited ? t('header.high_limit') : planMetric.percentLabel}
                 </p>
               </div>
               <button
@@ -69,12 +72,12 @@ export default function HeroView({
             <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/5">
               <div
                 className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 transition-all duration-1000"
-                style={{ width: `${100 - questionUsagePercent}%` }}
+                style={{ width: planMetric.progressWidth }}
               />
             </div>
 
             <p className="text-center text-[10px] font-bold text-slate-500 dark:text-slate-400">
-              {t('hero.questions_used', { used: usage?.monthlyQuestionsUsed ?? 0, limit: usage?.monthlyQuestionsLimit ?? 0 })}
+              {t('hero.plan_usage_caption')}
             </p>
           </div>
         </div>

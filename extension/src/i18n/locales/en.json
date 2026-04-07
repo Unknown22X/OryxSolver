@@ -11,7 +11,8 @@
     "continue": "Continue",
     "or": "or",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "percent_used": "{{percent}}% used"
   },
   "lang": {
     "switch_to_ar": "عربي",
@@ -62,6 +63,7 @@
     "type_question": "Type a question...",
     "bulk_solve": "Bulk Solve",
     "questions_used": "{{used}} / {{limit}} questions used",
+    "plan_usage_caption": "Plan usage is shown separately from extra credits.",
     "unlimited": "Unlimited",
     "upgrade_for_more": "Upgrade for more questions",
     "free_plan": "Free Plan",

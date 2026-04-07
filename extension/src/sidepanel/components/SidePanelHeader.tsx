@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { CreditCard, ArrowRight, Sun, Moon, Menu } from 'lucide-react';
 import { MascotIcon } from './MascotIcon';
+import { getPlanUsageMetric } from '../utils/usagePresentation';
 
 type SidePanelHeaderProps = {
   appName: string;
@@ -40,10 +41,12 @@ export default function SidePanelHeader({
   webAppBaseUrl = 'https://oryxsolver.com',
 }: SidePanelHeaderProps) {
   const { t } = useTranslation();
-  const totalCapacity = monthlyLimit === -1 ? -1 : (monthlyLimit + (paygoRemaining || 0));
-  const usagePercentage = monthlyLimit > 0 ? Math.min((monthlyUsed / (totalCapacity > 0 ? totalCapacity : monthlyLimit)) * 100, 100) : 0;
-  const isUsageWarning = monthlyLimit > 0 && usagePercentage >= 80 && paygoRemaining <= 0;
-  const remainingQuestions = monthlyLimit === -1 ? -1 : Math.max(monthlyLimit - monthlyUsed, 0) + (paygoRemaining || 0);
+  const planMetric = getPlanUsageMetric(
+    monthlyUsed,
+    monthlyLimit,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
+  const isUsageWarning = monthlyLimit > 0 && planMetric.percentUsed >= 80 && paygoRemaining <= 0;
   const avatarInitial = (userEmail?.trim().charAt(0) || 'U').toUpperCase();
 
   return (
@@ -92,16 +95,16 @@ export default function SidePanelHeader({
                 isUsageWarning ? 'border-red-200 bg-red-50/80 shadow-inner dark:bg-red-900/20 dark:border-red-700/50' : 'shadow-inner'
               }`}
               style={!isUsageWarning ? { backgroundColor: 'var(--oryx-panel-soft)', borderColor: 'var(--oryx-border-soft)' } : undefined}
-              title={remainingQuestions === -1 ? t('header.high_limit') : `${remainingQuestions} questions remaining`}
+              title={planMetric.isUnlimited ? t('header.high_limit') : planMetric.percentLabel}
             >
               <CreditCard size={12} className={isUsageWarning ? 'text-red-600' : 'text-blue-600 dark:text-blue-400'} />
               <span className={`text-[11px] font-black tracking-tight ${isUsageWarning ? 'text-red-800' : 'text-blue-800 dark:text-blue-300'}`}>
-                {remainingQuestions === -1 ? t('header.high_limit') : t('header.questions_left', { count: remainingQuestions })}
+                {planMetric.isUnlimited ? t('header.high_limit') : planMetric.percentLabel}
               </span>
               <div className="absolute bottom-0 left-3 right-3 h-[2px] overflow-hidden rounded-full bg-slate-200/50">
                 <div 
                   className={`h-full transition-all duration-700 ${isUsageWarning ? 'bg-red-500' : 'bg-blue-500'}`}
-                  style={{ width: `${usagePercentage}%` }}
+                  style={{ width: planMetric.progressWidth }}
                 />
               </div>
             </div>

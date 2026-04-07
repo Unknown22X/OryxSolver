@@ -11,7 +11,8 @@
     "continue": "متابعة",
     "or": "أو",
     "yes": "نعم",
-    "no": "لا"
+    "no": "لا",
+    "percent_used": "{{percent}}% مستخدم"
   },
   "lang": {
     "switch_to_ar": "عربي",
@@ -66,7 +67,8 @@
     "upgrade_for_more": "قم بالترقية للحصول على أسئلة أكثر",
     "free_plan": "الخطة المجانية",
     "pro_plan": "خطة برو",
-    "premium_plan": "الخطة المميزة"
+    "premium_plan": "الخطة المميزة",
+    "plan_usage_caption": "يظهر استخدام الخطة منفصلاً عن الرصيد الإضافي."
   },
   "composer": {
     "placeholder": "اطرح سؤالاً للمتابعة...",

@@ -16,6 +16,7 @@ import { MascotIcon } from '../components/MascotIcon';
 import AppLayout from '../components/AppLayout';
 import { useUsage } from '../hooks/useUsage';
 import { useSubscription } from '../hooks/useSubscription';
+import { getPlanUsageMetric } from '../lib/usagePresentation';
 import { cancelSubscription, createBillingPortalSession, createCheckout } from '../lib/billingApi';
 
 
@@ -172,7 +173,12 @@ export default function SubscriptionPage({ user }: { user: User }) {
   const includedQuestionsRemaining =
     usage?.monthlyQuestionsLimit === -1
       ? t('subscription_page.high_limit')
-      : String(Math.max(usage?.monthlyQuestionsRemaining ?? 0, 0));
+      : t('subscription_page.used_percent', {
+          percent: Math.min(
+            Math.round(getPlanUsageMetric(usage?.monthlyQuestionsUsed ?? 0, usage?.monthlyQuestionsLimit ?? 0).percentUsed),
+            100,
+          ),
+        });
   const totalCreditsPurchased = wallet.grantedCredits;
   const creditsSpent = wallet.usedCredits;
   const planStartedOn = formatDate(subscription.createdAt, t);

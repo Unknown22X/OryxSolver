@@ -96,7 +96,7 @@ export default function HowItWorksPage() {
                     <div className="marketing-panel flex min-h-[320px] items-center justify-center overflow-hidden p-6 text-center">
                       {step.videoUrl ? (
                         <div className="w-full">
-                          <video autoPlay muted loop playsInline className="h-full w-full rounded-[24px] object-cover" poster="/demo-poster.svg">
+                          <video autoPlay muted loop playsInline className="h-full w-full rounded-[24px] object-cover">
                             <source src={step.videoUrl} type="video/mp4" />
                           </video>
                           <p className="mt-4 text-[11px] font-black uppercase tracking-[0.18em] text-[color:var(--text-soft)]">{step.mediaLabel}</p>

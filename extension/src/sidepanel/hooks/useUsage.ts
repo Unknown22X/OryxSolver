@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { getApiUrl } from '../services/apiConfig';
 import { getAccessToken } from '../auth/supabaseAuthClient';
 import { buildUsageSnapshot, mergeUsageSnapshot } from '../utils/usageHelpers';
+import { getPlanUsageMetric } from '../utils/usagePresentation';
 import type { UsageSnapshot, UpgradeMoment } from '../types';
 
 const INITIAL_USAGE: UsageSnapshot = {
@@ -49,16 +50,12 @@ export function useUsage() {
 
   const resetUsage = useCallback(() => setUsage(INITIAL_USAGE), []);
 
-  const totalQuestionsCapacity = usage.monthlyQuestionsLimit === -1 ? -1 : (usage.monthlyQuestionsLimit + (usage.paygoCreditsRemaining || 0));
-  const creditUsagePercent = usage.monthlyQuestionsLimit > 0
-    ? Math.min((usage.monthlyQuestionsUsed / (totalQuestionsCapacity > 0 ? totalQuestionsCapacity : usage.monthlyQuestionsLimit)) * 100, 100)
-    : 0;
-    
-  const totalImagesCapacity = usage.monthlyImagesLimit === -1 ? -1 : (usage.monthlyImagesLimit + (usage.paygoCreditsRemaining || 0)); // Assuming paygo applies to images too if needed, or stick to questions logic
-  const imageUsagePercent = usage.monthlyImagesLimit > 0
-    ? Math.min((usage.monthlyImagesUsed / (totalImagesCapacity > 0 ? totalImagesCapacity : usage.monthlyImagesLimit)) * 100, 100)
-    : 0;
-  const effectiveUsagePercent = Math.max(creditUsagePercent, imageUsagePercent);
+  const questionUsage = getPlanUsageMetric(usage.monthlyQuestionsUsed, usage.monthlyQuestionsLimit);
+  const imageUsage = getPlanUsageMetric(usage.monthlyImagesUsed, usage.monthlyImagesLimit);
+  const effectiveUsagePercent = Math.max(
+    Math.min(questionUsage.percentUsed, 100),
+    Math.min(imageUsage.percentUsed, 100),
+  );
 
   const upgradeMoment = useMemo<UpgradeMoment>(() => {
     if (usage.subscriptionTier === 'pro' || usage.subscriptionTier === 'premium') {

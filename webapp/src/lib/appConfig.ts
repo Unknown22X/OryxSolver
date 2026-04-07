@@ -62,9 +62,9 @@ export interface PublicAppConfig {
 const DEFAULT_SUPPORT_EMAIL = 'support@oryxsolver.com';
 
 const FALLBACK_LEGAL_VERSIONS: LegalVersions = {
-  terms_version: '2.1.0',
-  privacy_version: '2.1.0',
-  effective_date: '2026-04-06',
+  terms_version: '1.0',
+  privacy_version: '1.0',
+  effective_date: '2026-04-07',
 };
 
 const FALLBACK_TERMS: LegalDocument = {
@@ -100,8 +100,8 @@ const FALLBACK_TERMS: LegalDocument = {
       body: 'You may not use the Service for any illegal purpose, attempt to interfere with the security of the Service, or share your account credentials with others. Sharing your account credentials with others is strictly prohibited and may lead to a permanent ban of your account.',
     },
     {
-      heading: '8. Subscriptions and Refund Policy',
-      body: 'You can manage your subscription and cancel your plan at any time through the Service. Subscriptions may auto-renew unless cancelled. Refunds are not guaranteed and are reviewed on a case-by-case basis in accordance with applicable consumer protection laws. To request a refund, contact support@oryxsolver.com.',
+      heading: '8. Subscriptions, Payments, and Refund Policy',
+      body: 'Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle handles all customer service inquiries and returns for payments made through their platform.\n\nSubscriptions: You can manage your subscription and cancel your plan at any time through the Service. Subscriptions auto-renew unless cancelled. Upon cancellation, you will retain access to paid features until the end of your current billing period.\n\nOne-Time Credits: Credits used for a "solve" are non-refundable once the processing is complete.\n\nRefund Requests: Refunds are reviewed on a case-by-case basis in accordance with applicable consumer protection laws. If you believe you are entitled to a refund, please contact support@oryxsolver.com within 14 days of the transaction.',
     },
     {
       heading: '9. Service Availability',
@@ -159,8 +159,8 @@ const FALLBACK_TERMS_AR: LegalDocument = {
       body: 'لا يجوز لك استخدام الخدمة لأي غرض غير قانوني، أو محاولة التدخل في أمن الخدمة، أو مشاركة بيانات اعتماد حسابك مع الآخرين. مشاركة بيانات اعتماد حسابك مع الآخرين محظورة تمامًا وقد تؤدي إلى حظر دائم لحسابك.',
     },
     {
-      heading: '8. الاشتراكات وسياسة الاسترداد',
-      body: 'يمكنك إدارة اشتراكك وإلغاء خطتك في أي وقت من خلال الخدمة. قد تتجدد الاشتراكات تلقائيًا ما لم يتم إلغاؤها. عمليات استرداد الأموال غير مضمونة وتتم مراجعتها على أساس كل حالة على حدة وفقًا لقوانين حماية المستهلك المعمول بها. لطلب استرداد الأموال، اتصل بـ support@oryxsolver.com.',
+      heading: '8. الاشتراكات والمدفوعات وسياسة الاسترداد',
+      body: 'تتم معالجة طلباتنا بواسطة وكيلنا عبر الإنترنت Paddle.com. يعتبر Paddle.com هو تاجر السجل (Merchant of Record) لجميع طلباتنا. يتولى Paddle جميع استفسارات خدمة العملاء وعمليات الإرجاع للمدفوعات التي تتم من خلال منصتهم.\n\nالاشتراكات: يمكنك إدارة اشتراكك وإلغاء خطتك في أي وقت من خلال الخدمة. تتجدد الاشتراكات تلقائيًا ما لم يتم إلغاؤها. عند الإلغاء، ستستمر في الوصول إلى الميزات المدفوعة حتى نهاية فترة الفاتورة الحالية.\n\nالاعتمادات لمرة واحدة: الاعتمادات المستخدمة لعملية "حل" (solve) غير قابلة للاسترداد بمجرد اكتمال المعالجة.\n\nطلبات الاسترداد: تخضع عمليات استرداد الأموال للمراجعة على أساس كل حالة على حدة وفقًا لقوانين حماية المستهلك المعمول بها. إذا كنت تعتقد أنك تستحق استرداد الأموال، يرجى الاتصال بـ support@oryxsolver.com في غضون 14 يومًا من المعاملة.',
     },
     {
       heading: '9. توفر الخدمة',
@@ -202,12 +202,12 @@ const FALLBACK_PRIVACY: LegalDocument = {
       body: 'We process your data based on your consent and our legitimate interest in providing and improving the Service. Uses include generating responses for study questions, analyzing usage trends to enhance user experience, and responding to support inquiries.',
     },
     {
-      heading: '4. Third-Party AI and International Transfers',
-      body: 'We use third-party AI models to provide high-quality responses. These providers act as data processors on our behalf. Your data may be processed and stored on servers located outside of your country. By using the Service, you consent to this international processing.',
+      heading: '4. Third-Party Processors and International Transfers',
+      body: 'We use third-party AI processors (such as Google and OpenAI) to analyze captured text, images, and PDFs to generate explanations. We also use Paddle.com as our online reseller and Merchant of Record to process payments and manage subscriptions. These providers act as data processors on our behalf and may process data in accordance with their own privacy policies. Your data may be processed and stored on servers located outside of your country.',
     },
     {
       heading: '5. Data Retention and Deletion',
-      body: 'We retain your content and history while your account is active. You can delete your history or your entire account at any time through the Account Settings. Deleted account data is removed from our active databases within a reasonable period (typically 30 days), unless required otherwise by law.',
+      body: 'We retain your content and history while your account is active. Captured images are processed to generate explanations and are stored only as long as necessary to provide the service and history to the user. You can delete your history or your entire account at any time through the Account Settings. Deleted account data is removed from our active databases within a reasonable period (typically 30 days), unless required otherwise by law.',
     },
     {
       heading: '6. User Rights',
@@ -245,12 +245,12 @@ const FALLBACK_PRIVACY_AR: LegalDocument = {
       body: 'نقوم بمعالجة بياناتك بناءً على موافقتك ومصلحتنا المشروعة في توفير الخدمة وتحسينها. وتشمل الاستخدامات توليد إجابات لأسئلة الدراسة، وتحليل اتجاهات الاستخدام لتعزيز تجربة المستخدم، والرد على استفسارات الدعم.',
     },
     {
-      heading: '4. الذكاء الاصطناعي من جهات خارجية والعمليات الدولية',
-      body: 'نحن نستخدم نماذج ذكاء اصطناعي من جهات خارجية لتقديم استجابات عالية الجودة. يعمل هؤلاء الموفرون كمعالجي بيانات نيابة عنا. قد يتم معالجة بياناتك وتخزينها على خوادم تقع خارج بلدك. باستخدام الخدمة، فإنك توافق على هذه المعالجة الدولية.',
+      heading: '4. معالجو الطرف الثالث والعمليات الدولية',
+      body: 'نحن نستخدم معالجي ذكاء اصطناعي تابعين لجهات خارجية (مثل Google و OpenAI) لتحليل النصوص والصور وملفات PDF الملتقطة لتوليد التفسيرات. كما نستخدم Paddle.com كوكيل مبيعات عبر الإنترنت وتاجر سجلات لمعالجة المدفوعات وإدارة الاشتراكات. يعمل هؤلاء المزودون كمعالجين للبيانات نيابة عنا وقد يعالجون البيانات وفقًا لسياسات الخصوصية الخاصة بهم. قد يتم معالجة بياناتك وتخزينها على خواتم تقع خارج بلدك.',
     },
     {
       heading: '5. الاحتفاظ بالبيانات وحذفها',
-      body: 'نحتفظ بمحتواك وسجلك طالما كان حسابك نشطاً. يمكنك حذف سجلك أو بيانات محددة أو حسابك بالكامل في أي وقت من خلال إعدادات الحساب. يتم إزالة بيانات الحساب المحذوفة من قواعد بياناتنا النشطة في غضون فترة زمنية معقولة (عادةً 30 يومًا)، ما لم يقتض القانون الاحتفاظ بها لفترة أطول.',
+      body: 'نحتفظ بمحتواك وسجلك طالما كان حسابك نشطاً. تتم معالجة الصور الملتقطة لتوليد التفسيرات ويتم تخزينها فقط للمدة اللازمة لتقديم الخدمة والسجل للمستخدم. يمكنك حذف سجلك أو حسابك بالكامل في أي وقت من خلال إعدادات الحساب. يتم إزالة بيانات الحساب المحذوفة من قواعد بياناتنا النشطة في غضون فترة زمنية معقولة (عادةً 30 يومًا)، ما لم يقتض القانون الاحتفاظ بها لفترة أطول.',
     },
     {
       heading: '6. حقوق المستخدم',

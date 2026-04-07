@@ -23,6 +23,7 @@ import { fetchAllHistoryEntries, type HistoryEntry } from '../lib/historyApi';
 import { buildMonthlySolveSeries, computeCurrentStreak, countSolvesOnDay } from '../lib/studyMetrics';
 import { useProfile } from '../hooks/useProfile';
 import { useUsage } from '../hooks/useUsage';
+import { getUsageSummary } from '../lib/usagePresentation';
 import { getOnboardingPreferences } from '../lib/onboarding';
 import { toPublicErrorMessage } from '../lib/supabaseAuth';
 import { useTranslation } from 'react-i18next';
@@ -166,11 +167,11 @@ export default function UserDashboard({ user }: { user: User }) {
     );
   }
 
-  const isOverLimit = usage && usage.monthlyQuestionsUsed > usage.monthlyQuestionsLimit;
-  const usagePercent =
-    usage && usage.monthlyQuestionsLimit > 0 && usage.monthlyQuestionsLimit !== -1
-      ? Math.min((usage.monthlyQuestionsUsed / usage.monthlyQuestionsLimit) * 100, 100)
-      : 0;
+  const planMetric = getUsageSummary(
+    usage,
+    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+  );
+  const isOverLimit = Boolean(usage && planMetric.isExhausted);
 
 
   const updateFeedbackDraft = (entryId: string, updater: (draft: AnswerFeedbackDraft) => AnswerFeedbackDraft) => {
@@ -438,21 +439,21 @@ export default function UserDashboard({ user }: { user: User }) {
                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">{t('dashboard.plan_allowance')}</p>
                  <div className="flex items-center justify-between mb-3">
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
-                      {usage?.monthlyQuestionsUsed ?? 0} <span className="text-xs font-bold text-slate-500 italic">/ {usage?.monthlyQuestionsLimit ?? 15}</span>
+                      {planMetric.isUnlimited ? t('nav.unlimited') : planMetric.percentLabel}
                     </p>
                     <MascotIcon name="scholar" size={18} className={isOverLimit ? "opacity-100" : "opacity-70"} />
                  </div>
                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden mb-2">
                    <div 
                      className={`h-full rounded-full transition-all duration-1000 ${isOverLimit ? 'bg-amber-500' : 'bg-violet-500'}`} 
-                     style={{ width: `${usagePercent}%` }}
+                     style={{ width: planMetric.progressWidth }}
                    />
                  </div>
                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                        <p className="text-[10px] font-bold text-slate-500 italic">{t('dashboard.used_this_month')}</p>
                        <p className={`text-[10px] font-black uppercase tracking-widest ${isOverLimit ? 'text-amber-600 dark:text-amber-500' : 'text-slate-900 dark:text-white'}`}>
-                         {isOverLimit ? t('dashboard.extra_credit_active') : t('dashboard.left', { count: usage?.monthlyQuestionsRemaining ?? 0 })}
+                         {isOverLimit ? t('dashboard.extra_credit_active') : planMetric.percentLabel}
                        </p>
                     </div>
                     <p className="text-[9px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-tighter">

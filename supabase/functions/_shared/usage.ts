@@ -19,7 +19,7 @@ export type MonthlyUsage = {
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: { questions: 15, images: 5, bulk: 3 },
-  pro: { questions: 100, images: 50, bulk: 15 },
+  pro: { questions: 150, images: 50, bulk: 15 },
   premium: { questions: 500, images: 200, bulk: 30 },
 };
 
