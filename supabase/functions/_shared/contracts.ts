@@ -21,6 +21,14 @@ export type SolveMetadata = {
   conversationId: string;
   isBulk?: boolean;
   isFollowUp?: boolean;
+  streamMode?: 'streamed' | 'fallback_full' | 'non_stream';
+};
+
+export type BulkSolveItem = {
+  index: number;
+  label: string;
+  question?: string;
+  answer: string;
 };
 
 export type SolveSuggestion = {
@@ -38,6 +46,7 @@ export type SolveSuccessResponse = {
   usage: SolveUsage;
   metadata: SolveMetadata;
   suggestions: SolveSuggestion[];
+  bulk_items?: BulkSolveItem[];
 };
 
 export type SolveStreamPhase =
@@ -113,6 +122,7 @@ export type HistoryEntry = {
   image_urls?: string[];
   is_bulk?: boolean;
   steps?: string[];
+  bulk_items?: BulkSolveItem[];
 };
 
 export type HistoryListResponse = {

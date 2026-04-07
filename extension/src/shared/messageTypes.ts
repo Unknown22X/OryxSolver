@@ -23,3 +23,4 @@ export const MSG_INLINE_SOLVE_RESULT = 'INLINE_SOLVE_RESULT' as const;
 // Sent by background → sidepanel after saving a pending question to storage,
 // so an already-open panel can pick it up without remounting.
 export const MSG_INLINE_QUESTION_READY = 'INLINE_QUESTION_READY' as const;
+export const MSG_INLINE_RESTORE_WIDGETS = 'INLINE_RESTORE_WIDGETS' as const;

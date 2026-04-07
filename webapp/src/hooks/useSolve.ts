@@ -20,6 +20,12 @@ interface SolveResponse {
   answer: string;
   explanation: string;
   steps?: string[];
+  bulk_items?: Array<{
+    index: number;
+    label: string;
+    question?: string;
+    answer: string;
+  }>;
   suggestions?: Array<{ label: string; prompt: string; styleMode: string }>;
   usage?: {
     subscriptionTier: 'free' | 'pro' | 'premium';
@@ -40,6 +46,7 @@ interface SolveResponse {
     styleMode?: string;
     isBulk?: boolean;
     isFollowUp?: boolean;
+    streamMode?: 'streamed' | 'fallback_full' | 'non_stream';
   };
   isPreview?: boolean;
   statusPhase?: SolveStreamPhase;
@@ -399,46 +406,86 @@ export function useSolve(user: User | null): UseSolveReturn {
         images: uploadImages,
       };
 
+      const requestFullResponse = () =>
+        fetchEdge<SolveResponse>('solve', {
+          method: 'POST',
+          body: buildFormData(requestForUpload, false),
+          signal: abortControllerRef.current?.signal,
+        });
+
       const data = request.isBulk
-        ? await fetchEdge<SolveResponse>('solve', {
-            method: 'POST',
-            body: buildFormData(requestForUpload, false),
-            signal: abortControllerRef.current.signal,
-          })
+        ? await requestFullResponse()
         : await (async () => {
-            const response = await fetchEdgeStream('solve', {
-              method: 'POST',
-              body: buildFormData(requestForUpload, true),
-              signal: abortControllerRef.current?.signal,
-            });
-            if (!response.body) {
-              throw new Error('Streaming solve returned no body.');
+            try {
+              const response = await fetchEdgeStream('solve', {
+                method: 'POST',
+                body: buildFormData(requestForUpload, true),
+                signal: abortControllerRef.current?.signal,
+              });
+              if (!response.body) {
+                throw Object.assign(new Error('Streaming solve returned no body.'), { code: 'STREAM_INTERRUPTED' });
+              }
+              return await parseNdjsonStream(response.body);
+            } catch (streamError) {
+              const code = streamError instanceof Error && 'code' in streamError
+                ? String((streamError as Error & { code?: string }).code || '')
+                : '';
+              const shouldFallback =
+                code === 'STREAM_INTERRUPTED' ||
+                code === 'AI_STREAM_INTERRUPTED' ||
+                code === 'AI_TIMEOUT' ||
+                code === 'AI_PROVIDER_ERROR';
+
+              if (!shouldFallback) {
+                throw streamError;
+              }
+
+              setChatSession((prev) =>
+                prev.map((msg) =>
+                  msg.id === pendingId
+                    ? {
+                        ...msg,
+                        response: {
+                          ...msg.response,
+                          answer: msg.response.answer || 'Finishing response...',
+                          explanation: '',
+                          steps: [],
+                          statusPhase: 'refining',
+                        },
+                      }
+                    : msg,
+                ),
+              );
+              return await requestFullResponse();
             }
-            return parseNdjsonStream(response.body);
           })();
 
       if (data.usage) {
         broadcastUsageUpdated(data.usage);
       }
 
+      const formattedBulkAnswer = Array.isArray(data.bulk_items) && data.bulk_items.length > 0
+        ? data.bulk_items
+            .slice()
+            .sort((a, b) => a.index - b.index)
+            .map((item) => `${item.label}. ${item.answer}`.trim())
+            .join('\n')
+        : data.answer;
+
       clearPreviewTimer(pendingId);
       clearInterruptedMessages();
       setChatSession((prev) =>
         prev.map((msg) =>
           msg.id === pendingId
-            ? { ...msg, response: { ...data, isPreview: false }, error: undefined }
+            ? { ...msg, response: { ...data, answer: formattedBulkAnswer, isPreview: false }, error: undefined }
             : msg,
         ),
       );
 
-      return data;
+      return { ...data, answer: formattedBulkAnswer };
     } catch (err) {
       clearPreviewTimer(pendingId);
-      const code = err instanceof Error && 'code' in err ? String((err as Error & { code?: string }).code || '') : '';
-      if (err instanceof Error && (err.name === 'AbortError' || code === 'STREAM_INTERRUPTED')) {
-        if (code === 'STREAM_INTERRUPTED') {
-          console.warn('[webapp] Stream interrupted before final response');
-        }
+      if (err instanceof Error && err.name === 'AbortError') {
         setChatSession((prev) =>
           prev.map((msg) =>
             msg.id === pendingId

@@ -60,31 +60,37 @@ function UsageCard({
   used,
   limit,
   accentClass,
+  progressClass,
   t,
 }: {
   title: string;
   used: number;
   limit: number;
   accentClass: string;
+  progressClass: string;
   t: any;
 }) {
-  const percent = limit > 0 && limit !== -1 ? Math.min((used / limit) * 100, 100) : 0;
+  const metric = getPlanUsageMetric(
+    used,
+    limit,
+    (percent) => t('subscription_page.used_percent', { percent }),
+  );
   const highLimitText = t('subscription_page.high_limit');
 
   return (
     <div className="rounded-[26px] border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
       <div className="flex items-center justify-between">
         <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{title}</p>
-        <p className={`text-sm font-black ${accentClass}`}>{limit === -1 ? highLimitText : t('subscription_page.used_percent', { percent: Math.round(percent) })}</p>
+        <p className={`text-sm font-black ${accentClass}`}>{metric.isUnlimited ? highLimitText : metric.percentLabel}</p>
       </div>
-      <div className="mt-4 h-2.5 rounded-full bg-slate-200 dark:bg-white/10">
-        <div className={`h-full rounded-full ${accentClass.replace('text-', 'bg-')}`} style={{ width: `${limit === -1 ? 100 : percent}%` }} />
+      <div className="mt-4 h-2.5 rounded-full bg-slate-200 dark:bg-white/10" dir="ltr">
+        <div
+          className={`h-full rounded-full ${progressClass}`}
+          style={{ width: metric.progressWidth }}
+        />
       </div>
-      <p className="mt-4 text-xl font-black text-slate-950 dark:text-white">
-        {used}
-        <span className="ml-2 text-base font-semibold text-slate-500 dark:text-slate-400">
-          {t('subscription_page.of')} {limit === -1 ? highLimitText : limit}
-        </span>
+      <p className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
+        {t('subscription_page.questions_left')}
       </p>
     </div>
   );
@@ -341,9 +347,30 @@ export default function SubscriptionPage({ user }: { user: User }) {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-3">
-          <UsageCard title={t('subscription_page.questions')} used={usage?.monthlyQuestionsUsed ?? 0} limit={usage?.monthlyQuestionsLimit ?? 0} accentClass="text-rose-500" t={t} />
-          <UsageCard title={t('subscription_page.image_uploads')} used={usage?.monthlyImagesUsed ?? 0} limit={usage?.monthlyImagesLimit ?? 0} accentClass="text-amber-500" t={t} />
-          <UsageCard title={t('subscription_page.bulk_solves')} used={usage?.monthlyBulkUsed ?? 0} limit={usage?.monthlyBulkLimit ?? 0} accentClass="text-sky-500" t={t} />
+          <UsageCard
+            title={t('subscription_page.questions')}
+            used={usage?.monthlyQuestionsUsed ?? 0}
+            limit={usage?.monthlyQuestionsLimit ?? 0}
+            accentClass="text-rose-500"
+            progressClass="bg-rose-500"
+            t={t}
+          />
+          <UsageCard
+            title={t('subscription_page.image_uploads')}
+            used={usage?.monthlyImagesUsed ?? 0}
+            limit={usage?.monthlyImagesLimit ?? 0}
+            accentClass="text-amber-500"
+            progressClass="bg-amber-500"
+            t={t}
+          />
+          <UsageCard
+            title={t('subscription_page.bulk_solves')}
+            used={usage?.monthlyBulkUsed ?? 0}
+            limit={usage?.monthlyBulkLimit ?? 0}
+            accentClass="text-sky-500"
+            progressClass="bg-sky-500"
+            t={t}
+          />
         </section>
 
         <section className="rounded-[30px] border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">

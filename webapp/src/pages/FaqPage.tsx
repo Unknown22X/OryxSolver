@@ -18,7 +18,7 @@ export default function FaqPage() {
         },
         {
           question: t('faq_page.cat_general_q2', { defaultValue: 'Is OryxSolver free to use?' }),
-          answer: t('faq_page.cat_general_a2', { defaultValue: 'Yes, we offer a free plan with 15 questions per month. No credit card required to start.' }),
+          answer: t('faq_page.cat_general_a2', { defaultValue: 'Yes, we offer a free plan with standard limits. No credit card required to start.' }),
         },
         {
           question: t('faq_page.cat_general_q3', { defaultValue: 'Who is OryxSolver for?' }),
@@ -138,7 +138,7 @@ export default function FaqPage() {
               {t('faq_page.ready_title', { defaultValue: "Try it - it's free." })}
             </h2>
             <p className="marketing-copy mx-auto mt-6 max-w-2xl text-base">
-              {t('faq_page.ready_desc', { defaultValue: '15 questions every month. No credit card. Solve your first question in under 2 minutes.' })}
+              {t('faq_page.ready_desc', { defaultValue: 'Limited messages every month. No credit card. Solve your first question and see how it works.' })}
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link to="/signup" className="gradient-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-10 py-5 text-base sm:w-auto">

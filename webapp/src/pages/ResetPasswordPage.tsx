@@ -19,11 +19,11 @@ export default function ResetPasswordPage() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
-      setMessage({ text: t('auth.error_password_length', { defaultValue: 'Password must be at least 6 characters.' }), type: 'error' });
+      setMessage({ text: t('auth.error_password_length'), type: 'error' });
       return;
     }
     if (password !== confirmPassword) {
-      setMessage({ text: t('auth.error_passwords_match', { defaultValue: 'Passwords do not match.' }), type: 'error' });
+      setMessage({ text: t('auth.error_passwords_match'), type: 'error' });
       return;
     }
 
@@ -34,12 +34,12 @@ export default function ResetPasswordPage() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       
-      setMessage({ text: t('auth.password_updated_success', { defaultValue: 'Password updated successfully! Redirecting...' }), type: 'success' });
+      setMessage({ text: t('auth.password_updated_success'), type: 'success' });
       setTimeout(() => {
         navigate('/chat');
       }, 1500);
     } catch (err) {
-      const errorMessage = toPublicErrorMessage(err, t('auth.error_update_password', { defaultValue: 'Failed to update password' }));
+      const errorMessage = toPublicErrorMessage(err, t('auth.error_update_password'));
       setMessage({ text: errorMessage, type: 'error' });
     } finally {
       setLoading(false);
@@ -63,10 +63,10 @@ export default function ResetPasswordPage() {
                 <MascotIcon name="sparkle" size={24} className="text-white dark:text-slate-900" />
               </Link>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                {t('auth.set_new_password', { defaultValue: 'Set new password' })}
+                {t('auth.set_new_password')}
               </h1>
               <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                {t('auth.enter_new_password', { defaultValue: 'Please enter your new password below.' })}
+                {t('auth.enter_new_password')}
               </p>
             </div>
 
@@ -80,14 +80,14 @@ export default function ResetPasswordPage() {
 
             <form onSubmit={handleUpdatePassword} className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 ml-1 dark:text-slate-300">{t('auth.new_password_label', { defaultValue: 'New Password' })}</label>
+                <label className="text-xs font-bold text-slate-700 ml-1 dark:text-slate-300">{t('auth.new_password_label')}</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
                     type={showPassword ? 'text' : 'password'} 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={t('auth.new_password_placeholder', { defaultValue: 'Enter new password' })}
+                    placeholder={t('auth.new_password_placeholder')}
                     className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-12 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
                     required
                   />
@@ -103,14 +103,14 @@ export default function ResetPasswordPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 ml-1 dark:text-slate-300">{t('auth.confirm_password_label', { defaultValue: 'Confirm Password' })}</label>
+                <label className="text-xs font-bold text-slate-700 ml-1 dark:text-slate-300">{t('auth.confirm_password_label')}</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
                     type={showConfirmPassword ? 'text' : 'password'} 
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder={t('auth.confirm_password_placeholder', { defaultValue: 'Confirm new password' })}
+                    placeholder={t('auth.confirm_password_placeholder')}
                     className="w-full rounded-xl border border-slate-200 bg-transparent py-3 pl-11 pr-12 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-600 dark:focus:border-slate-500 dark:focus:ring-slate-800"
                     required
                   />
@@ -130,7 +130,7 @@ export default function ResetPasswordPage() {
                 disabled={loading || !password || !confirmPassword}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-bold text-white shadow-lg shadow-slate-900/10 transition-all hover:scale-[1.01] hover:bg-slate-800 active:scale-[0.99] disabled:scale-100 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 dark:shadow-white/5"
               >
-                <span>{loading ? t('auth.updating', { defaultValue: 'Updating...' }) : t('auth.update_password_btn', { defaultValue: 'Update Password' })}</span>
+                <span>{loading ? t('auth.updating') : t('auth.update_password_btn')}</span>
                 {!loading && <ArrowRight size={18} />}
               </button>
             </form>

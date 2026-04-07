@@ -12,6 +12,12 @@ export type HistoryEntry = {
   image_urls?: string[];
   is_bulk?: boolean;
   steps?: string[];
+  bulk_items?: Array<{
+    index: number;
+    label: string;
+    question?: string;
+    answer: string;
+  }>;
 };
 
 export type HistoryListResponse = {

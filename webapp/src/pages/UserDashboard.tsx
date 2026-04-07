@@ -14,6 +14,7 @@ import {
   ChevronUp,
   Download,
   Trophy,
+  Sparkles,
   Shapes,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -23,6 +24,7 @@ import { fetchAllHistoryEntries, type HistoryEntry } from '../lib/historyApi';
 import { buildMonthlySolveSeries, computeCurrentStreak, countSolvesOnDay } from '../lib/studyMetrics';
 import { useProfile } from '../hooks/useProfile';
 import { useUsage } from '../hooks/useUsage';
+import { useSubscription } from '../hooks/useSubscription';
 import { getUsageSummary } from '../lib/usagePresentation';
 import { getOnboardingPreferences } from '../lib/onboarding';
 import { toPublicErrorMessage } from '../lib/supabaseAuth';
@@ -56,6 +58,7 @@ export default function UserDashboard({ user }: { user: User }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { usage, loading: usageLoading } = useUsage(user);
+  const { subscription, loading: subscriptionLoading } = useSubscription(user);
   const { profile, loading: profileLoading } = useProfile(user);
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(() => {
     return localStorage.getItem('oryx_hide_upgrade_banner') !== 'true';
@@ -96,6 +99,15 @@ export default function UserDashboard({ user }: { user: User }) {
   }, []);
   const currentStreak = useMemo(() => computeCurrentStreak(history), [history]);
   const todaySolved = useMemo(() => countSolvesOnDay(history), [history]);
+
+  const daysUntilRenewal = useMemo(() => {
+    if (!subscription?.currentPeriodEnd) return null;
+    const now = new Date();
+    const renewal = new Date(subscription.currentPeriodEnd);
+    const diff = renewal.getTime() - now.getTime();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return Math.max(days, 0);
+  }, [subscription?.currentPeriodEnd]);
 
   
   const usageByMonth = useMemo(
@@ -153,11 +165,11 @@ export default function UserDashboard({ user }: { user: User }) {
     if (totalSolves === 0) return t('dashboard.coaching_start');
 
     if (todaySolved >= 1) return t('dashboard.coaching_done_today', { count: todaySolved });
-    if (currentStreak > 0) return t('dashboard.coaching_streak_alive', { count: currentStreak });
+    if (currentStreak > 0) return t('dashboard.coaching_streak_alive', { count: currentStreak, nextGoal: currentStreak + 1 });
     return t('dashboard.coaching_momentum', { count: totalSolves });
   }, [currentStreak, t, todaySolved, totalSolves]);
 
-  if (usageLoading || profileLoading) {
+  if (usageLoading || profileLoading || subscriptionLoading) {
     return (
       <AppLayout currentPage="dashboard" user={user}>
         <div className="flex h-64 items-center justify-center">
@@ -169,7 +181,7 @@ export default function UserDashboard({ user }: { user: User }) {
 
   const planMetric = getUsageSummary(
     usage,
-    (percent) => t('common.percent_used', { percent, defaultValue: `${percent}% used` }),
+    (percent) => t('common.percent_used', { percent }),
   );
   const isOverLimit = Boolean(usage && planMetric.isExhausted);
 
@@ -297,17 +309,17 @@ export default function UserDashboard({ user }: { user: User }) {
               </p>
               {onboarding.completed && (
                 <div className="mb-6 inline-flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-violet-200/70 bg-violet-50/70 px-4 py-3 text-xs font-bold text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200">
-                  <span>{t(`onboarding.goal_${onboarding.goal}_title`, { defaultValue: 'Study goal set' })}</span>
+                  <span>{t(`onboarding.goal_${onboarding.goal}_title`)}</span>
                   {onboarding.subjects.slice(0, 3).map((subject) => (
                     <span
                       key={subject}
                       className="rounded-full border border-violet-300/60 bg-white/70 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-violet-700 dark:border-violet-400/20 dark:bg-violet-950/30 dark:text-violet-200"
                     >
-                      {t(`onboarding.subject_${subject.toLowerCase()}`, { defaultValue: subject })}
+                      {t(`onboarding.subject_${subject.toLowerCase()}`)}
                     </span>
                   ))}
                   <span className="rounded-full border border-violet-300/60 bg-white/70 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-violet-700 dark:border-violet-400/20 dark:bg-violet-950/30 dark:text-violet-200">
-                    {t(`onboarding.mode_${onboarding.mode}_title`, { defaultValue: onboarding.mode })}
+                    {t(`onboarding.mode_${onboarding.mode}_title`)}
                   </span>
                 </div>
               )}
@@ -451,13 +463,18 @@ export default function UserDashboard({ user }: { user: User }) {
                  </div>
                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
-                       <p className="text-[10px] font-bold text-slate-500 italic">{t('dashboard.used_this_month')}</p>
+                       <p className="text-[10px] font-bold text-slate-500 italic">
+                         {t('dashboard.allowance_body', { 
+                           percent: planMetric.percentUsed.toFixed(0), 
+                           days: daysUntilRenewal ?? '?' 
+                         })}
+                       </p>
                        <p className={`text-[10px] font-black uppercase tracking-widest ${isOverLimit ? 'text-amber-600 dark:text-amber-500' : 'text-slate-900 dark:text-white'}`}>
                          {isOverLimit ? t('dashboard.extra_credit_active') : planMetric.percentLabel}
                        </p>
                     </div>
                     <p className="text-[9px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-tighter">
-                       {t('dashboard.all_messages_count', { defaultValue: 'Every message you send counts toward your allowance.' })}
+                       {t('dashboard.all_messages_count')}
                     </p>
                     <div className="pb-6" />
                  </div>
@@ -491,7 +508,7 @@ export default function UserDashboard({ user }: { user: User }) {
                             <div>
                                <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">{t('dashboard.follow_ups')}</p>
                                <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic">
-                                 {t('dashboard.all_messages_desc', { defaultValue: 'New questions and follow-up replies both count as solves, so the rule stays simple and predictable.' })}
+                                 {t('dashboard.all_messages_desc')}
                                </p>
                             </div>
                          </div>
@@ -519,14 +536,11 @@ export default function UserDashboard({ user }: { user: User }) {
                  <div className="flex items-center justify-between">
                     <div>
                         <p className="text-2xl font-black text-slate-900 dark:text-white">{t('dashboard.days', { count: currentStreak })}</p>
-                        <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">
-                          {currentStreak === 0 ? t('dashboard.start_your_streak') : t('dashboard.goal_days', { count: currentStreak + 1 })}
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-500/80 italic mt-1">
-                           {currentStreak >= 7 ? t('dashboard.champion_status') : t('dashboard.more_days_to_streak', { count: 7 - currentStreak })}
+                        <p className="text-[10px] font-medium text-slate-500 mt-1 leading-relaxed">
+                           {t('dashboard.streak_body', { count: currentStreak })}
                         </p>
                     </div>
-                    <MascotIcon name="sparkle" size={22} className={currentStreak > 0 ? "animate-pulse" : "opacity-30"} />
+                    <Sparkles className={`text-violet-500 ${currentStreak > 0 ? "animate-pulse" : "opacity-30"}`} size={24} />
                  </div>
                </div>
             </div>
@@ -537,7 +551,7 @@ export default function UserDashboard({ user }: { user: User }) {
                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">{t('dashboard.daily_goal')}</p>
                  <div className="flex items-center justify-between mb-3">
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
-                      {Math.min(todaySolved, 1)} <span className="text-xs font-bold text-slate-500 italic">/ 1</span>
+                      {todaySolved} <span className="text-xs font-bold text-slate-500 italic">/ 1</span>
                     </p>
                     <Target className="text-indigo-500 border border-indigo-500/10 p-0.5 rounded-md" size={18} />
                  </div>
@@ -548,7 +562,9 @@ export default function UserDashboard({ user }: { user: User }) {
                    />
                  </div>
                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-slate-500 italic">{todaySolved > 0 ? t('dashboard.goal_met') : t('dashboard.goal_remaining')}</p>
+                    <p className="text-[10px] font-bold text-slate-500 italic">
+                      {todaySolved > 0 ? t('dashboard.goal_met') : t('dashboard.goal_remaining', { count: todaySolved })}
+                    </p>
                     <button 
                       onClick={() => navigate('/chat')}
                       className={`text-[10px] font-black uppercase tracking-widest transition-colors ${
@@ -569,7 +585,7 @@ export default function UserDashboard({ user }: { user: User }) {
                     <p className="text-2xl font-black text-slate-900 dark:text-white">
                       {usage?.paygoCreditsRemaining ?? 0} <span className="text-xs font-bold text-slate-500 italic">{t('dashboard.credits')}</span>
                     </p>
-                    <MascotIcon name="sparkle" size={18} />
+                    <Trophy className="text-indigo-500" size={20} />
                  </div>
                  <div className="pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
                     <p className="text-[10px] font-bold text-slate-500 italic">{t('dashboard.extra_backup')}</p>
@@ -616,7 +632,7 @@ export default function UserDashboard({ user }: { user: User }) {
          <div className="mb-16 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
            {[
              { label: t('dashboard.total_solves'), value: totalSolves, icon: 'historian', color: 'text-violet-500 dark:text-violet-400', bg: 'bg-violet-500/10 dark:bg-violet-400/10' },
-             { label: t('dashboard.day_streak'), value: t('dashboard.days', { count: currentStreak }), icon: 'sparkle', color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-500/10 dark:bg-orange-400/10' },
+             { label: t('dashboard.day_streak'), value: t('dashboard.days', { count: currentStreak }), icon: Trophy, color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-500/10 dark:bg-orange-400/10' },
              { label: t('dashboard.avg_per_day'), value: (totalSolves / 30).toFixed(1), icon: TrendingUp, color: 'text-emerald-500 dark:text-emerald-400', bg: 'bg-emerald-500/10 dark:bg-emerald-400/10' },
              { label: t('dashboard.subjects'), value: subjectStats.uniqueCount, icon: Shapes, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-500/10 dark:bg-blue-400/10' },
            ].map((stat, i) => (

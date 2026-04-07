@@ -571,7 +571,14 @@ function scheduleBackgroundTask(task: Promise<unknown>) {
 }
 
 function buildSolveSuccessResponse(params: {
-  ai: { answer: string; explanation: string; suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>; steps: string[]; model: string };
+  ai: {
+    answer: string;
+    explanation: string;
+    suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+    steps: string[];
+    model: string;
+    bulk_items?: Array<{ index: number; label: string; question?: string; answer: string }>;
+  };
   usage: ReturnType<typeof getPlanLimits>;
   usagePayload: {
     subscriptionTier: 'free' | 'pro' | 'premium';
@@ -591,6 +598,7 @@ function buildSolveSuccessResponse(params: {
   conversationId: string;
   isBulk: boolean;
   isFollowUp: boolean;
+  streamMode: 'streamed' | 'fallback_full' | 'non_stream';
 }): SolveSuccessResponse {
   return {
     api_version: 'v1',
@@ -605,9 +613,11 @@ function buildSolveSuccessResponse(params: {
       conversationId: params.conversationId,
       isBulk: params.isBulk,
       isFollowUp: params.isFollowUp,
+      streamMode: params.streamMode,
     },
     suggestions: params.ai.suggestions,
     steps: params.ai.steps,
+    ...(params.ai.bulk_items?.length ? { bulk_items: params.ai.bulk_items } : {}),
   };
 }
 
@@ -626,6 +636,27 @@ function hasMeaningfulAiOutput(ai: { answer: string; explanation: string; steps:
   // If it's a placeholder answer, we need some content elsewhere.
   if (meaningfulSteps.length > 0) return true;
   return explanation.length >= 10; // Lowered from 24 to support shorter quiz questions
+}
+
+function looksLikeGenericFallback(text: string): boolean {
+  const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase();
+  return normalized === 'hello! how can i help you today?' ||
+    normalized === 'hello how can i help you today?' ||
+    normalized === 'how can i help you today?' ||
+    normalized === 'answer available in explanation';
+}
+
+function validatePreparedQuestion(question: string, imageCount: number) {
+  if (imageCount > 0) return;
+
+  const compact = question.replace(/[\s\n\r\t]+/g, '');
+  if (compact.length < 2) {
+    throw new AppError(400, 'QUESTION_MALFORMED', 'Question is too short or malformed.');
+  }
+
+  if (/^(hello|hi|hey)\b[!. ]*$/i.test(question.trim())) {
+    throw new AppError(400, 'QUESTION_MALFORMED', 'Please provide the actual question to solve.');
+  }
 }
 
 function parseStyleMode(input: string): StyleMode {
@@ -714,6 +745,17 @@ function repairLikelyFractionCopyArtifacts(normalized: string): string {
   return fixed.join('\n');
 }
 
+function parseBulkQuestionItems(question: string) {
+  const matches = Array.from(question.matchAll(/QUESTION\s+(\d+):\s*([\s\S]*?)(?=(?:\n\s*QUESTION\s+\d+:)|$)/gi));
+  return matches
+    .map((match, index) => ({
+      index: Number.parseInt(match[1] ?? '', 10) || index + 1,
+      label: match[1] || String(index + 1),
+      question: (match[2] || '').trim(),
+    }))
+    .filter((item) => item.question.length > 0);
+}
+
 function hasAmbiguousEquationFormatting(text: string): boolean {
   const lower = text.toLowerCase();
   const isEquationChoiceQuestion =
@@ -748,6 +790,7 @@ Deno.serve(async (req) => {
   let runMode: 'normal' | 'fast_fallback' = 'normal';
   let runUsedFallback = false;
   let runModel: string | null = null;
+  let runStreamMode: 'streamed' | 'fallback_full' | 'non_stream' = 'non_stream';
 
   if (req.method !== 'POST') {
     return jsonError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
@@ -839,7 +882,9 @@ Deno.serve(async (req) => {
     }
     const repairedQuestion = repairLikelyFractionCopyArtifacts(normalizedQuestion);
     const imageCount = imageParts.length;
-    const realtimeStreamingEnabled = streamRequested && responseSurface === 'webapp' && !isBulk;
+    validatePreparedQuestion(repairedQuestion, imageCount);
+    const requestedBulkItems = isBulk ? parseBulkQuestionItems(repairedQuestion) : [];
+    const realtimeStreamingEnabled = streamRequested && !isBulk;
     const cacheSafe = isCacheSafeRequest({
       imageCount,
       history,
@@ -1024,6 +1069,7 @@ Deno.serve(async (req) => {
           conversationId,
           isBulk,
           isFollowUp,
+          streamMode: streamRequested ? 'fallback_full' : 'non_stream',
         },
         suggestions: [],
         steps: cachedAnswer.steps?.length > 0 ? cachedAnswer.steps : ['Answer retrieved from cache (no AI call needed)'],
@@ -1041,6 +1087,7 @@ Deno.serve(async (req) => {
           image_urls: [...acceptedImageUrls, ...persistedImageRefs],
           is_bulk: isBulk,
           steps: cachedAnswer.steps?.length > 0 ? cachedAnswer.steps : ['Answer retrieved from cache (no AI call needed)'],
+          bulk_items: [],
         });
         if (usePaygoCredit) {
           await consumePaygoCredit(supabaseAdmin, user.id, 1, {
@@ -1105,24 +1152,58 @@ Deno.serve(async (req) => {
       styleOverride: StyleMode,
     ) => {
       if (realtimeStreamingEnabled && streamContext) {
-        const response = await callAiProxyStream(
-          questionToSolve,
-          imageParts,
-          modeOverride,
-          styleOverride,
-          history,
-          isBulk,
-          user.id,
-          {
-            preferredLanguage,
-            surface: responseSurface,
-          },
-        );
-        return await readAiProxyStream(response, (text) => {
-          emitStream({ type: 'delta', text });
-        });
+        try {
+          const response = await callAiProxyStream(
+            questionToSolve,
+            imageParts,
+            modeOverride,
+            styleOverride,
+            history,
+            isBulk,
+            user.id,
+            {
+              preferredLanguage,
+              surface: responseSurface,
+            },
+          );
+          runStreamMode = 'streamed';
+          return await readAiProxyStream(response, (text) => {
+            emitStream({ type: 'delta', text });
+          });
+        } catch (error) {
+          if (
+            error instanceof AiError &&
+            (
+              error.code === 'AI_TIMEOUT' ||
+              error.code === 'AI_STREAM_INTERRUPTED' ||
+              error.code === 'AI_PROVIDER_ERROR'
+            )
+          ) {
+            console.warn(`[${reqId}] stream transport failed; retrying same request in full-response mode`, {
+              code: error.code,
+              message: error.message,
+            });
+            runStreamMode = 'fallback_full';
+            emitStatus('refining');
+            return await callAiProxy(
+              questionToSolve,
+              imageParts,
+              modeOverride,
+              styleOverride,
+              history,
+              isBulk,
+              user.id,
+              {
+                preferredLanguage,
+                surface: responseSurface,
+              },
+            );
+          }
+          throw error;
+        }
       }
 
+      runStreamMode = 'non_stream';
       return await callAiProxy(questionToSolve, imageParts, modeOverride, styleOverride, history, isBulk, user.id, {
         preferredLanguage,
         surface: responseSurface,
@@ -1137,21 +1218,22 @@ Deno.serve(async (req) => {
           error.code === 'AI_TIMEOUT' ||
           error.code === 'AI_STREAM_INTERRUPTED' ||
           error.code === 'AI_INCOMPLETE_OUTPUT' ||
-          error.code === 'AI_PROVIDER_ERROR'
+          error.code === 'AI_PROVIDER_ERROR' ||
+          error.code === 'AI_GENERIC_OUTPUT'
         )) {
           aiFallbackUsed = true;
           emitStatus('refining');
           try {
             return await runAiAttempt(questionToSolve, 'fast_fallback', styleOverride);
           } catch (fallbackError) {
-            if (fallbackError instanceof AiError && fallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
+            if (fallbackError instanceof AiError && (fallbackError.code === 'AI_INCOMPLETE_OUTPUT' || fallbackError.code === 'AI_GENERIC_OUTPUT')) {
               const conciseQuestion = responseSurface === 'webapp'
                 ? `${questionToSolve}\n\nOutput constraint: Keep the reply concise, natural, and complete. Use short paragraphs or compact bullets only if they help clarity.`
                 : `${questionToSolve}\n\nOutput constraint: Keep response concise with max 3 steps while preserving correctness.`;
               try {
                 return await runAiAttempt(conciseQuestion, 'fast_fallback', styleOverride);
               } catch (finalFallbackError) {
-                if (finalFallbackError instanceof AiError && finalFallbackError.code === 'AI_INCOMPLETE_OUTPUT') {
+                if (finalFallbackError instanceof AiError && (finalFallbackError.code === 'AI_INCOMPLETE_OUTPUT' || finalFallbackError.code === 'AI_GENERIC_OUTPUT')) {
                   const ultraCompactQuestion = responseSurface === 'webapp'
                     ? `${questionToSolve}\n\nOutput constraint: Give the most helpful short answer possible in natural chat style. No rigid labels.`
                     : `${questionToSolve}\n\nOutput constraint: Return FINAL_ANSWER and only 2 short reasoning steps.`;
@@ -1232,6 +1314,15 @@ Deno.serve(async (req) => {
         { retryable: true },
       );
     }
+    if (looksLikeGenericFallback(ai.answer)) {
+      if (streamContext) {
+        emitStreamError('AI_GENERIC_OUTPUT', 'AI returned a generic fallback response. Please retry.');
+        return streamContext.response;
+      }
+      return jsonError(503, 'AI_GENERIC_OUTPUT', 'AI returned a generic fallback response. Please retry.', {
+        retryable: true,
+      });
+    }
 
     if (ai.answer.trim().toUpperCase() === 'INCOMPLETE_QUESTION') {
       if (streamContext) {
@@ -1247,9 +1338,20 @@ Deno.serve(async (req) => {
     runUsedFallback = aiFallbackUsed;
     runMode = aiFallbackUsed ? 'fast_fallback' : initialMode;
     runModel = ai.model ?? null;
+    const resolvedBulkItems = ai.bulk_items?.map((item, index) => {
+      const matchingQuestion = requestedBulkItems.find((candidate) => candidate.index === item.index)
+        ?? requestedBulkItems[index];
+      return {
+        ...item,
+        ...(matchingQuestion?.question ? { question: matchingQuestion.question } : {}),
+      };
+    }) ?? [];
     const nextPaygoRemaining = usePaygoCredit ? Math.max(paygoRemaining - 1, 0) : paygoRemaining;
     const responseBody = buildSolveSuccessResponse({
-      ai,
+      ai: {
+        ...ai,
+        bulk_items: resolvedBulkItems,
+      },
       usage: planLimits,
       usagePayload: buildUsagePayload(nextQuestionsUsed, nextImagesUsed, nextBulkUsed, nextStepQuestionsUsed, nextPaygoRemaining),
       aiMode: aiFallbackUsed ? 'fast_fallback' : initialMode,
@@ -1257,6 +1359,7 @@ Deno.serve(async (req) => {
       conversationId,
       isBulk,
       isFollowUp,
+      streamMode: runStreamMode,
     });
 
     emitStatus('finalizing');
@@ -1281,6 +1384,7 @@ Deno.serve(async (req) => {
         image_urls: [...acceptedImageUrls, ...persistedImageRefs],
         is_bulk: isBulk,
         steps: ai.steps,
+        bulk_items: resolvedBulkItems,
       });
 
       if (usePaygoCredit) {

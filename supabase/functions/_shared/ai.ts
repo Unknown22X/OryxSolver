@@ -87,6 +87,7 @@ export async function callAiProxy(
   steps: string[]; 
   model: string; 
   suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  bulk_items?: Array<{ index: number; label: string; question?: string; answer: string }>;
   cost_usd?: number;
 }> {
   const { url, init } = getAiProxyRequestInit(
@@ -136,6 +137,20 @@ export async function callAiProxy(
       explanation: typeof data?.explanation === 'string' ? data.explanation : '',
       steps: Array.isArray(data?.steps) ? data.steps.map((s: unknown) => String(s)) : [],
       model: typeof data?.model === 'string' && data.model.trim() ? data.model.trim() : 'unknown',
+      bulk_items: Array.isArray(data?.bulk_items)
+        ? data.bulk_items
+            .filter((item: unknown) => typeof item === 'object' && item !== null)
+            .map((item: unknown, index: number) => {
+              const entry = item as { index?: unknown; label?: unknown; question?: unknown; answer?: unknown };
+              return {
+                index: typeof entry.index === 'number' ? entry.index : index + 1,
+                label: typeof entry.label === 'string' ? entry.label : String(index + 1),
+                ...(typeof entry.question === 'string' ? { question: entry.question } : {}),
+                answer: typeof entry.answer === 'string' ? entry.answer : '',
+              };
+            })
+            .filter((item: { answer: string }) => item.answer.trim().length > 0)
+        : [],
       suggestions: Array.isArray(data?.suggestions)
         ? data.suggestions
             .filter((s: unknown) => typeof s === 'object' && s !== null)

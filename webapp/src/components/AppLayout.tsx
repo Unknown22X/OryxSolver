@@ -249,7 +249,10 @@ export default function AppLayout({ children, currentPage, user }: AppLayoutProp
 
                 <span className="text-lg font-black sm:text-xl">Oryx<span className="text-indigo-500">.</span></span>
               </Link>
-              <NotificationCenter align={isRtl ? 'right' : 'left'} />
+              <div className="flex items-center gap-2">
+                <LanguageSwitcher className="hidden lg:flex" />
+                <NotificationCenter align={isRtl ? 'right' : 'left'} />
+              </div>
             </div>
           </div>
 

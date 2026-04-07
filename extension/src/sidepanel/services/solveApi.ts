@@ -7,6 +7,7 @@ function buildSolveForm(request: SolveRequest, stream = false) {
   const form = new FormData();
   form.append('question', request.question);
   form.append('style_mode', request.styleMode);
+  form.append('surface', request.surface || 'extension');
   if (stream) {
     form.append('stream', 'true');
   }
@@ -72,7 +73,7 @@ async function parseErrorResponse(res: Response) {
 function isStreamEvent(value: unknown): value is SolveStreamEvent {
   if (!value || typeof value !== 'object') return false;
   const event = value as { type?: unknown };
-  return event.type === 'status' || event.type === 'preview' || event.type === 'final' || event.type === 'error';
+  return event.type === 'status' || event.type === 'preview' || event.type === 'delta' || event.type === 'final' || event.type === 'error';
 }
 
 async function* parseNdjsonStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<SolveStreamEvent, void, void> {

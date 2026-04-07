@@ -41,6 +41,7 @@ export interface LandingReviewItem {
   role: string;
 }
 
+
 export const LANDING_REVIEWS_INTRO = {
   eyebrow: 'Student Reviews',
   titlePrefix: 'Loved by students',
@@ -50,20 +51,20 @@ export const LANDING_REVIEWS_INTRO = {
 export const LANDING_REVIEWS: LandingReviewItem[] = [
   {
     id: 'sarah',
-    quote: 'OryxSolver turns confusing questions into clear steps. I actually understand the material now.',
+    quote: 'Literally saved me during my AP Physics homework. It explains the math better than my textbook does.',
     name: 'Sarah M.',
-    role: 'High School Junior',
+    role: '10th Grade',
   },
   {
     id: 'james',
-    quote: 'Exam mode is perfect for studying. The answers are structured the way my professors grade.',
+    quote: "The Chrome extension is a game changer. I don't have to keep switching tabs to search for help anymore.",
     name: 'James K.',
-    role: 'College Freshman',
+    role: 'University Student',
   },
   {
     id: 'emily',
-    quote: 'The extension is smooth and the explanations are consistent. It saves me hours each week.',
+    quote: "It's actually clean. No ads, no unnecessary buttons, just the solution I need.",
     name: 'Emily R.',
-    role: 'Senior Student',
+    role: 'Beta Tester',
   },
 ];

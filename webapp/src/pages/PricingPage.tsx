@@ -7,90 +7,90 @@ import MarketingLayout from '../components/MarketingLayout';
 import { supabase } from '../lib/supabase';
 import { trackEvent } from '../lib/analyticsClient';
 
-const PLANS = [
-  {
-    id: 'free',
-    name: 'Free Starter',
-    price: '0',
-    description: 'Perfect for trying OryxSolver with real homework.',
-    titleClass: 'pricing-title-free',
-    features: [
-      'pricing.free_usage',
-      'pricing.free_img',
-      'pricing.free_bulk',
-      'pricing.free_modes',
-      'pricing.free_hist',
-      'pricing.free_support',
-    ],
-    featured: false,
-  },
-  {
-    id: 'pro',
-    name: 'Oryx Pro',
-    price: '3.99',
-    description: 'The standard for serious students.',
-    titleClass: 'pricing-title-pro',
-    features: [
-      'pricing.pro_usage',
-      'pricing.pro_img',
-      'pricing.pro_bulk',
-      'pricing.pro_modes',
-      'pricing.pro_processing',
-      'pricing.pro_sync',
-    ],
-    featured: true,
-  },
-  {
-    id: 'premium',
-    name: 'Premium Elite',
-    price: '9.99',
-    description: 'Higher limits for power users.',
-    titleClass: 'pricing-title-premium',
-    features: [
-      'pricing.premium_usage',
-      'pricing.premium_img',
-      'pricing.premium_bulk',
-      'pricing.premium_modes',
-      'pricing.premium_hist',
-      'pricing.premium_support',
-    ],
-    featured: false,
-  },
-];
-
-const CREDIT_PACKAGES = [
-  { credits: 10, price: '0.99', badge: 'Mini' },
-  { credits: 20, price: '1.99', badge: 'Starter' },
-  { credits: 50, price: '4.99', badge: 'Best value', featured: true },
-  { credits: 100, price: '8.99', badge: 'Study week' },
-  { credits: 200, price: '14.99', badge: 'Exam prep' },
-  { credits: 500, price: '29.99', badge: 'Power pack' },
-];
-
-const FAQS = [
-  {
-    q: 'What counts as a question?',
-    a: 'Each solve or follow-up uses your monthly plan quota first. If that quota is finished, Oryx uses your extra credits.',
-  },
-  {
-    q: 'When do extra credits help?',
-    a: 'Extra credits help after your monthly plan quota is fully used. They keep the app working without changing your subscription.',
-  },
-  {
-    q: 'Can I switch plans later?',
-    a: 'Yes. Start free first, then move to a higher-limit option when you need more room.',
-  },
-  {
-    q: 'Do I need a subscription for credits?',
-    a: 'No. Credit packs are one-time purchases and stay separate from the monthly plan structure.',
-  },
-];
-
 export default function PricingPage() {
   const { t } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
   const [showCredits, setShowCredits] = useState(false);
   const navigate = useNavigate();
+
+  const PLANS = [
+    {
+      id: 'free',
+      name: t('pricing.free_name'),
+      price: '0',
+      description: t('pricing.free_desc'),
+      titleClass: 'pricing-title-free',
+      features: [
+        'pricing.free_usage',
+        'pricing.free_img',
+        'pricing.free_bulk',
+        'pricing.free_modes',
+        'pricing.free_hist',
+        'pricing.free_support',
+      ],
+      featured: false,
+    },
+    {
+      id: 'pro',
+      name: t('pricing.pro_name'),
+      price: '3.99',
+      description: t('pricing.pro_desc'),
+      titleClass: 'pricing-title-pro',
+      features: [
+        'pricing.pro_usage',
+        'pricing.pro_img',
+        'pricing.pro_bulk',
+        'pricing.pro_modes',
+        'pricing.pro_processing',
+        'pricing.pro_sync',
+      ],
+      featured: true,
+    },
+    {
+      id: 'premium',
+      name: t('pricing.premium_name'),
+      price: '9.99',
+      description: t('pricing.premium_desc'),
+      titleClass: 'pricing-title-premium',
+      features: [
+        'pricing.premium_usage',
+        'pricing.premium_img',
+        'pricing.premium_bulk',
+        'pricing.premium_modes',
+        'pricing.premium_hist',
+        'pricing.premium_support',
+      ],
+      featured: false,
+    },
+  ];
+
+  const CREDIT_PACKAGES = [
+    { credits: 10, price: '0.99', badge: 'Mini' },
+    { credits: 20, price: '1.99', badge: 'Starter' },
+    { credits: 50, price: '4.99', badge: 'Best value', featured: true },
+    { credits: 100, price: '8.99', badge: 'Study week' },
+    { credits: 200, price: '14.99', badge: 'Exam prep' },
+    { credits: 500, price: '29.99', badge: 'Power pack' },
+  ];
+
+  const FAQS = [
+    {
+      q: t('pricing.faq_1_q'),
+      a: t('pricing.faq_1_a'),
+    },
+    {
+      q: t('pricing.faq_2_q'),
+      a: t('pricing.faq_2_a'),
+    },
+    {
+      q: t('pricing.faq_3_q'),
+      a: t('pricing.faq_3_a'),
+    },
+    {
+      q: t('pricing.faq_4_q'),
+      a: t('pricing.faq_4_a'),
+    },
+  ];
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -122,16 +122,16 @@ export default function PricingPage() {
         <div className="marketing-container">
           <section className="mx-auto mb-16 max-w-3xl text-center">
             <div className="marketing-badge">
-              <span>{t('pricing.heading_badge', { defaultValue: 'Pick your study setup' })}</span>
+              <span>{t('pricing.heading_badge')}</span>
             </div>
 
             <h1 className="marketing-heading marketing-title-xl mt-8 text-[color:var(--text-primary)]">
-              {t('pricing.heading_main', { defaultValue: 'Pricing that fits' })}
-              <span className="block gradient-text-animated">{t('pricing.heading_gradient', { defaultValue: 'how you study.' })}</span>
+              {t('pricing.heading_main')}
+              <span className="block gradient-text-animated">{t('pricing.heading_gradient')}</span>
             </h1>
 
             <p className="marketing-copy mt-6 text-lg sm:text-xl">
-              {t('pricing.heading_desc', { defaultValue: 'Start free, compare higher-limit options, and choose the setup that matches your workload.' })}
+              {t('pricing.heading_desc')}
             </p>
 
             <div className="mt-10 inline-flex rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-surface)] p-1.5">
@@ -139,13 +139,13 @@ export default function PricingPage() {
                 onClick={() => setShowCredits(false)}
                 className={`rounded-full px-6 py-3 text-sm font-bold transition ${!showCredits ? 'gradient-btn' : 'text-[color:var(--text-secondary)]'}`}
               >
-                {t('pricing.tab_monthly', { defaultValue: 'Monthly plans' })}
+                {t('pricing.tab_monthly')}
               </button>
               <button
                 onClick={() => setShowCredits(true)}
                 className={`rounded-full px-6 py-3 text-sm font-bold transition ${showCredits ? 'gradient-btn' : 'text-[color:var(--text-secondary)]'}`}
               >
-                {t('pricing.tab_credits', { defaultValue: 'One-time credits' })}
+                {t('pricing.tab_credits')}
               </button>
             </div>
           </section>
@@ -156,13 +156,13 @@ export default function PricingPage() {
                 <div key={plan.id} className={`marketing-panel relative flex flex-col p-8 ${plan.featured ? 'border-[color:var(--brand-border-strong)]' : ''}`}>
                   {plan.featured && (
                     <div className="marketing-badge absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
-                      <span>{t('pricing.highly_recommended', { defaultValue: 'Highly recommended' })}</span>
+                      <span>{t('pricing.highly_recommended')}</span>
                     </div>
                   )}
 
                   <div className={`${plan.featured ? 'mt-4' : ''}`}>
-                    <p className={`text-4xl font-bold tracking-[-0.05em] ${plan.titleClass}`}>{t(`pricing.${plan.id}_name`, { defaultValue: plan.name })}</p>
-                    <p className="marketing-copy mt-3 text-base">{t(`pricing.${plan.id}_desc`, { defaultValue: plan.description })}</p>
+                    <p className={`text-4xl font-bold tracking-[-0.05em] ${plan.titleClass}`}>{plan.name}</p>
+                    <p className="marketing-copy mt-3 text-base">{plan.description}</p>
                     <div className="mt-5 inline-flex rounded-full border border-[color:var(--brand-border)] bg-[color:var(--brand-surface)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[color:var(--brand-accent)]">
                       {t(`pricing.${plan.id}_usage_badge`)}
                     </div>
@@ -171,7 +171,7 @@ export default function PricingPage() {
                   <div className="mt-10 flex items-end gap-2">
                     <span className="text-lg font-bold text-[color:var(--text-muted)]">$</span>
                     <span className="text-6xl font-black tracking-[-0.04em] text-[color:var(--text-primary)]">{plan.price}</span>
-                    <span className="pb-3 text-sm font-bold text-[color:var(--text-muted)]">{t('pricing.month', { defaultValue: '/month' })}</span>
+                    <span className="pb-3 text-sm font-bold text-[color:var(--text-muted)]">{t('pricing.month')}</span>
                   </div>
 
                   <ul className="mt-10 flex-1 space-y-4">
@@ -185,16 +185,15 @@ export default function PricingPage() {
                     ))}
                   </ul>
 
-
                   <button
                     onClick={() => handleUpgrade(plan.id)}
                     className={`${plan.featured ? 'gradient-btn' : 'marketing-secondary-btn'} mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-4 text-sm`}
                   >
                     {plan.id === 'free'
-                      ? t('pricing.get_started', { defaultValue: 'Get Started' })
+                      ? t('pricing.get_started')
                       : plan.id === 'pro'
-                        ? t('pricing.upgrade_to_pro', { defaultValue: 'Upgrade to Pro' })
-                        : t('pricing.go_premium', { defaultValue: 'Go Premium' })}
+                        ? t('pricing.upgrade_to_pro')
+                        : t('pricing.go_premium')}
                   </button>
                 </div>
               ))}
@@ -203,10 +202,10 @@ export default function PricingPage() {
             <section>
               <div className="mb-10 text-center">
                 <h2 className="marketing-heading marketing-title-lg text-[color:var(--text-primary)]">
-                  {t('pricing.credits_heading', { defaultValue: 'Extra credits when you need more.' })}
+                  {t('pricing.credits_heading')}
                 </h2>
                 <p className="marketing-copy mx-auto mt-4 max-w-2xl text-base">
-                  {t('pricing.credits_sub', { defaultValue: 'Simple one-time packs for extra solves, without changing your monthly plan.' })}
+                  {t('pricing.credits_sub')}
                 </p>
               </div>
 
@@ -218,17 +217,17 @@ export default function PricingPage() {
                     </div>
                     <p className="mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--text-soft)]">{pkg.badge}</p>
                     <div className="mt-4 text-4xl font-black tracking-[-0.04em] text-[color:var(--text-primary)]">{pkg.credits}</div>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--text-soft)]">{t('pricing.credits_unit', { defaultValue: 'credits' })}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--text-soft)]">{t('pricing.credits_unit')}</p>
                     <div className="mt-5 flex items-end gap-1.5">
                       <span className="text-base font-bold text-[color:var(--text-muted)]">$</span>
                       <span className="text-4xl font-black tracking-[-0.04em] text-[color:var(--text-primary)]">{pkg.price}</span>
                     </div>
-                    <p className="mt-2 text-sm text-[color:var(--text-secondary)]">{t('pricing.one_time_pack', { defaultValue: 'One-time pack' })}</p>
+                    <p className="mt-2 text-sm text-[color:var(--text-secondary)]">{t('pricing.one_time_pack')}</p>
                     <button
                       onClick={() => handleUpgrade(`credits_${pkg.credits}`)}
                       className={`${pkg.featured ? 'gradient-btn' : 'marketing-secondary-btn'} mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm`}
                     >
-                      {t('pricing.buy_credits', { defaultValue: 'Buy pack' })}
+                      {t('pricing.buy_credits')}
                     </button>
                   </div>
                 ))}
@@ -238,17 +237,17 @@ export default function PricingPage() {
 
           <section className="mt-16">
             <div className="mb-8 text-center">
-              <p className="marketing-eyebrow">{t('pricing.faq_pre_title', { defaultValue: 'Questions' })}</p>
+              <p className="marketing-eyebrow">{t('pricing.faq_pre_title')}</p>
               <h2 className="marketing-heading marketing-title-md mt-3 text-[color:var(--text-primary)]">
-                {t('pricing.faq_title2', { defaultValue: 'A few quick answers before you choose.' })}
+                {t('pricing.faq_title2')}
               </h2>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
               {FAQS.map((item, index) => (
-                <div key={item.q} className="marketing-panel p-6">
-                  <p className="text-lg font-black text-[color:var(--text-primary)]">{t(`pricing.faq_${index + 1}_q`, { defaultValue: item.q })}</p>
-                  <p className="marketing-copy mt-3 text-sm">{t(`pricing.faq_${index + 1}_a`, { defaultValue: item.a })}</p>
+                <div key={index} className="marketing-panel p-6">
+                  <p className="text-lg font-black text-[color:var(--text-primary)]">{item.q}</p>
+                  <p className="marketing-copy mt-3 text-sm">{item.a}</p>
                 </div>
               ))}
             </div>
@@ -256,16 +255,16 @@ export default function PricingPage() {
 
           <section className="mt-16">
             <div className="marketing-panel-strong mx-auto max-w-4xl p-10 text-center sm:p-14">
-              <p className="marketing-eyebrow">{t('pricing.get_started_pre', { defaultValue: 'Get started' })}</p>
+              <p className="marketing-eyebrow">{t('pricing.get_started_pre')}</p>
               <h3 className="marketing-heading marketing-title-lg mt-4 text-[color:var(--text-primary)]">
-                {t('pricing.get_started_heading', { defaultValue: 'Start free now. Upgrade when you are ready.' })}
+                {t('pricing.get_started_heading')}
               </h3>
               <p className="marketing-copy mx-auto mt-4 max-w-2xl text-base">
-                {t('pricing.get_started_desc', { defaultValue: 'Create your account, try real homework questions, and see which plan fits your study flow best.' })}
+                {t('pricing.get_started_desc')}
               </p>
               <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <Link to="/signup" className="gradient-btn inline-flex items-center gap-2 rounded-full px-7 py-4 text-base">
-                  {t('pricing.create_free_acc', { defaultValue: 'Create free account' })}
+                  {t('pricing.create_free_acc')}
                   <ArrowRight size={18} />
                 </Link>
               </div>

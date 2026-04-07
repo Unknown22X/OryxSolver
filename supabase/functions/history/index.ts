@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
     let query = supabase
       .from('history_entries')
       .select(
-        'id, created_at, question, answer, explanation, conversation_id, style_mode, image_urls, is_bulk, steps',
+        'id, created_at, question, answer, explanation, conversation_id, style_mode, image_urls, is_bulk, steps, bulk_items',
       )
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })

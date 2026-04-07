@@ -58,10 +58,7 @@ export default function MessageComposer({
   serviceUnavailableMessage = null,
 }: MessageComposerProps) {
   const { t } = useTranslation();
-  const rawModeGuideUrl = String(import.meta.env.VITE_MODE_GUIDE ?? '').trim();
-  const modeGuideUrl = rawModeGuideUrl
-    ? (rawModeGuideUrl.startsWith('http') ? rawModeGuideUrl : `https://${rawModeGuideUrl}`)
-    : '';
+  const modeGuideUrl = 'https://oryxsolver.com/modes';
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);

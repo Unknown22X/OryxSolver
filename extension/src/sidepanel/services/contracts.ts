@@ -5,6 +5,7 @@ export type SolveRequest = {
   styleMode: StyleMode;
   images: (File | { url: string })[];
   language?: string;
+  surface?: 'webapp' | 'extension';
   history?: Array<{ role: 'user' | 'model', text: string }>;
   conversationId?: string;
   quotedStep?: { text: string; index: number } | null;
@@ -23,6 +24,12 @@ export type SolveResponse = {
   answer: string;
   explanation: string;
   steps: string[];
+  bulk_items?: Array<{
+    index: number;
+    label: string;
+    question?: string;
+    answer: string;
+  }>;
   usage: {
     subscriptionTier: 'free' | 'pro' | 'premium';
     subscriptionStatus: 'active' | 'inactive' | 'canceled' | 'trialing' | 'past_due';
@@ -42,6 +49,7 @@ export type SolveResponse = {
     styleMode: StyleMode;
     conversationId: string;
     isBulk?: boolean;
+    streamMode?: 'streamed' | 'fallback_full' | 'non_stream';
   };
   isBulk?: boolean;
   suggestions: SolveSuggestion[];
@@ -67,6 +75,11 @@ export type SolvePreviewEvent = {
   steps?: string[];
 };
 
+export type SolveDeltaEvent = {
+  type: 'delta';
+  text: string;
+};
+
 export type SolveFinalEvent = {
   type: 'final';
   data: SolveResponse;
@@ -81,6 +94,7 @@ export type SolveErrorEvent = {
 export type SolveStreamEvent =
   | SolveStatusEvent
   | SolvePreviewEvent
+  | SolveDeltaEvent
   | SolveFinalEvent
   | SolveErrorEvent;
 
@@ -100,6 +114,12 @@ export type HistoryEntry = {
   image_urls?: string[];
   is_bulk?: boolean;
   steps?: string[];
+  bulk_items?: Array<{
+    index: number;
+    label: string;
+    question?: string;
+    answer: string;
+  }>;
 };
 
 export type HistoryListResponse = {

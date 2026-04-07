@@ -238,21 +238,31 @@ export default function ChatPage({ user }: { user: User }) {
         const data = await fetchHistoryList({ conversationId: id });
         if (cancelled) return;
         const reversed = [...data.entries].reverse();
-        const mappedSession = reversed.map((entry) => ({
-          id: entry.id,
-          question: entry.question,
-          images: entry.image_urls,
-          isBulk: entry.is_bulk,
-          response: {
-            answer: entry.answer,
-            explanation: entry.explanation || '',
-            steps: entry.steps || [],
-            metadata: {
-              styleMode: entry.style_mode ?? undefined,
-              conversationId: entry.conversation_id ?? entry.id,
+        const mappedSession = reversed.map((entry) => {
+          const bulkAnswer = Array.isArray(entry.bulk_items) && entry.bulk_items.length > 0
+            ? entry.bulk_items
+                .slice()
+                .sort((a, b) => a.index - b.index)
+                .map((item) => `${item.label}. ${item.answer}`.trim())
+                .join('\n')
+            : '';
+
+          return {
+            id: entry.id,
+            question: entry.question,
+            images: entry.image_urls,
+            isBulk: entry.is_bulk,
+            response: {
+              answer: bulkAnswer || entry.answer,
+              explanation: entry.explanation || '',
+              steps: entry.steps || [],
+              metadata: {
+                styleMode: entry.style_mode ?? undefined,
+                conversationId: entry.conversation_id ?? entry.id,
+              },
             },
-          },
-        }));
+          };
+        });
         setSession(mappedSession);
         setActiveConversationId(id);
         const threadMode = data.entries.find((entry) => typeof entry.style_mode === 'string')?.style_mode;
@@ -780,30 +790,30 @@ export default function ChatPage({ user }: { user: User }) {
                                     ? t('chat.copied', { defaultValue: 'Copied' })
                                     : t('chat.copy_full_response', { defaultValue: 'Copy full response' })}
                                 </button>
-                                <div className="ml-auto flex items-center gap-2">
+                                <div className="ml-auto flex items-center gap-1.5">
                                   <button
                                     type="button"
                                     onClick={() => handleReaction(msg.id, 'up', msg.response?.metadata?.conversationId ?? activeConversationId)}
-                                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
+                                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
                                       reaction === 'up'
                                         ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
                                         : 'border-slate-200 bg-white/70 text-slate-400 hover:border-emerald-200 hover:text-emerald-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:border-emerald-500/20 dark:hover:text-emerald-300'
                                     }`}
                                     title={t('chat.helpful', { defaultValue: 'Helpful' })}
                                   >
-                                    <ThumbsUp size={15} />
+                                    <ThumbsUp size={13} />
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleReaction(msg.id, 'down', msg.response?.metadata?.conversationId ?? activeConversationId)}
-                                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
+                                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
                                       reaction === 'down'
                                         ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300'
                                         : 'border-slate-200 bg-white/70 text-slate-400 hover:border-rose-200 hover:text-rose-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:border-rose-500/20 dark:hover:text-rose-300'
                                     }`}
                                     title={t('chat.not_helpful', { defaultValue: 'Not helpful' })}
                                   >
-                                    <ThumbsDown size={15} />
+                                    <ThumbsDown size={13} />
                                   </button>
                                 </div>
                               </div>

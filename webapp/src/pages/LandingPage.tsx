@@ -134,14 +134,13 @@ export default function LandingPage() {
 
               <div className="mt-6 overflow-hidden rounded-[30px] border border-[color:var(--brand-border-strong)] bg-[#050b16] p-2 sm:p-3">
                 <div className="overflow-hidden rounded-[24px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.14),transparent_45%),linear-gradient(180deg,#0b1220,#090f1b)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <video
-                    className="landing-demo-video block aspect-[16/10] w-full object-cover"
-                    controls
-                    playsInline
-                    preload="metadata"
-                  >
-                    <source src="/betademo.mp4" type="video/mp4" />
-                  </video>
+                  <iframe
+                    className="landing-demo-video block aspect-video w-full border-0"
+                    src="https://www.youtube.com/embed/XrVkEIOMNyw"
+                    title="OryxSolver Demo"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  ></iframe>
                 </div>
               </div>
 
@@ -229,7 +228,7 @@ export default function LandingPage() {
                     ))}
                   </div>
                   <p className="mt-5 text-lg leading-relaxed text-[color:var(--text-secondary)]">
-                    "{review.quote}"
+                    {t(`landing.reviews.${review.id}.quote`)}
                   </p>
                   <div className="mt-8 flex items-center gap-4">
                     <div className={`flex h-14 w-14 items-center justify-center rounded-[18px] bg-gradient-to-br text-base font-black text-white ${reviewAccent}`}>
@@ -264,7 +263,7 @@ export default function LandingPage() {
                 onClick={() => handleCreateAccountClick('final_signup')}
                 className="gradient-btn inline-flex items-center justify-center gap-3 rounded-full px-7 py-4 text-base"
               >
-                {t('landing.create_free_account')}
+                {t('landing.cta_final')}
                 <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />
               </button>
             </div>

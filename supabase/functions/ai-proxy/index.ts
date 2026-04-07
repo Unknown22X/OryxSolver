@@ -29,6 +29,7 @@ type AiProxySuccess = {
   steps: string[];
   model: string;
   suggestions: Array<{ label: string; prompt: string; styleMode?: StyleMode }>;
+  bulk_items?: Array<{ index: number; label: string; question?: string; answer: string }>;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   cost_usd?: number;
 };
@@ -261,6 +262,35 @@ function normalizeComparableText(value: string): string {
   return value.replace(/\s+/g, ' ').replace(/[*`]/g, '').trim().toLowerCase();
 }
 
+function isGenericAssistantFallbackText(value: string): boolean {
+  const normalized = normalizeComparableText(value);
+  if (!normalized) return true;
+
+  return [
+    'hello how can i help you today?',
+    'hello! how can i help you today?',
+    'hi how can i help you today?',
+    'how can i help you today?',
+    'answer available in explanation',
+  ].includes(normalized);
+}
+
+function validateSolvePrompt(question: string) {
+  const normalized = question.trim();
+  if (!normalized) {
+    throw new AppError(400, 'QUESTION_REQUIRED', 'Question is required');
+  }
+
+  const visibleChars = normalized.replace(/[\s\n\r\t]+/g, '');
+  if (visibleChars.length < 2) {
+    throw new AppError(400, 'QUESTION_MALFORMED', 'Question is too short or malformed.');
+  }
+
+  if (/^(hello|hi|hey)\b[!. ]*$/i.test(normalized)) {
+    throw new AppError(400, 'QUESTION_MALFORMED', 'Please provide the actual question to solve.');
+  }
+}
+
 function parseStructuredOutput(raw: string, question: string): { answer: string; explanation: string; steps: string[] } {
   const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
   if (lines.length === 0) {
@@ -375,7 +405,12 @@ function parseWebappOutput(raw: string, question: string): { answer: string; exp
 }
 
 /** Dedicated parser for bulk answer keys - extracts ANSWER_KEY section and strips number prefixes */
-function parseBulkOutput(raw: string): { answer: string; explanation: string; steps: string[] } {
+function parseBulkOutput(raw: string): {
+  answer: string;
+  explanation: string;
+  steps: string[];
+  bulkItems: Array<{ index: number; label: string; answer: string }>;
+} {
   const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
   
   // Find the ANSWER_KEY: or FINAL_ANSWERS: marker
@@ -389,18 +424,36 @@ function parseBulkOutput(raw: string): { answer: string; explanation: string; st
   const cleanedLines = numberedLines.map((line) => line.replace(/^\d+[\).:\-]\s*/, '').trim());
   
   if (cleanedLines.length > 0) {
+    const bulkItems = numberedLines.map((line, index) => {
+      const prefixMatch = line.match(/^(\d+)[\).:\-]\s*(.*)$/);
+      const label = prefixMatch?.[1] ?? String(index + 1);
+      const answer = prefixMatch?.[2]?.trim() || cleanedLines[index] || '';
+      return {
+        index: Number.parseInt(label, 10) || index + 1,
+        label,
+        answer,
+      };
+    }).filter((item) => item.answer.length > 0);
+
     return {
-      answer: 'Answer Key',
-      explanation: cleanedLines.join('\n'),
+      answer: cleanedLines.join('\n'),
+      explanation: '',
       steps: cleanedLines,
+      bulkItems,
     };
   }
   
   // Fallback: treat all non-empty lines as answers if no numbered format detected
+  const fallbackItems = lines.map((line, index) => ({
+    index: index + 1,
+    label: String(index + 1),
+    answer: line,
+  }));
   return {
-    answer: 'Answer Key',
-    explanation: lines.join('\n'),
+    answer: lines.join('\n'),
+    explanation: '',
     steps: lines,
+    bulkItems: fallbackItems,
   };
 }
 
@@ -524,6 +577,18 @@ async function callGemini(
         preferredLanguage: options?.preferredLanguage,
         surface: options?.surface,
       });
+
+  validateSolvePrompt(question);
+  if (Deno.env.get('DEBUG_SOLVE_PROMPTS') === 'true') {
+    console.log('[ai-proxy] prompt.debug', JSON.stringify({
+      previewOnly,
+      isBulk: isBulkAsk,
+      mode,
+      styleMode,
+      surface: options?.surface,
+      prompt,
+    }));
+  }
 
   let fullText = '';
   let resolvedModel = dedupedModelChain[0];
@@ -867,6 +932,12 @@ async function callGemini(
     throw new AppError(502, 'AI_PROVIDER_ERROR', 'All configured AI models failed.', lastErrorText);
   }
 
+  if (isGenericAssistantFallbackText(fullText)) {
+    throw new AppError(503, 'AI_GENERIC_OUTPUT', 'AI returned a generic fallback response. Please retry.', {
+      retryable: true,
+    });
+  }
+
   // Use dedicated bulk parser for bulk requests
   if (isBulkAsk) {
     const bulkParsed = parseBulkOutput(fullText);
@@ -874,6 +945,7 @@ async function callGemini(
       answer: bulkParsed.answer,
       explanation: bulkParsed.explanation,
       steps: bulkParsed.steps,
+      bulk_items: bulkParsed.bulkItems,
       model: resolvedModel,
       suggestions: [],
       usage: lastUsage,

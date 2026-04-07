@@ -50,7 +50,8 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get('LEMON_SQUEEZY_API_KEY');
   const storeId = Deno.env.get('LEMON_SQUEEZY_STORE_ID');
   if (!apiKey || !storeId) {
-    return jsonError(500, 'CONFIG_ERROR', 'Lemon Squeezy is not configured.');
+    console.error('[CHECKOUT] Billing provider configuration is missing.');
+    return jsonError(503, 'BILLING_UNAVAILABLE', 'Checkout is temporarily unavailable. Please try again later.');
   }
 
   try {
@@ -67,7 +68,8 @@ Deno.serve(async (req) => {
 
     const variantId = PLAN_VARIANTS[plan];
     if (!variantId) {
-      return jsonError(500, 'CONFIG_ERROR', `Variant ID missing for plan: ${plan}`);
+      console.error(`[CHECKOUT] Billing variant missing for plan: ${plan}`);
+      return jsonError(503, 'BILLING_UNAVAILABLE', 'Checkout is temporarily unavailable. Please try again later.');
     }
 
     const checkoutPayload = {

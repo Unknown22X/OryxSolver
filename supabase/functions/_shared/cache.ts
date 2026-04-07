@@ -8,11 +8,23 @@ export interface CachedAnswer {
   steps: string[];
 }
 
-export function normalizeForCache(question: string): string {
+function normalizeArabicForCache(question: string): string {
   return question
-    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .replace(/[“”"']/g, '')
+    .replace(/[،؛]/g, ',')
+    .replace(/[؟]/g, '?')
+    .replace(/[‐‑–—]/g, '-')
+    .replace(/[^\p{L}\p{N}\s.,!?;:()\-+=/*^<>[\]{}]/gu, ' ')
     .replace(/\s+/g, ' ')
-    .replace(/[.,!?;:]$/, '')
+    .trim();
+}
+
+export function normalizeForCache(question: string): string {
+  return normalizeArabicForCache(question)
+    .toLowerCase()
+    .replace(/[.,!?;:()\-]+$/g, '')
     .trim();
 }
 

@@ -163,6 +163,7 @@ export function useSolve(
         styleMode: payload.styleMode,
         images: compressedImages,
         language: effectiveLanguage,
+        surface: 'extension' as const,
         history: currentHistory,
         conversationId: activeConversationId || undefined,
         quotedStep: quotedStep || undefined,
@@ -193,17 +194,68 @@ export function useSolve(
               statusPhase: 'refining',
             },
           } : entry));
+          return;
+        }
+
+        if (event.type === 'delta') {
+          setChatSession((prev) => prev.map((entry) => entry.id === pendingTurnId ? {
+            ...entry,
+            response: {
+              ...entry.response,
+              answer: `${entry.response.answer === 'Thinking...' ? '' : entry.response.answer || ''}${event.text}`,
+              explanation: '',
+              steps: [],
+              isPreview: true,
+              statusPhase: 'refining',
+            },
+          } : entry));
         }
       };
-      const response = streamedRequest
-        ? await streamSolveRequest(token, requestPayload, {
+      let response;
+      if (streamedRequest) {
+        try {
+          response = await streamSolveRequest(token, requestPayload, {
             onEvent: applyStreamEvent,
-          }, { signal: abortControllerRef.current?.signal })
-        : await postSolveRequest(token, requestPayload, { signal: abortControllerRef.current?.signal });
+          }, { signal: abortControllerRef.current?.signal });
+        } catch (streamError: any) {
+          const streamCode = String(streamError?.code || '');
+          const isTransportFallback =
+            streamCode === 'STREAM_INTERRUPTED' ||
+            streamCode === 'AI_STREAM_INTERRUPTED' ||
+            streamCode === 'AI_TIMEOUT' ||
+            streamCode === 'AI_PROVIDER_ERROR';
+
+          if (!isTransportFallback) {
+            throw streamError;
+          }
+
+          setChatSession((prev) => prev.map((entry) => entry.id === pendingTurnId ? {
+            ...entry,
+            response: {
+              ...entry.response,
+              statusPhase: 'refining',
+              answer: entry.response.answer && entry.response.answer !== 'Thinking...'
+                ? entry.response.answer
+                : 'Finishing response...',
+            },
+          } : entry));
+
+          response = await postSolveRequest(token, requestPayload, { signal: abortControllerRef.current?.signal });
+        }
+      } else {
+        response = await postSolveRequest(token, requestPayload, { signal: abortControllerRef.current?.signal });
+      }
 
       if (response.answer) {
         const turnId = response.metadata?.conversationId || Date.now().toString();
         if (response.metadata?.conversationId) setActiveConversationId(response.metadata.conversationId);
+        const formattedBulkAnswer = Array.isArray(response.bulk_items) && response.bulk_items.length > 0
+          ? response.bulk_items
+              .slice()
+              .sort((a, b) => a.index - b.index)
+              .map((item) => `${item.label}. ${item.answer}`.trim())
+              .join('\n')
+          : response.answer;
 
         const nextUsage = buildUsageSnapshot(response.usage);
         setUsage(prev => mergeUsageSnapshot(prev, nextUsage));
@@ -214,7 +266,7 @@ export function useSolve(
           images: previewImages,
           isBulk: payload.isBulk,
           response: {
-            answer: response.answer,
+            answer: formattedBulkAnswer,
             explanation: response.explanation,
             steps: Array.isArray(response.steps) ? response.steps : undefined,
             isPreview: false,
@@ -237,7 +289,7 @@ export function useSolve(
           aiMode: response.metadata?.aiMode ?? null,
         });
         return { 
-          answer: response.answer, 
+          answer: formattedBulkAnswer, 
           explanation: response.explanation,
           steps: Array.isArray(response.steps) ? response.steps : undefined
         };

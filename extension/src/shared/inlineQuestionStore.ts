@@ -4,7 +4,7 @@ import {
 } from './messageTypes';
 
 const PENDING_INLINE_QUESTION_KEY = 'pendingInlineQuestion';
-const MAX_INLINE_TEXT_CHARS = 2600;
+const MAX_INLINE_TEXT_CHARS = 20000;
 
 export type PendingInlineQuestionType =
   | typeof MSG_INLINE_EXTRACT_QUESTION

@@ -59,13 +59,17 @@ export function buildMonthlySolveSeries(
   const now = new Date();
   return Array.from({ length: months }, (_, index) => {
     const offset = months - index - 1;
-    const monthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    const monthKey = monthDate.toISOString().slice(0, 7);
+    // Safely get the target year and month
+    const targetMonthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const y = targetMonthDate.getFullYear();
+    const m = String(targetMonthDate.getMonth() + 1).padStart(2, '0');
+    const monthKey = `${y}-${m}`;
+    
     const isCurrentMonth = offset === 0;
     const fallbackCount = counts[monthKey] ?? 0;
 
     return {
-      label: monthDate.toLocaleDateString(language, { month: 'short' }),
+      label: targetMonthDate.toLocaleDateString(language, { month: 'short' }),
       count: isCurrentMonth && typeof options?.currentMonthCountOverride === 'number'
         ? Math.max(options.currentMonthCountOverride, fallbackCount)
         : fallbackCount,

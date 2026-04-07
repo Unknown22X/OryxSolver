@@ -5,6 +5,7 @@ import {
   MSG_CROP_CAPTURE_READY,
   MSG_CROP_RECT_SELECTED,
   MSG_INLINE_EXTRACT_QUESTION,
+  MSG_INLINE_RESTORE_WIDGETS,
   MSG_INLINE_SOLVE_AND_INJECT,
   MSG_INLINE_SOLVE_RESULT,
 } from '../shared/messageTypes';
@@ -38,6 +39,9 @@ interface SiteConfig {
 // Minimum confidence score (0-1) for treating an element as a real question container
 const MIN_QUESTION_SCORE = 0.45;
 const INLINE_SOLVE_RESULT_TIMEOUT_MS = 90_000;
+const GENERIC_QUESTION_SELECTOR = '[data-testid*="question" i], [data-test*="question" i], [class*="question" i], [id*="question" i], [class*="problem" i], [class*="exercise" i], fieldset, [role="radiogroup"], [role="group"][aria-labelledby], article, section';
+const INLINE_DISMISS_KEY = `oryx:inline-dismissed:${location.hostname}`;
+const FLOATING_SOLVE_BUTTON_ID = 'oryx-floating-solve-btn';
 
 function ensureKatexStyles(shadowRoot?: ShadowRoot | null) {
     if (!shadowRoot) return;
@@ -149,6 +153,27 @@ let pendingAutoCrop:
   | { resolve: (value: string | null) => void; timeoutId: number }
   | null = null;
 const pendingInlineSolveTimeouts = new Map<string, number>();
+let triggerInlineRescan: (() => void) | null = null;
+
+function isInlineDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(INLINE_DISMISS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setInlineDismissed(value: boolean) {
+  try {
+    if (value) {
+      sessionStorage.setItem(INLINE_DISMISS_KEY, '1');
+    } else {
+      sessionStorage.removeItem(INLINE_DISMISS_KEY);
+    }
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
 function getFrameOffset(): { x: number; y: number } {
   let x = 0;
@@ -661,11 +686,7 @@ function stripSharedBulkLines(entries: BulkQuestionEntry[]): BulkQuestionEntry[]
 }
 
 function collectBulkQuestionEntries(config: SiteConfig): BulkQuestionEntry[] {
-  let allPotential = Array.from(document.querySelectorAll(config.questionSelector)) as HTMLElement[];
-  if (allPotential.length === 0) allPotential = querySelectorAllDeep(config.questionSelector);
-  if (allPotential.length === 0 && config.name !== 'Generic Educational') {
-    allPotential = querySelectorAllDeep('[data-testid*="question" i], [class*="question" i], [id*="question" i], [class*="problem" i], [class*="exercise" i]');
-  }
+  const allPotential = collectQuestionCandidates(config);
   const questions = getFinalistQuestions(allPotential, config);
   const entries: BulkQuestionEntry[] = [];
   let count = 0;
@@ -676,6 +697,58 @@ function collectBulkQuestionEntries(config: SiteConfig): BulkQuestionEntry[] {
     entries.push(entry);
   });
   return stripSharedBulkLines(entries).filter((entry) => entry.text.length >= 8);
+}
+
+function buildBulkPayload(entries: BulkQuestionEntry[]) {
+  const sanitizedEntries = entries.filter((entry) => entry.text.trim().length >= 8);
+  const payloadText = sanitizedEntries
+    .map((entry) => `QUESTION ${entry.label}:\n${entry.text}`)
+    .join('\n\n')
+    .trim();
+  const payloadQuestionCount = (payloadText.match(/QUESTION\s+\d+:/gi) || []).length;
+  const valid = sanitizedEntries.length > 0 && payloadQuestionCount === sanitizedEntries.length;
+
+  if (!valid) {
+    console.warn('[ORYX][bulk] Extraction mismatch', {
+      detectedCount: entries.length,
+      sanitizedCount: sanitizedEntries.length,
+      payloadQuestionCount,
+    });
+  }
+
+  return {
+    valid,
+    sanitizedEntries,
+    payloadText,
+    payloadQuestionCount,
+  };
+}
+
+function collectQuestionCandidates(config: SiteConfig | null): HTMLElement[] {
+  const candidates: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  const selectors = [
+    config?.questionSelector || '',
+    GENERIC_QUESTION_SELECTOR,
+  ].filter(Boolean);
+
+  selectors.forEach((selector) => {
+    querySelectorAllDeep(selector).forEach((node) => {
+      if (!seen.has(node)) {
+        seen.add(node);
+        candidates.push(node);
+      }
+    });
+  });
+
+  findFallbackQuestionContainers().forEach((node) => {
+    if (!seen.has(node)) {
+      seen.add(node);
+      candidates.push(node);
+    }
+  });
+
+  return candidates;
 }
 
 const SUPPORTED_SITES: SiteConfig[] = [
@@ -711,9 +784,10 @@ function looksLikeQuestionPage(): boolean {
   const mathNodes = document.querySelectorAll('mjx-container, .katex, .katex-display, svg[aria-label*="math" i]').length;
   const bodyText = (document.body?.innerText || '').slice(0, 5000);
   const hasPromptLanguage = /\b(what|which|solve|find|value|correct|incorrect|true|false|choose)\b/i.test(bodyText);
+  const hasArabicPromptLanguage = /(?:اختر|حدد|حل|السؤال|الفقرة|صواب|خطأ|ما قيمة|أوجد)/.test(bodyText);
 
   return (questionishRoots > 0 && (answerInputs > 0 || mathNodes > 0))
-    || (answerInputs > 0 && (mathNodes > 0 || hasPromptLanguage));
+    || (answerInputs > 0 && (mathNodes > 0 || hasPromptLanguage || hasArabicPromptLanguage));
 }
 
 function getCurrentSiteConfig(): SiteConfig | null {
@@ -726,14 +800,51 @@ function getCurrentSiteConfig(): SiteConfig | null {
 }
 
 function querySelectorAllDeep(selector: string): HTMLElement[] {
-  const results: HTMLElement[] = []; const seen = new Set<HTMLElement>();
+  const results: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  const visitedDocuments = new Set<Document>();
+
   const traverse = (root: ParentNode) => {
-    root.querySelectorAll(selector).forEach((el) => { const node = el as HTMLElement; if (!seen.has(node)) { seen.add(node); results.push(node); } });
-    const walker = document.createTreeWalker(root as Node, NodeFilter.SHOW_ELEMENT);
+    const ownerDocument = root instanceof Document ? root : root.ownerDocument;
+    if (ownerDocument && visitedDocuments.has(ownerDocument) && root === ownerDocument) {
+      return;
+    }
+    if (ownerDocument && root === ownerDocument) {
+      visitedDocuments.add(ownerDocument);
+    }
+
+    root.querySelectorAll(selector).forEach((el) => {
+      const node = el as HTMLElement;
+      if (!seen.has(node)) {
+        seen.add(node);
+        results.push(node);
+      }
+    });
+
+    const walker = (ownerDocument || document).createTreeWalker(root as Node, NodeFilter.SHOW_ELEMENT);
     let current = walker.currentNode as Element | null;
-    while (current) { const shadow = (current as HTMLElement).shadowRoot; if (shadow) traverse(shadow); current = walker.nextNode() as Element | null; }
+    while (current) {
+      const htmlCurrent = current as HTMLElement;
+      const shadow = htmlCurrent.shadowRoot;
+      if (shadow) traverse(shadow);
+
+      if (htmlCurrent.tagName === 'IFRAME') {
+        try {
+          const frameDoc = (htmlCurrent as HTMLIFrameElement).contentDocument;
+          if (frameDoc && !visitedDocuments.has(frameDoc)) {
+            traverse(frameDoc);
+          }
+        } catch {
+          // Cross-origin iframe; ignore.
+        }
+      }
+
+      current = walker.nextNode() as Element | null;
+    }
   };
-  traverse(document); return results;
+
+  traverse(document);
+  return results;
 }
 
 function findFallbackQuestionContainers(): HTMLElement[] {
@@ -1264,9 +1375,21 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
   const button = document.createElement('button');
   button.innerHTML = getInlineSolveButtonIdleHtml();
   button.style.cssText = 'display: flex; align-items: center; justify-content: center; background: white; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: all 0.2s; color: #475569; pointer-events: auto;';
+  const dismissBtn = document.createElement('button');
+  dismissBtn.type = 'button';
+  dismissBtn.textContent = '×';
+  dismissBtn.setAttribute('aria-label', 'Hide Oryx inline button');
+  dismissBtn.style.cssText = 'display:flex; align-items:center; justify-content:center; width:22px; height:22px; margin-bottom:6px; border:1px solid rgba(148,163,184,0.45); border-radius:999px; background:rgba(255,255,255,0.92); color:#475569; font:700 14px system-ui,sans-serif; cursor:pointer; box-shadow:0 6px 16px -10px rgba(15,23,42,0.35); pointer-events:auto;';
   const answerBox = document.createElement('div');
   answerBox.id = 'answer-' + injectionId;
   answerBox.style.cssText = 'display: none; position: absolute; bottom: calc(100% + 8px); right: 0; inset-inline-end: 0; width: min(600px, 72vw); background: #f8fafc; border: 2px solid #e0e7ff; border-radius: 12px; padding: 16px; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1); font-family: system-ui, sans-serif; text-align: left; pointer-events: auto;';
+  dismissBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setInlineDismissed(true);
+    shadowHost.remove();
+    element.dataset.oryxInjected = 'dismissed';
+  });
   
   button.addEventListener('mouseenter', () => {
     if (button.disabled) return;
@@ -1369,7 +1492,7 @@ function injectLogo(element: HTMLElement, config?: SiteConfig | null) {
     };
     void runSolve();
   });
-  shadowRoot.appendChild(button); shadowRoot.appendChild(answerBox);
+  shadowRoot.appendChild(dismissBtn); shadowRoot.appendChild(button); shadowRoot.appendChild(answerBox);
   element.appendChild(shadowHost);
 }
 
@@ -1456,73 +1579,145 @@ function addExtractAllButton(config: SiteConfig) {
     });
     copyBtn.addEventListener('click', () => {
         const entries = collectBulkQuestionEntries(config);
-        const allText = entries.map((entry) => `QUESTION ${entry.label}:\n${entry.text}`).join('\n\n');
-        if (allText) {
+        const payload = buildBulkPayload(entries);
+        if (payload.valid && payload.payloadText) {
             const originalHtml = copyBtn.innerHTML;
-            navigator.clipboard.writeText(allText.trim()).then(() => { copyBtn.innerHTML = '- Copied!'; setTimeout(() => { copyBtn.innerHTML = originalHtml; }, 3000); }).catch(() => { copyBtn.innerHTML = '- Copy Failed'; setTimeout(() => { copyBtn.innerHTML = originalHtml; }, 3000); });
+            navigator.clipboard.writeText(payload.payloadText).then(() => { copyBtn.innerHTML = '- Copied!'; setTimeout(() => { copyBtn.innerHTML = originalHtml; }, 3000); }).catch(() => { copyBtn.innerHTML = '- Copy Failed'; setTimeout(() => { copyBtn.innerHTML = originalHtml; }, 3000); });
+        } else {
+            const originalHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = '- Extraction Failed';
+            setTimeout(() => { copyBtn.innerHTML = originalHtml; }, 3000);
         }
     });
     solveBtn.addEventListener('click', () => {
         const entries = collectBulkQuestionEntries(config);
-        const allText = entries.map((entry) => `QUESTION ${entry.label}:\n${entry.text}`).join('\n\n');
+        const payload = buildBulkPayload(entries);
         const allImages: string[] = [];
-        entries.forEach((entry) => { entry.images.forEach((src) => { if (!allImages.includes(src)) allImages.push(src); }); });
-        if (allText) {
+        payload.sanitizedEntries.forEach((entry) => { entry.images.forEach((src) => { if (!allImages.includes(src)) allImages.push(src); }); });
+        if (payload.valid && payload.payloadText) {
             safeSendMessage({ 
               type: MSG_INLINE_EXTRACT_QUESTION, 
               payload: { 
-                text: `I need an answer key for the following questions. Provide a clear, numbered list of ONLY the final answers (e.g., 1. A, 2. 15, 3. True). No steps or reasoning.\n\nQuestions:\n${allText}`, 
+                text: `I need an answer key for the following questions. Provide a clear, numbered list of ONLY the final answers (e.g., 1. A, 2. 15, 3. True). No steps or reasoning.\n\nQuestions:\n${payload.payloadText}`, 
                 images: allImages.slice(0, 8), // Restored to 8 as requested
                 isBulk: true 
               } 
             });
             const originalHtml = solveBtn.innerHTML; solveBtn.innerHTML = '- Sending...'; setTimeout(() => { solveBtn.innerHTML = originalHtml; }, 3000);
+        } else {
+            const originalHtml = solveBtn.innerHTML;
+            solveBtn.innerHTML = '- Extraction Failed';
+            setTimeout(() => { solveBtn.innerHTML = originalHtml; }, 3000);
         }
     });
     container.appendChild(solveBtn); container.appendChild(copyBtn); document.body.appendChild(container);
 }
 
+function ensureFloatingSolveButton() {
+  let button = document.getElementById(FLOATING_SOLVE_BUTTON_ID) as HTMLButtonElement | null;
+  if (button) return button;
+
+  button = document.createElement('button');
+  button.id = FLOATING_SOLVE_BUTTON_ID;
+  button.type = 'button';
+  button.innerHTML = `${getOryxInlineIcon(16)}<span style="margin-left:8px;">Solve Page</span>`;
+  button.style.cssText = 'position: fixed; bottom: 28px; right: 28px; z-index: 2147483647; display: none; align-items: center; justify-content: center; background: #6366f1; color: white; border: 0; border-radius: 999px; padding: 12px 16px; box-shadow: 0 18px 40px -10px rgba(99,102,241,0.45); font: 800 13px system-ui, sans-serif; cursor: pointer;';
+  button.addEventListener('click', () => {
+    const config = getCurrentSiteConfig() || (SUPPORTED_SITES.find((site) => site.name === 'Generic Educational') || null);
+    if (!config) return;
+
+    const entries = collectBulkQuestionEntries(config);
+    if (entries.length > 1) {
+      const payload = buildBulkPayload(entries);
+      if (payload.valid && payload.payloadText) {
+        safeSendMessage({
+          type: MSG_INLINE_EXTRACT_QUESTION,
+          payload: {
+            text: `I need an answer key for the following questions. Provide a clear, numbered list of ONLY the final answers. No steps or reasoning.\n\nQuestions:\n${payload.payloadText}`,
+            images: payload.sanitizedEntries.flatMap((entry) => entry.images).slice(0, 8),
+            isBulk: true,
+          },
+        });
+        return;
+      }
+    }
+
+    const firstEntry = entries[0];
+    const fallbackText = firstEntry?.text || sanitizeBulkTextBlock(getCleanVisibleText(document.body)).slice(0, 4000);
+    if (!fallbackText.trim()) return;
+    safeSendMessage({
+      type: MSG_INLINE_EXTRACT_QUESTION,
+      payload: {
+        text: fallbackText,
+        images: firstEntry?.images ?? [],
+      },
+    });
+  });
+
+  document.body.appendChild(button);
+  return button;
+}
+
 function initInjector() {
-  const config = getCurrentSiteConfig();
+  if (triggerInlineRescan) {
+    triggerInlineRescan();
+    return;
+  }
+  const fallbackConfig = getCurrentSiteConfig() || (SUPPORTED_SITES.find((site) => site.name === 'Generic Educational') || null);
+  const floatingButton = ensureFloatingSolveButton();
   document.addEventListener('mouseup', (e) => {
       const selection = window.getSelection(); const text = selection?.toString().trim();
       if (text && text.length > 10) showHighlightButton(e.pageX, e.pageY, text);
       else setTimeout(() => { const currentSelection = window.getSelection(); if (!currentSelection || currentSelection.toString().length < 2) hideHighlightButton(); }, 100);
   });
-  if (config) {
-    const scanAndInject = () => {
-        const currentConfig = getCurrentSiteConfig(); if (!currentConfig) return;
-        let allPotential = querySelectorAllDeep(currentConfig.questionSelector);
-        if (allPotential.length === 0) {
-          allPotential = querySelectorAllDeep('[data-testid*="question" i], [data-test*="question" i], [class*="question" i], [id*="question" i], [class*="problem" i], [class*="exercise" i], fieldset, [role="radiogroup"]');
-        }
-        if (allPotential.length === 0) {
-          allPotential = findFallbackQuestionContainers();
-        }
-        const deduplicatedFinalists = getFinalistQuestions(allPotential, currentConfig);
-        if (deduplicatedFinalists.length > 0 && !document.getElementById('oryx-extract-all-container')) {
-          addExtractAllButton(currentConfig);
-        }
-        deduplicatedFinalists.forEach((el) => {
-            const htmlEl = el as HTMLElement;
-            if (htmlEl.dataset.oryxInjected !== "true" || !htmlEl.querySelector('.oryx-inline-injector')) injectLogo(htmlEl, currentConfig);
-        });
-        const validCount = document.querySelectorAll('[data-oryx-injected="true"]').length;
-        const extContainer = document.getElementById('oryx-extract-all-container');
-        if (extContainer && validCount > 0) extContainer.style.display = 'flex';
-    };
-    let scanFrame = 0;
-    const scheduleScan = () => { if (scanFrame) return; scanFrame = window.requestAnimationFrame(() => { scanFrame = 0; scanAndInject(); }); };
-    const observer = new MutationObserver((mutations) => { if (mutations.some((m) => m.addedNodes.length > 0)) scheduleScan(); });
-    observer.observe(document.body, { childList: true, subtree: true });
-    window.setTimeout(scheduleScan, 1000);
-  }
+  if (!fallbackConfig) return;
+
+  const scanAndInject = () => {
+      const currentConfig = getCurrentSiteConfig() || fallbackConfig;
+      const allPotential = collectQuestionCandidates(currentConfig);
+      const deduplicatedFinalists = getFinalistQuestions(allPotential, currentConfig);
+      const inlineDismissed = isInlineDismissed();
+
+      if (deduplicatedFinalists.length > 0 && !document.getElementById('oryx-extract-all-container')) {
+        addExtractAllButton(currentConfig);
+      }
+
+      deduplicatedFinalists.forEach((el) => {
+          const htmlEl = el as HTMLElement;
+          if (!inlineDismissed && (htmlEl.dataset.oryxInjected !== "true" || !htmlEl.querySelector('.oryx-inline-injector'))) {
+            injectLogo(htmlEl, currentConfig);
+          }
+      });
+
+      const validCount = document.querySelectorAll('.oryx-inline-injector').length;
+      const extContainer = document.getElementById('oryx-extract-all-container');
+      if (extContainer) extContainer.style.display = deduplicatedFinalists.length > 0 ? 'flex' : 'none';
+      if (floatingButton) {
+        floatingButton.style.display = validCount === 0 ? 'flex' : 'none';
+      }
+  };
+  let scanFrame = 0;
+  const scheduleScan = () => { if (scanFrame) return; scanFrame = window.requestAnimationFrame(() => { scanFrame = 0; scanAndInject(); }); };
+  triggerInlineRescan = scheduleScan;
+  const observer = new MutationObserver((mutations) => { if (mutations.some((m) => m.addedNodes.length > 0)) scheduleScan(); });
+  observer.observe(document.body, { childList: true, subtree: true });
+  window.setTimeout(scheduleScan, 1000);
 }
 
 const inlineInjectorWindow = window as typeof window & { __oryxInlineInjectorReady?: boolean };
 if (!inlineInjectorWindow.__oryxInlineInjectorReady) {
   inlineInjectorWindow.__oryxInlineInjectorReady = true;
   chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === MSG_INLINE_RESTORE_WIDGETS) {
+      setInlineDismissed(false);
+      document.querySelectorAll('[data-oryx-injected="dismissed"]').forEach((node) => {
+        (node as HTMLElement).dataset.oryxInjected = 'false';
+      });
+      const floatingButton = document.getElementById(FLOATING_SOLVE_BUTTON_ID) as HTMLElement | null;
+      if (floatingButton) floatingButton.style.display = 'none';
+      triggerInlineRescan?.();
+      return;
+    }
     if (message?.type === MSG_CROP_CAPTURE_READY && pendingAutoCrop) {
       const resolve = pendingAutoCrop.resolve; window.clearTimeout(pendingAutoCrop.timeoutId);
       pendingAutoCrop = null; resolve(String(message.imageDataUrl || '')); return;

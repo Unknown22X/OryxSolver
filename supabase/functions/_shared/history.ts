@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import type { BulkSolveItem } from './contracts.ts';
 
 const HISTORY_IMAGE_BUCKET = 'history-images';
 const STORAGE_REF_PREFIX = `storage://${HISTORY_IMAGE_BUCKET}/`;
@@ -101,6 +102,7 @@ export async function saveHistoryEntry(
     image_urls?: string[];
     is_bulk?: boolean;
     steps?: string[];
+    bulk_items?: BulkSolveItem[];
   },
 ): Promise<{ saved: boolean; id: string | null }> {
   const { authUserId, question, answer, source = 'extension' } = params;
@@ -118,6 +120,7 @@ export async function saveHistoryEntry(
       image_urls: params.image_urls || [],
       is_bulk: params.is_bulk || false,
       steps: params.steps ?? [],
+      bulk_items: params.bulk_items ?? [],
       created_at: new Date().toISOString(),
     })
     .select('id')

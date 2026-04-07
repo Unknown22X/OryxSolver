@@ -4,7 +4,8 @@ import {
   MSG_CAPTURE_VISIBLE_TAB, MSG_START_CROP_CAPTURE, MSG_SHOW_CROP_OVERLAY,
   MSG_CROP_RECT_SELECTED, MSG_CROP_SELECTION_CANCELLED, MSG_CROP_CAPTURE_READY,
   MSG_CROP_CAPTURE_ERROR, MSG_EXTRACT_PAGE_CONTEXT,
-  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT, MSG_INLINE_QUESTION_READY
+  MSG_INLINE_EXTRACT_QUESTION, MSG_INLINE_SOLVE_AND_INJECT, MSG_INLINE_QUESTION_READY,
+  MSG_INLINE_RESTORE_WIDGETS
 } from './shared/messageTypes';
 import {
   sanitizePendingInlineQuestion,
@@ -35,9 +36,11 @@ chrome.action.onClicked.addListener(async (tab) => {
     await chrome.sidePanel.open({ windowId: tab.windowId });
     if (isInjectableTab(tab)) {
       // Non-blocking: opening the panel should never wait on script injection.
-      void ensureContentScripts(tab.id).catch((error) => {
-        console.warn('Failed to ensure content scripts after side panel open:', error);
-      });
+      void ensureContentScripts(tab.id)
+        .then(() => chrome.tabs.sendMessage(tab.id, { type: MSG_INLINE_RESTORE_WIDGETS }).catch(() => undefined))
+        .catch((error) => {
+          console.warn('Failed to ensure content scripts after side panel open:', error);
+        });
     }
   } catch (error) {
     console.warn('Failed to open side panel on action click:', error);

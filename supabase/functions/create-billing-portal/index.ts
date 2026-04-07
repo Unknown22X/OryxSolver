@@ -24,7 +24,8 @@ Deno.serve(async (req) => {
 
   const apiKey = Deno.env.get('LEMON_SQUEEZY_API_KEY');
   if (!apiKey) {
-    return jsonError(500, 'CONFIG_ERROR', 'Lemon Squeezy is not configured.');
+    console.error('[BILLING_PORTAL] Billing provider configuration is missing.');
+    return jsonError(503, 'BILLING_PORTAL_UNAVAILABLE', 'Billing management is temporarily unavailable.');
   }
 
   try {
